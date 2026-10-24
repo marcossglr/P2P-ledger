@@ -21,6 +21,7 @@ import {
   Calculator,
   ChevronDown,
   ChevronUp,
+  ListFilter,
 } from 'lucide-react';
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
@@ -263,7 +264,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
 
   return (
     <div className="space-y-4">
-      {/* Barra Flotante Compacta de Filtros Históricos */}
+      {/* Barra Flotante Compacta de Filtros Históricos (Período, Rango, Moneda Fiat y Exportar) */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
           {/* Selector de Período Histórico (Dropdown con valor por defecto Hoy) */}
@@ -313,72 +314,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
             </div>
           )}
 
-          {/* Tipo de Orden */}
-          <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-900/80 p-1 text-xs shadow-xs">
-            {[
-              { id: 'ALL', label: 'Todas' },
-              { id: 'COMPRA', label: 'Compras' },
-              { id: 'VENTA', label: 'Ventas' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setOrderType(tab.id)}
-                className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
-                  orderType === tab.id
-                    ? tab.id === 'COMPRA'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
-                      : tab.id === 'VENTA'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
-                      : 'bg-slate-800 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Estado de Orden (Completadas / Canceladas / Todas) */}
-          <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-900/80 p-1 text-xs shadow-xs">
-            {[
-              {
-                id: 'ALL',
-                label: `Todos (${stats.all_orders_count ?? orders.length})`,
-              },
-              {
-                id: 'COMPLETED',
-                label: `Completadas (${stats.completed_orders ?? stats.total_orders ?? 0})`,
-              },
-              {
-                id: 'IN_PROGRESS',
-                label: `En Proceso (${stats.in_progress_orders ?? 0})`,
-              },
-              {
-                id: 'CANCELLED',
-                label: `Canceladas (${stats.cancelled_orders ?? 0})`,
-              },
-            ].map((stTab) => (
-              <button
-                key={stTab.id}
-                onClick={() => setOrderStatus(stTab.id)}
-                className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
-                  orderStatus === stTab.id
-                    ? stTab.id === 'CANCELLED'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold'
-                      : stTab.id === 'IN_PROGRESS'
-                      ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold'
-                      : stTab.id === 'COMPLETED'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
-                      : 'bg-slate-800 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {stTab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Moneda Fiat */}
+          {/* Moneda Fiat (Afecta las tarjetas de KPIs analíticos y el balance consolidado) */}
           <select
             value={fiatCurrency}
             onChange={(e) => setFiatCurrency(e.target.value)}
@@ -393,8 +329,20 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
           </select>
         </div>
 
-        {/* Extremo derecho: Exportar Histórico con separación limpia */}
-        <div className="flex items-center ml-auto">
+        {/* Extremo derecho: Acciones de Documentación y Exportar con separación limpia */}
+        <div className="flex items-center gap-2 ml-auto">
+          {onNavigateFormulas && (
+            <button
+              type="button"
+              onClick={onNavigateFormulas}
+              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-300 hover:border-amber-500/40 hover:text-amber-300 transition-colors shadow-xs whitespace-nowrap"
+              title="Ver documentación contable y fórmulas de cálculo (WAC/WAP, Breakeven, P&L)"
+            >
+              <Calculator className="h-3.5 w-3.5 text-amber-400" />
+              <span>Fórmulas</span>
+            </button>
+          )}
+
           <button
             onClick={handleExportExcel}
             disabled={orders.length === 0}
@@ -791,25 +739,85 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
 
       {/* Libro Histórico de Operaciones P2P */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-white">Libro Histórico de Operaciones P2P</h3>
-            <p className="text-xs text-slate-400">
-              {tableSearch.trim()
-                ? `Mostrando ${filteredOrders.length} de ${orders.length} operaciones que coinciden con "${tableSearch.trim()}"`
-                : `Mostrando ${orders.length} operaciones en el rango seleccionado`}
-            </p>
+        {/* Barra de Filtros y Búsqueda sobre la tabla con todo el ancho disponible */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+          {/* Filtros de la tabla (Tipo y Estado con badges de conteo) */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Filtro: Tipo de Orden */}
+            <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs shadow-xs">
+              {[
+                { id: 'ALL', label: 'Todas' },
+                { id: 'COMPRA', label: 'Compras' },
+                { id: 'VENTA', label: 'Ventas' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setOrderType(tab.id)}
+                  className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
+                    orderType === tab.id
+                      ? tab.id === 'COMPRA'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
+                        : tab.id === 'VENTA'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
+                        : 'bg-slate-800 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtro: Estado de Orden */}
+            <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs shadow-xs">
+              {[
+                {
+                  id: 'ALL',
+                  label: `Todos (${stats.all_orders_count ?? orders.length})`,
+                },
+                {
+                  id: 'COMPLETED',
+                  label: `Completadas (${stats.completed_orders ?? stats.total_orders ?? 0})`,
+                },
+                {
+                  id: 'IN_PROGRESS',
+                  label: `En Proceso (${stats.in_progress_orders ?? 0})`,
+                },
+                {
+                  id: 'CANCELLED',
+                  label: `Canceladas (${stats.cancelled_orders ?? 0})`,
+                },
+              ].map((stTab) => (
+                <button
+                  key={stTab.id}
+                  onClick={() => setOrderStatus(stTab.id)}
+                  className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
+                    orderStatus === stTab.id
+                      ? stTab.id === 'CANCELLED'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold'
+                        : stTab.id === 'IN_PROGRESS'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold'
+                        : stTab.id === 'COMPLETED'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
+                        : 'bg-slate-800 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {stTab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Buscador de Orden Específica dentro de la Tabla Histórica */}
-          <div className="relative">
+          {/* Buscador de Orden Específica */}
+          <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
-              placeholder="Buscar #orden, contraparte, banco o monto..."
-              className="h-8 w-56 sm:w-72 rounded-xl border border-slate-700/80 bg-slate-950/90 pl-9 pr-8 text-xs text-slate-100 placeholder:text-slate-500 hover:border-slate-600 focus:border-amber-500 focus:outline-none transition-colors shadow-xs"
+              placeholder="Buscar por ID, contraparte, monto..."
+              className="h-8 w-full rounded-xl border border-slate-700/80 bg-slate-950/90 pl-9 pr-8 text-xs text-slate-100 placeholder:text-slate-500 hover:border-slate-600 focus:border-amber-500 focus:outline-none transition-colors shadow-xs"
             />
             {tableSearch && (
               <button
@@ -845,33 +853,6 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
           itemLabel="operaciones históricas"
         />
       </div>
-
-      {/* Acceso y Respaldo de Documentación Financiera y Fórmulas */}
-      {onNavigateFormulas && (
-        <div className="flex items-center justify-between rounded-xl border border-slate-800/80 bg-slate-900/60 px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-800 text-amber-400">
-              <Calculator className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-200">
-                Documentación Contable y Fórmulas de Cálculo
-              </p>
-              <p className="text-[11px] text-slate-400">
-                Consulta el respaldo técnico de cómo se calculan las tasas WAC/WAP, comisiones, spreads y P&L neto.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onNavigateFormulas}
-            className="flex h-8 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors shadow-xs"
-          >
-            <Calculator className="h-3.5 w-3.5 text-amber-400" />
-            <span>Ver Fórmulas</span>
-          </button>
-        </div>
-      )}
 
       {/* Vista Flotante de Detalles de la Orden Seleccionada */}
       <OrderDetailsModal
