@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python environments
+.venv/
+venv/
+ENV/
+env/
+backend/.venv/
+backend/venv/
+
+# Node & Frontend dependencies and builds
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+build/
+.vite/
+frontend/.vite/
+package-lock.json
+
+# Databases & local persistent storage
+*.db
+*.db-journal
+*.sqlite3
+backend/*.db
+backend/*.db.bak*
+backend/p2p_reconciliation.db
+backend/p2p_reconciliation.db.bak-canal
+
+# Credentials & Sensitive Local Caches
+.env
+.env.*
+.binance_credentials.json
+backend/.binance_credentials.json
+.binance_funding_cache.json
+backend/.binance_funding_cache.json
+
+# Graphify & tool generated outputs
+graphify-out/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
