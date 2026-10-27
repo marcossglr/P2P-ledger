@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
+import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
 
 export default function HistoryOperationsView({ refreshTrigger, onNavigateFormulas }) {
@@ -34,7 +35,8 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   // Filtros de consulta histórica
   const [orderType, setOrderType] = useState('ALL');
   const [orderStatus, setOrderStatus] = useState('ALL');
-  const [fiatCurrency, setFiatCurrency] = useState('ALL');
+  const [selectedAsset, setSelectedAsset] = useState('USDT');
+  const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [activePreset, setActivePreset] = useState('TODAY');
   // Usar la fecha local del navegador (no UTC de toISOString) para evitar desfase de día
   const [startDate, setStartDate] = useState(() => {
@@ -57,6 +59,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   const [tableSearch, setTableSearch] = useState('');
   const [copiedOrderId, setCopiedOrderId] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isPairModalOpen, setIsPairModalOpen] = useState(false);
 
   // Paginación para la tabla de Rendimiento Diario y el Libro Histórico
   const [dailyPage, setDailyPage] = useState(1);
@@ -74,7 +77,8 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
       params.set('only_today', 'false');
       if (orderType !== 'ALL') params.set('order_type', orderType);
       if (orderStatus !== 'ALL') params.set('order_status', orderStatus);
-      if (fiatCurrency !== 'ALL') params.set('fiat_currency', fiatCurrency);
+      if (selectedAsset !== 'ALL') params.set('asset', selectedAsset);
+      if (fiatCurrency) params.set('fiat_currency', fiatCurrency);
       if (startDate) params.set('start_date', startDate);
       if (endDate) params.set('end_date', endDate);
       params.set('bank_fee_pct', String(bankFeePct || 0));
@@ -82,12 +86,19 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
       const res = await fetch(`/api/operations?${params.toString()}`);
       const json = await res.json();
       setData(json);
+
+      if (json?.default_asset && !localStorage.getItem('user_custom_asset_selected')) {
+        setSelectedAsset(json.default_asset);
+      }
+      if (json?.default_fiat && !localStorage.getItem('user_custom_fiat_selected')) {
+        setFiatCurrency(json.default_fiat);
+      }
     } catch (err) {
       console.error('Error cargando histórico de operaciones:', err);
     } finally {
       setLoading(false);
     }
-  }, [orderType, orderStatus, fiatCurrency, startDate, endDate, bankFeePct]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct]);
 
   useEffect(() => {
     fetchHistory();
@@ -315,18 +326,18 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
           )}
 
           {/* Moneda Fiat (Afecta las tarjetas de KPIs analíticos y el balance consolidado) */}
-          <select
-            value={fiatCurrency}
-            onChange={(e) => setFiatCurrency(e.target.value)}
-            className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 focus:border-amber-500 focus:outline-none transition-colors shadow-xs cursor-pointer"
+          {/* Botón Selector Unificado de Par de Mercado (Cripto / Fiat) */}
+          <button
+            type="button"
+            onClick={() => setIsPairModalOpen(true)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 hover:text-white transition-colors shadow-xs cursor-pointer group"
+            title="Cambiar Criptoactivo y Moneda Fiat de análisis"
           >
-            <option value="ALL">Fiat: Todas</option>
-            {(data?.available_fiats || ['VES']).map((f) => (
-              <option key={f} value={f}>
-                Fiat: {f}
-              </option>
-            ))}
-          </select>
+            <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{selectedAsset}</span>
+            <span className="text-slate-500">/</span>
+            <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{fiatCurrency}</span>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
+          </button>
         </div>
 
         {/* Extremo derecho: Acciones de Documentación y Exportar con separación limpia */}
@@ -435,7 +446,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
                 </span>
                 <span className="text-slate-600 select-none">·</span>
                 <span
-                  className="inline-flex items-center gap-1 text-amber-400 cursor-help"
+                  className="inline-flex items-center gap-1 text-rose-400 cursor-help"
                   title={`Precio promedio de venta (WAP): ${fmtRate(stats.wap_sell_price)} ${fiat}`}
                 >
                   <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
@@ -756,9 +767,9 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
                   className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
                     orderType === tab.id
                       ? tab.id === 'COMPRA'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold'
                         : tab.id === 'VENTA'
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold'
                         : 'bg-slate-800 text-white shadow'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -794,7 +805,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
                   className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
                     orderStatus === stTab.id
                       ? stTab.id === 'CANCELLED'
-                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold'
+                        ? 'bg-slate-800 text-slate-300 border border-slate-700 font-semibold line-through'
                         : stTab.id === 'IN_PROGRESS'
                         ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold'
                         : stTab.id === 'COMPLETED'
@@ -864,6 +875,22 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
         bankFeePct={bankFeePct}
         wacBuyPrice={stats.wac_buy_price}
         wapSellPrice={stats.wap_sell_price}
+      />
+
+      {/* Modal Selector de Par de Mercado */}
+      <MarketPairModal
+        isOpen={isPairModalOpen}
+        onClose={() => setIsPairModalOpen(false)}
+        selectedAsset={selectedAsset}
+        selectedFiat={fiatCurrency}
+        availableAssets={data?.available_assets || ['USDT']}
+        availableFiats={data?.available_fiats || ['VES']}
+        onSelectPair={(newAsset, newFiat) => {
+          localStorage.setItem('user_custom_asset_selected', 'true');
+          localStorage.setItem('user_custom_fiat_selected', 'true');
+          setSelectedAsset(newAsset);
+          setFiatCurrency(newFiat);
+        }}
       />
     </div>
   );

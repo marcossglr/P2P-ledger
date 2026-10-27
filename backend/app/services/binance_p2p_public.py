@@ -42,6 +42,7 @@ DEFAULT_P2P_PUBLIC_CONFIG: Dict[str, Any] = {
     "publisher_type": None,  # None = todos | "merchant" = solo comerciantes verificados
     "top_n": 5,  # Cantidad de mejores anuncios usados para el precio promedio "top"
     "timeout_seconds": 15,
+    "refresh_interval_seconds": 60,  # 0 = desactivado/manual, 15, 30, 60, 120, 300
 }
 
 
@@ -79,6 +80,7 @@ def _sanitize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     cfg["pages"] = _clamp_int(cfg.get("pages"), 1, 1, 10)
     cfg["top_n"] = _clamp_int(cfg.get("top_n"), 5, 1, 50)
     cfg["timeout_seconds"] = _clamp_int(cfg.get("timeout_seconds"), 15, 3, 60)
+    cfg["refresh_interval_seconds"] = _clamp_int(cfg.get("refresh_interval_seconds"), 60, 0, 3600)
 
     publisher = str(cfg.get("publisher_type") or "").strip().lower()
     cfg["publisher_type"] = "merchant" if publisher == "merchant" else None

@@ -8,15 +8,16 @@ def compute_operations_analytics(
     orders: List[BinanceOrder],
     bank_fee_rate_pct: float = 0.0,
     accounts: Optional[List[BankAccount]] = None,
+    target_asset: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Calcula todas las métricas financieras de arbitraje P2P:
-    - Volumen Fiat y USDT (Compras vs Ventas)
+    - Volumen Fiat y Crypto (Compras vs Ventas)
     - Costo Promedio Ponderado de Compra (WAC) vs Precio Promedio Ponderado de Venta (WAP)
     - Spread Promedio Ponderado (absoluto y porcentual)
-    - Comisiones de Binance P2P en USDT y su impacto en Fiat
-    - Comisiones bancarias en Bs aplicadas únicamente a compras por Pago Móvil (Transferencias mismo banco = 0%)
-    - Ganancia Bruta y Ganancia Neta realizada sobre el volumen arbitrado (ciclo cerrado USDT)
+    - Comisiones de Binance P2P en Crypto y su impacto en Fiat
+    - Comisiones bancarias en Bs aplicadas a compras por Pago Móvil
+    - Ganancia Bruta y Ganancia Neta realizada sobre el volumen arbitrado (ciclo cerrado)
     - Serie temporal diaria, métodos de pago y top contrapartes
     """
     buy_fiat = 0.0
@@ -55,9 +56,22 @@ def compute_operations_analytics(
     pay_methods_map = defaultdict(lambda: {"name": "", "count": 0, "fiat_volume": 0.0, "usdt_volume": 0.0})
     counterparties_map = defaultdict(lambda: {"name": "", "count": 0, "fiat_volume": 0.0, "usdt_volume": 0.0})
     fiat_currencies = set()
+    crypto_assets = set()
 
     for o in orders:
         fiat_currencies.add(o.fiat_currency or "VES")
+        if o.asset:
+            crypto_assets.add(o.asset)
+
+    # Si no se especifica target_asset, usar "USDT" o el primero disponible
+    active_asset = target_asset or ("USDT" if "USDT" in crypto_assets else (sorted(list(crypto_assets))[0] if crypto_assets else "USDT"))
+
+    for o in orders:
+        ord_asset = o.asset or "USDT"
+        # Si la orden pertenece a otro criptoactivo diferente al seleccionado, no mezclar en WAC/WAP/P&L
+        if ord_asset != active_asset:
+            continue
+
         ord_status = (getattr(o, "order_status", None) or "COMPLETED").upper()
         day_key = (o.order_date or "")[:10] or "Sin Fecha"
 
@@ -199,10 +213,15 @@ def compute_operations_analytics(
         })
 
     primary_fiat = sorted(list(fiat_currencies))[0] if fiat_currencies else "VES"
+    available_assets = sorted(list(crypto_assets)) if crypto_assets else ["USDT"]
+    if "USDT" not in available_assets:
+        available_assets.insert(0, "USDT")
     total_all = completed_orders_count + cancelled_orders_count + in_progress_orders_count
     completion_rate = (completed_orders_count / total_all * 100.0) if total_all > 0 else 100.0
 
     return {
+        "target_asset": active_asset,
+        "available_assets": available_assets,
         "primary_fiat": primary_fiat,
         "fiat_currencies": sorted(list(fiat_currencies)),
         "total_orders": completed_orders_count,

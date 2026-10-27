@@ -15,6 +15,7 @@ export default function TablePaginator({
   pageSizeOptions = [10, 20, 50, 100],
   itemLabel = 'operaciones',
   compact = false,
+  showTopBorder = true,
 }) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
@@ -40,9 +41,9 @@ export default function TablePaginator({
 
   return (
     <div
-      className={`mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/80 pt-3.5 text-xs ${
-        compact ? 'text-[11px]' : 'text-xs'
-      }`}
+      className={`flex flex-wrap items-center justify-between gap-3 text-xs ${
+        showTopBorder ? 'mt-4 border-t border-slate-800/80 pt-3.5' : ''
+      } ${compact ? 'text-[11px]' : 'text-xs'}`}
     >
       {/* Izquierda: Rango actual y selector de filas por página */}
       <div className="flex flex-wrap items-center gap-3 text-slate-400">

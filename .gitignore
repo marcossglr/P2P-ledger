@@ -37,6 +37,8 @@ backend/p2p_reconciliation.db.bak-canal
 backend/.binance_credentials.json
 .binance_funding_cache.json
 backend/.binance_funding_cache.json
+.binance_user_ads_cache.json
+backend/.binance_user_ads_cache.json
 
 # Graphify & tool generated outputs
 graphify-out/

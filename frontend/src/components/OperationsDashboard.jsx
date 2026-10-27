@@ -14,10 +14,16 @@ import {
   Check,
   TrendingUp,
   ListFilter,
+  Megaphone,
+  Radio,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
 import BankReconcileModal from './BankReconcileModal';
+import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
 
 export default function OperationsDashboard({
@@ -35,7 +41,8 @@ export default function OperationsDashboard({
   // Filtros rápidos exclusivos para la jornada de hoy
   const [orderType, setOrderType] = useState('ALL');
   const [orderStatus, setOrderStatus] = useState('ALL');
-  const [fiatCurrency, setFiatCurrency] = useState('ALL');
+  const [selectedAsset, setSelectedAsset] = useState('USDT');
+  const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [bankFeePct, setBankFeePct] = useState(0.3);
 
   // Buscador local directo en la tabla de Operaciones Ejecutadas y orden seleccionada
@@ -51,9 +58,26 @@ export default function OperationsDashboard({
     tab: 'SINGLE',
   });
 
+  // Modal selector de Par de Mercado (Cripto / Fiat)
+  const [isPairModalOpen, setIsPairModalOpen] = useState(false);
+
   // Paginación de la tabla de hoy
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Control para colapsar/expandir la sección de Mis Anuncios
+  const [isAdsExpanded, setIsAdsExpanded] = useState(() => {
+    const saved = localStorage.getItem('p2p_ads_expanded');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const toggleAdsExpanded = () => {
+    setIsAdsExpanded((prev) => {
+      const next = !prev;
+      localStorage.setItem('p2p_ads_expanded', String(next));
+      return next;
+    });
+  };
 
   const fetchTodayDashboard = useCallback(async () => {
     setLoading(true);
@@ -62,18 +86,27 @@ export default function OperationsDashboard({
       params.set('only_today', 'true');
       if (orderType !== 'ALL') params.set('order_type', orderType);
       if (orderStatus !== 'ALL') params.set('order_status', orderStatus);
+      if (selectedAsset !== 'ALL') params.set('asset', selectedAsset);
       if (fiatCurrency !== 'ALL') params.set('fiat_currency', fiatCurrency);
       params.set('bank_fee_pct', String(bankFeePct || 0));
 
       const res = await fetch(`/api/operations?${params.toString()}`);
       const json = await res.json();
       setData(json);
+
+      // Si el usuario no ha forzado manualmente otro par, sincronizar automáticamente con el par dominante detectado en sus órdenes
+      if (json?.default_asset && !localStorage.getItem('user_custom_asset_selected')) {
+        setSelectedAsset(json.default_asset);
+      }
+      if (json?.default_fiat && !localStorage.getItem('user_custom_fiat_selected')) {
+        setFiatCurrency(json.default_fiat);
+      }
     } catch (err) {
       console.error('Error cargando operaciones de hoy:', err);
     } finally {
       setLoading(false);
     }
-  }, [orderType, orderStatus, fiatCurrency, bankFeePct]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, bankFeePct]);
 
   useEffect(() => {
     fetchTodayDashboard();
@@ -82,7 +115,7 @@ export default function OperationsDashboard({
   // Reiniciar a la primera página cuando cambian los filtros o el buscador de tabla
   useEffect(() => {
     setCurrentPage(1);
-  }, [orderType, orderStatus, fiatCurrency, tableSearch]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, tableSearch]);
 
   const handleSeedDemo = async () => {
     await fetch('/api/binance/demo-seed', { method: 'POST' });
@@ -142,6 +175,7 @@ export default function OperationsDashboard({
   const serverToday =
     data?.server_today || new Date().toLocaleDateString('sv-SE');
   const fiat = stats.primary_fiat || 'VES';
+  const cryptoAsset = stats.target_asset || selectedAsset || 'USDT';
 
   const fmtFiat = (n) =>
     Number(n || 0).toLocaleString('es-ES', {
@@ -357,18 +391,18 @@ export default function OperationsDashboard({
               )}
             </button>
 
-            <select
-              value={fiatCurrency}
-              onChange={(e) => setFiatCurrency(e.target.value)}
-              className="h-8 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 focus:border-amber-500 focus:outline-none transition-colors shadow-xs cursor-pointer"
+            {/* Botón Selector Unificado de Par de Mercado (Cripto / Fiat) */}
+            <button
+              type="button"
+              onClick={() => setIsPairModalOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 hover:text-white transition-colors shadow-xs cursor-pointer group"
+              title="Cambiar Criptoactivo y Moneda Fiat de análisis"
             >
-              <option value="ALL">Fiat: Todas</option>
-              {(data?.available_fiats || ['VES']).map((f) => (
-                <option key={f} value={f}>
-                  Fiat: {f}
-                </option>
-              ))}
-            </select>
+              <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{selectedAsset}</span>
+              <span className="text-slate-500">/</span>
+              <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{fiatCurrency}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
+            </button>
           </div>
         </div>
 
@@ -393,10 +427,10 @@ export default function OperationsDashboard({
                   className={`text-2xl font-bold tracking-tight tabular-nums block cursor-help ${
                     Number(stats.net_profit_usdt || 0) < -0.005 ? 'text-rose-400' : 'text-white'
                   }`}
-                  title={`Bruta: ${grossProfitUsdt > 0.005 ? '+' : ''}${fmtUsdt(grossProfitUsdt)} USDT · Comisiones: -${fmtUsdt(totalCommissionsAllUsdt)} USDT`}
+                  title={`Bruta: ${grossProfitUsdt > 0.005 ? '+' : ''}${fmtUsdt(grossProfitUsdt)} ${cryptoAsset} · Comisiones: -${fmtUsdt(totalCommissionsAllUsdt)} ${cryptoAsset}`}
                 >
                   {Number(stats.net_profit_usdt || 0) > 0.005 ? '+' : ''}
-                  {fmtUsdt(stats.net_profit_usdt)} USDT
+                  {fmtUsdt(stats.net_profit_usdt)} {cryptoAsset}
                 </span>
                 <div className="mt-1.5 min-h-[20px] flex items-center flex-wrap gap-x-1.5 text-xs text-slate-400">
                   <span className="tabular-nums">{fmtFiat(stats.net_profit_fiat)} {fiat}</span>
@@ -447,7 +481,7 @@ export default function OperationsDashboard({
                   </span>
                   <span className="text-slate-600 select-none">·</span>
                   <span
-                    className="inline-flex items-center gap-1 text-amber-400 cursor-help"
+                    className="inline-flex items-center gap-1 text-rose-400 cursor-help"
                     title={`Precio promedio de venta (WAP): ${fmtRate(stats.wap_sell_price)} ${fiat}`}
                   >
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
@@ -486,12 +520,12 @@ export default function OperationsDashboard({
               {/* Métrica principal y dato secundario integrado */}
               <div className="mt-2.5">
                 <span className="text-2xl font-bold tracking-tight text-white tabular-nums block">
-                  {fmtUsdt(stats.total_usdt_volume)} USDT
+                  {fmtUsdt(stats.total_usdt_volume)} {cryptoAsset}
                 </span>
                 <div className="mt-1.5 min-h-[20px] flex items-center flex-wrap gap-x-1.5 text-xs text-slate-400">
                   <span
                     className="inline-flex items-center gap-1 text-emerald-400 cursor-help"
-                    title={`Total Compras: ${fmtUsdt(stats.buy_usdt_total)} USDT (${fmtFiat(stats.buy_fiat_total)} ${fiat})`}
+                    title={`Total Compras: ${fmtUsdt(stats.buy_usdt_total)} ${cryptoAsset} (${fmtFiat(stats.buy_fiat_total)} ${fiat})`}
                   >
                     <ArrowDownRight className="h-3.5 w-3.5 shrink-0" />
                     <span className="tabular-nums">{fmtUsdt(stats.buy_usdt_total)}</span>
@@ -499,7 +533,7 @@ export default function OperationsDashboard({
                   <span className="text-slate-600 select-none">·</span>
                   <span
                     className="inline-flex items-center gap-1 text-amber-400 cursor-help"
-                    title={`Total Ventas: ${fmtUsdt(stats.sell_usdt_total)} USDT (${fmtFiat(stats.sell_fiat_total)} ${fiat})`}
+                    title={`Total Ventas: ${fmtUsdt(stats.sell_usdt_total)} ${cryptoAsset} (${fmtFiat(stats.sell_fiat_total)} ${fiat})`}
                   >
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
                     <span className="tabular-nums">{fmtUsdt(stats.sell_usdt_total)}</span>
@@ -552,6 +586,186 @@ export default function OperationsDashboard({
         </div>
       </section>
 
+      {/* =========================================================================
+          ZONA INTERMEDIA: ANUNCIOS ACTIVOS EN BINANCE P2P
+         ========================================================================= */}
+      {apiConfigured && (
+        <section className="rounded-xl border border-slate-800 bg-slate-900/60 shadow-sm overflow-hidden transition-all">
+          {/* Cabecera interactiva / Acordeón Completo */}
+          <div
+            onClick={toggleAdsExpanded}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleAdsExpanded();
+              }
+            }}
+            className="flex w-full items-center justify-between gap-3 p-3.5 sm:px-4 cursor-pointer group select-none hover:bg-slate-850/50 transition-colors"
+            title={isAdsExpanded ? 'Clic para colapsar sección de anuncios' : 'Clic para expandir sección de anuncios'}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:border-amber-500/40 group-hover:bg-amber-500/20 transition-all shrink-0">
+                <Megaphone className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 group-hover:text-white transition-colors">
+                    Mis Anuncios en Binance P2P
+                  </h2>
+                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 shrink-0">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{(data?.my_ads || []).filter((a) => a.is_active).length} activos</span>
+                  </span>
+                </div>
+                {/* Resumen rápido visible cuando está colapsado */}
+                {!isAdsExpanded && data?.my_ads && data.my_ads.length > 0 && (
+                  <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-2 truncate">
+                    {data.my_ads.map((ad, idx) => (
+                      <span key={ad.adv_no || idx} className="inline-flex items-center gap-1 text-slate-300">
+                        <strong className={ad.adv_type === 'COMPRA' ? 'text-emerald-400' : 'text-rose-400'}>
+                          {ad.adv_type}
+                        </strong>
+                        <span className="font-mono">{fmtUsdt(ad.surplus_amount)} {ad.asset}</span>
+                        <span className="text-slate-500">@</span>
+                        <span className="font-mono text-white">{fmtRate(ad.price)} {ad.fiat_unit}</span>
+                        {idx < data.my_ads.length - 1 && <span className="text-slate-600">·</span>}
+                      </span>
+                    ))}
+                  </p>
+                )}
+                {isAdsExpanded && (
+                  <span className="block text-[11px] text-slate-500 mt-0.5">
+                    Estado en vivo de tus ofertas publicadas, saldo remanente y cotización configurada
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Indicador Chevron */}
+            <div className="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-200 transition-colors shrink-0 pl-2">
+              <span className="hidden sm:inline text-[11px] font-medium text-slate-500 group-hover:text-slate-400">
+                {isAdsExpanded ? 'Colapsar' : 'Expandir'}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  isAdsExpanded ? 'rotate-180 text-amber-400' : 'text-slate-400'
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* Tarjetas o Grid de Anuncios (Solo si está expandido) */}
+          {isAdsExpanded && (
+            <div className="border-t border-slate-800/80 p-3.5 sm:p-4 bg-slate-950/30">
+              {(!data?.my_ads || data.my_ads.length === 0) ? (
+                <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 text-center">
+                  <p className="text-xs text-slate-400">
+                    No tienes anuncios publicados o activos en este momento en tu cuenta de Binance P2P.
+                  </p>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Cuando publiques un anuncio de compra o venta en Binance, aparecerá aquí con su saldo y precio.
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {data.my_ads.map((ad) => {
+                    const isBuy = ad.adv_type === 'COMPRA';
+                    const isOnline = ad.is_active;
+                    return (
+                      <div
+                        key={ad.adv_no}
+                        className={`relative rounded-xl border p-3.5 transition-all shadow-sm ${
+                          isOnline
+                            ? isBuy
+                              ? 'border-emerald-500/30 bg-slate-900/70 hover:border-emerald-500/50'
+                              : 'border-rose-500/30 bg-slate-900/70 hover:border-rose-500/50'
+                            : 'border-slate-800/80 bg-slate-900/30 opacity-75'
+                        }`}
+                      >
+                        {/* Fila Superior: Tipo, Moneda y Estado */}
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                                isBuy
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              }`}
+                            >
+                              {ad.adv_type} {ad.asset}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-300">
+                              / {ad.fiat_unit}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
+                                isOnline
+                                  ? 'bg-emerald-500/15 text-emerald-400'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {isOnline && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                              {ad.status_label}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500" title={`ID: ${ad.adv_no}`}>
+                              #{ad.adv_no ? ad.adv_no.slice(-6) : ''}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Fila Central: Precio y Saldo Remanente */}
+                        <div className="grid grid-cols-2 gap-2 my-2.5">
+                          <div>
+                            <span className="block text-[10px] uppercase font-semibold text-slate-500">
+                              Precio Fijado
+                            </span>
+                            <span className="text-base font-bold text-white tabular-nums">
+                              {fmtRate(ad.price)} <span className="text-xs font-normal text-slate-400">{ad.fiat_unit}</span>
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] uppercase font-semibold text-slate-500">
+                              Saldo Disponible
+                            </span>
+                            <span className="text-base font-bold text-emerald-400 tabular-nums">
+                              {fmtUsdt(ad.surplus_amount)} <span className="text-xs font-normal text-slate-400">{ad.asset}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Fila Inferior: Límites en Fiat y Métodos */}
+                        <div className="pt-2 border-t border-slate-800/60 flex flex-col gap-1.5 text-[11px] text-slate-400">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Límites:</span>
+                            <span className="font-mono text-slate-300 tabular-nums">
+                              {fmtFiat(ad.min_fiat)} - {fmtFiat(ad.max_fiat)} {ad.fiat_unit}
+                            </span>
+                          </div>
+
+                          {ad.trade_methods && ad.trade_methods.length > 0 && (
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-slate-500 shrink-0">Bancos:</span>
+                              <span className="truncate text-slate-300 font-medium text-right" title={ad.trade_methods.join(', ')}>
+                                {ad.trade_methods.join(' · ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Separador Visual entre Zonas */}
       <div className="relative py-2">
         <div className="absolute inset-0 flex items-center">
@@ -601,9 +815,9 @@ export default function OperationsDashboard({
                     className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
                       orderType === tab.id
                         ? tab.id === 'COMPRA'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold'
                           : tab.id === 'VENTA'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
+                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold'
                           : 'bg-slate-800 text-white shadow'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
@@ -639,7 +853,7 @@ export default function OperationsDashboard({
                     className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
                       orderStatus === stTab.id
                         ? stTab.id === 'CANCELLED'
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold'
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700 font-semibold line-through'
                           : stTab.id === 'IN_PROGRESS'
                           ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold'
                           : stTab.id === 'COMPLETED'
@@ -742,6 +956,22 @@ export default function OperationsDashboard({
         initialTab={reconcileModal.tab}
         onSuccess={(updatedInv) => {
           setData((prev) => (prev ? { ...prev, bank_inventory: updatedInv } : prev));
+        }}
+      />
+
+      {/* Modal Selector de Par de Mercado */}
+      <MarketPairModal
+        isOpen={isPairModalOpen}
+        onClose={() => setIsPairModalOpen(false)}
+        selectedAsset={selectedAsset}
+        selectedFiat={fiatCurrency}
+        availableAssets={data?.available_assets || ['USDT']}
+        availableFiats={data?.available_fiats || ['VES']}
+        onSelectPair={(newAsset, newFiat) => {
+          localStorage.setItem('user_custom_asset_selected', 'true');
+          localStorage.setItem('user_custom_fiat_selected', 'true');
+          setSelectedAsset(newAsset);
+          setFiatCurrency(newFiat);
         }}
       />
     </div>

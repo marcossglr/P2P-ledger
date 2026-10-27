@@ -18,6 +18,8 @@ from .services.binance_api import (
     fetch_funding_asset_balance,
     save_cached_funding_asset,
     get_cached_funding_asset,
+    fetch_c2c_user_ads,
+    get_cached_user_ads,
 )
 from .services.binance_p2p_public import (
     get_p2p_public_config,
@@ -132,6 +134,7 @@ class P2PPublicConfigPayload(BaseModel):
     pages: Optional[int] = None
     publisher_type: Optional[str] = None
     top_n: Optional[int] = None
+    refresh_interval_seconds: Optional[int] = None
 
 
 def upsert_binance_orders(db: Session, records: list, batch_id: Optional[int] = None, default_source: str = "API") -> dict:
@@ -277,6 +280,12 @@ def set_binance_funding_wallet_manual(payload: FundingManualPayload):
     }
     save_cached_funding_asset(data)
     return data
+
+
+@app.get("/api/binance/my-ads")
+def get_my_binance_ads():
+    """Retorna los anuncios publicados por el usuario en Binance P2P."""
+    return fetch_c2c_user_ads()
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +524,8 @@ def clear_operations(only_demo: bool = Query(False), db: Session = Depends(get_d
 def get_operations_dashboard(
     order_type: Optional[str] = Query(None),
     order_status: Optional[str] = Query(None),
-    fiat_currency: Optional[str] = Query(None),
+    asset: Optional[str] = Query(None),
+    fiat_currency: Optional[str] = Query("VES"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     only_today: bool = Query(False),
@@ -527,10 +537,10 @@ def get_operations_dashboard(
     total_stored_orders = db.query(BinanceOrder).count()
     has_demo_orders = db.query(BinanceOrder).filter(BinanceOrder.source == "DEMO").count() > 0
 
-    # Consulta base para el período (sin filtrar por order_type para calcular analytics globales del período)
-    base_period_q = db.query(BinanceOrder)
-    if fiat_currency and fiat_currency != "ALL":
-        base_period_q = base_period_q.filter(BinanceOrder.fiat_currency == fiat_currency)
+    target_fiat = (fiat_currency or "VES").upper().strip()
+
+    # Consulta base para el período filtrada por la moneda Fiat objetivo
+    base_period_q = db.query(BinanceOrder).filter(BinanceOrder.fiat_currency == target_fiat)
 
     if only_today:
         base_period_q = base_period_q.filter(BinanceOrder.order_date >= f"{today_str} 00:00:00")
@@ -541,16 +551,20 @@ def get_operations_dashboard(
         if end_date:
             base_period_q = base_period_q.filter(BinanceOrder.order_date <= f"{end_date} 23:59:59")
 
-    # Las tarjetas de analytics reflejan la totalidad de la jornada/período (compras + ventas)
+    # Las tarjetas de analytics reflejan la totalidad de la jornada/período (compras + ventas) filtradas por criptoactivo objetivo
     period_orders_all = base_period_q.order_by(BinanceOrder.order_date.desc()).all()
     analytics = compute_operations_analytics(
         period_orders_all,
         bank_fee_rate_pct=bank_fee_pct,
         accounts=db.query(BankAccount).order_by(BankAccount.id.asc()).all(),
+        target_asset=asset if asset and asset != "ALL" else None,
     )
 
     # Filtrar las órdenes para la tabla según los filtros de tabla específicos
     q = base_period_q
+    if asset and asset != "ALL":
+        q = q.filter(BinanceOrder.asset == asset)
+
     if order_type and order_type in ["COMPRA", "VENTA"]:
         q = q.filter(BinanceOrder.order_type == order_type)
 
@@ -594,7 +608,21 @@ def get_operations_dashboard(
             "updated_at": datetime.now().isoformat(),
         }
 
-    all_fiats = [r[0] for r in db.query(BinanceOrder.fiat_currency).distinct().all() if r[0]]
+    # Criptoactivos estándar oficiales de Binance P2P combinados con los que el usuario tenga en BD
+    STANDARD_CRYPTO_ASSETS = ["USDT", "BTC", "USDC", "ETH", "BNB", "FDUSD"]
+    db_crypto_assets = [r[0] for r in db.query(BinanceOrder.asset).distinct().all() if r[0]]
+    combined_assets = list(dict.fromkeys(db_crypto_assets + STANDARD_CRYPTO_ASSETS))
+
+    # Mercados Fiat estándar habituales combinados con los de las órdenes y cuentas del usuario
+    STANDARD_FIATS = ["VES", "COP", "USD", "ARS", "BRL"]
+    db_fiats = [r[0] for r in db.query(BinanceOrder.fiat_currency).distinct().all() if r[0]]
+    combined_fiats = list(dict.fromkeys(db_fiats + STANDARD_FIATS))
+
+    # Par principal detectado según el mayor volumen u órdenes del usuario
+    detected_top_asset = db_crypto_assets[0] if db_crypto_assets else "USDT"
+    detected_top_fiat = db_fiats[0] if db_fiats else "VES"
+
+    my_ads = fetch_c2c_user_ads()
 
     return {
         "server_today": today_str,
@@ -603,7 +631,11 @@ def get_operations_dashboard(
         "analytics": analytics,
         "bank_inventory": bank_inventory,
         "funding_wallet": funding_wallet,
-        "available_fiats": sorted(all_fiats) if all_fiats else ["VES"],
+        "my_ads": my_ads,
+        "default_asset": detected_top_asset,
+        "default_fiat": detected_top_fiat,
+        "available_fiats": combined_fiats,
+        "available_assets": combined_assets,
         "orders": [
             {
                 "id": o.id,

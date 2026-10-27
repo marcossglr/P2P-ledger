@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / ".binance_credentials.json"
 FUNDING_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / ".binance_funding_cache.json"
+USER_ADS_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / ".binance_user_ads_cache.json"
 BINANCE_BASE_URL = "https://api.binance.com"
 
 
@@ -240,6 +241,109 @@ def _signed_post(
             raise RuntimeError(f"HTTP {e.code}: {err_body}")
     except urllib.error.URLError as e:
         raise RuntimeError(f"Error de red al conectar con Binance: {e.reason}")
+
+
+def get_cached_user_ads() -> List[Dict[str, Any]]:
+    """Obtiene los anuncios del usuario guardados en caché local."""
+    if USER_ADS_CACHE_PATH.exists():
+        try:
+            return json.loads(USER_ADS_CACHE_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return []
+
+
+def save_cached_user_ads(ads: List[Dict[str, Any]]) -> None:
+    """Guarda los anuncios del usuario en caché local."""
+    try:
+        USER_ADS_CACHE_PATH.write_text(json.dumps(ads, indent=2), encoding="utf-8")
+        try:
+            os.chmod(USER_ADS_CACHE_PATH, 0o600)
+        except OSError:
+            pass
+    except Exception:
+        pass
+
+
+def fetch_c2c_user_ads(
+    api_key: Optional[str] = None,
+    api_secret: Optional[str] = None,
+    page: int = 1,
+    rows: int = 20,
+) -> List[Dict[str, Any]]:
+    """
+    Consulta los anuncios publicados por el usuario en Binance C2C (/sapi/v1/c2c/ads/listWithPagination).
+    Devuelve la lista de anuncios formateada con precio, montos disponibles, límites y estado.
+    """
+    creds = get_saved_credentials()
+    key = (api_key or creds["api_key"]).strip()
+    secret = (api_secret or creds["api_secret"]).strip()
+
+    if not key or not secret:
+        return get_cached_user_ads()
+
+    try:
+        resp = _signed_post(
+            "/sapi/v1/c2c/ads/listWithPagination",
+            params={},
+            body={"page": page, "rows": rows},
+            api_key=key,
+            api_secret=secret,
+        )
+        raw_ads = resp.get("data") if isinstance(resp, dict) else []
+        normalized_ads: List[Dict[str, Any]] = []
+
+        for ad in raw_ads or []:
+            adv_no = str(ad.get("advNo") or "").strip()
+            if not adv_no:
+                continue
+
+            adv_type_raw = str(ad.get("tradeType") or ad.get("advType") or "").upper()
+            adv_type = "COMPRA" if adv_type_raw == "BUY" else "VENTA"
+
+            # Estado del anuncio: 1 = Online (Activo), 2 = Offline (Pausado), 3 = Completado/Cerrado
+            status_code = str(ad.get("advStatus") or "1")
+            status_label = "ACTIVO" if status_code == "1" else ("PAUSADO" if status_code == "2" else "CERRADO")
+
+            methods = []
+            for tm in ad.get("tradeMethods") or []:
+                m = (
+                    str(tm.get("tradeMethodName") or "").strip()
+                    or str(tm.get("identifier") or "").strip()
+                    or str(tm.get("payType") or "").strip()
+                )
+                if m and m not in methods:
+                    methods.append(m)
+
+            price = float(ad.get("price") or 0.0)
+            surplus = float(ad.get("surplusAmount") or ad.get("tradableQuantity") or 0.0)
+            init_amt = float(ad.get("initAmount") or 0.0)
+            min_fiat = float(ad.get("minSingleTransAmount") or 0.0)
+            max_fiat = float(ad.get("dynamicMaxSingleTransAmount") or ad.get("maxSingleTransAmount") or 0.0)
+
+            normalized_ads.append({
+                "adv_no": adv_no,
+                "adv_type": adv_type,
+                "adv_type_raw": adv_type_raw,
+                "asset": str(ad.get("asset") or "USDT"),
+                "fiat_unit": str(ad.get("fiatUnit") or "VES"),
+                "price": price,
+                "surplus_amount": surplus,
+                "init_amount": init_amt,
+                "min_fiat": min_fiat,
+                "max_fiat": max_fiat,
+                "status_code": status_code,
+                "status_label": status_label,
+                "is_active": status_code == "1",
+                "trade_methods": methods,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+        if normalized_ads or page == 1:
+            save_cached_user_ads(normalized_ads)
+        return normalized_ads
+    except Exception:
+        return get_cached_user_ads()
 
 
 def fetch_c2c_user_pay_methods(

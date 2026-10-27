@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Building2,
   Search,
   Check,
   Sparkles,
-  ChevronRight,
-  ShieldCheck,
-  Plus,
 } from 'lucide-react';
 
 export default function BankAccountFormModal({
@@ -91,6 +89,17 @@ export default function BankAccountFormModal({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  // Bloquear el scroll de fondo
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
 
   // Selección inteligente de un banco del catálogo
   const handleSelectCatalogBank = (b) => {
@@ -178,39 +187,34 @@ export default function BankAccountFormModal({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn w-screen h-screen overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative flex flex-col w-full max-w-xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-slate-950/90 text-slate-100 space-y-4 my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        {/* Header */}
-        <div className="shrink-0 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-5 py-3.5 backdrop-blur-sm gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
-              <Building2 className="h-5 w-5" />
+        {/* Cabecera Estándar Directa */}
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
+              <Building2 className="h-4 w-4" />
             </div>
-            <div className="min-w-0 space-y-0.5">
-              <h3 className="text-base font-bold text-white tracking-tight leading-none">
-                {editingAccount
-                  ? `Configurar ${editingAccount.name}`
-                  : 'Añadir Cuenta Bancaria en Bs'}
-              </h3>
-              <p className="text-xs text-slate-400">
-                {editingAccount
-                  ? 'Ajusta alias, palabras clave y comisiones'
-                  : 'Selecciona del catálogo nacional o ingresa una cuenta personalizada'}
-              </p>
-            </div>
+            <h3 className="text-sm font-bold text-white truncate">
+              {editingAccount
+                ? `Configurar ${editingAccount.name}`
+                : 'Añadir Cuenta Bancaria'}
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             title="Cerrar modal (Esc)"
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/80 text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-white transition-colors shrink-0"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors shrink-0 cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -218,40 +222,40 @@ export default function BankAccountFormModal({
 
         {/* Error message */}
         {errorMsg && (
-          <div className="mx-6 mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-xs text-rose-200">
+          <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-200 shrink-0">
             {errorMsg}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
             {/* Si es creación nueva: Mostrar Catálogo Oficial de Bancos Nacionales */}
             {!editingAccount && (
-              <div className="space-y-2.5 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="space-y-2.5 rounded-xl border border-slate-800/80 bg-slate-950/40 p-3.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-amber-400" />
                     Catálogo Nacional de Bancos (SUDEBAN)
                   </span>
-                  <span className="text-[11px] text-slate-500">
-                    21 bancos disponibles
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {filteredCatalog.length} disponibles
                   </span>
                 </div>
 
                 {/* Buscador de Banco */}
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
                   <input
                     type="text"
                     value={catalogSearch}
                     onChange={(e) => setCatalogSearch(e.target.value)}
-                    placeholder="Buscar por nombre (ej. Venezuela, BDV, Mercantil) o código..."
-                    className="h-8 w-full rounded-xl border border-slate-700/80 bg-slate-900/90 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
+                    placeholder="Buscar banco, sigla o código (ej. BDV, Banesco, 0102)..."
+                    className="h-8 w-full rounded-xl border border-slate-800 bg-slate-950/60 pl-8 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
                   />
                 </div>
 
                 {/* Grid / Lista compacta de Bancos con Scroll */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-1">
                   {filteredCatalog.map((b) => {
                     const isSelected = selectedCatalogBank?.code === b.code || accName.trim().toLowerCase() === b.name.toLowerCase();
                     const isAlready = b.isAlreadyAdded;
@@ -264,10 +268,10 @@ export default function BankAccountFormModal({
                         disabled={isAlready}
                         className={`group relative flex flex-col items-start justify-between rounded-xl p-2.5 text-left border transition-all cursor-pointer ${
                           isAlready
-                            ? 'border-slate-800/40 bg-slate-950/40 opacity-40 cursor-not-allowed'
+                            ? 'border-slate-800/40 bg-slate-950/30 opacity-40 cursor-not-allowed'
                             : isSelected
-                            ? 'border-amber-500 bg-amber-500/15 shadow-sm text-white'
-                            : 'border-slate-800/80 bg-slate-900/80 hover:border-slate-700 hover:bg-slate-800/80 text-slate-300'
+                            ? 'border-amber-500/60 bg-amber-500/15 text-white shadow-xs'
+                            : 'border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900 text-slate-300'
                         }`}
                       >
                         <div className="w-full flex items-center justify-between">
@@ -283,7 +287,7 @@ export default function BankAccountFormModal({
                         <span className="text-xs font-bold leading-tight mt-1 truncate w-full">
                           {b.name}
                         </span>
-                        <span className="text-[10px] text-slate-500 truncate w-full mt-0.5">
+                        <span className="text-[10px] text-slate-400 truncate w-full mt-0.5">
                           {b.short_name}
                         </span>
                       </button>
@@ -295,8 +299,8 @@ export default function BankAccountFormModal({
 
             {/* Datos Principales de la Cuenta */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Nombre del Banco *
                 </label>
                 <input
@@ -305,12 +309,12 @@ export default function BankAccountFormModal({
                   value={accName}
                   onChange={(e) => setAccName(e.target.value)}
                   placeholder="Ej: Banco de Venezuela"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Alias / Titular (Opcional)
                 </label>
                 <input
@@ -318,16 +322,16 @@ export default function BankAccountFormModal({
                   value={accAlias}
                   onChange={(e) => setAccAlias(e.target.value)}
                   placeholder="Ej: Cuenta BDV Principal"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
                 />
               </div>
             </div>
 
             {/* Palabras clave de vinculación P2P */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Palabras Clave de Vinculación Automática en Binance
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Palabras Clave de Detección Binance P2P
                 </label>
                 <span className="text-[10px] text-slate-500">Separadas por comas</span>
               </div>
@@ -336,42 +340,41 @@ export default function BankAccountFormModal({
                 value={accKeywords}
                 onChange={(e) => setAccKeywords(e.target.value)}
                 placeholder="venezuela, bdv, bancodevenezuela, pagomovil bdv"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
               />
-              <p className="mt-1 text-[11px] text-slate-400">
-                Cualquier orden P2P cuyo método contenga alguno de estos términos se imputará automáticamente a esta cuenta.
-              </p>
             </div>
 
             {/* Saldo Inicial (solo en creación) */}
             {!editingAccount && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-1.5">
-                <label className="block text-xs font-semibold text-amber-300">
-                  Saldo Actual en el Banco (Bs)
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Saldo Inicial en Banco (Bs)
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={accInitialBalance}
-                  onChange={(e) => setAccInitialBalance(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-bold tabular-nums text-white focus:border-amber-500 focus:outline-none"
-                />
-                <p className="text-[11px] text-slate-400">
-                  Punto de partida en Bs para tu posición consolidada. Las órdenes completadas desde este momento sumarán o restarán a partir de este monto.
-                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={accInitialBalance}
+                    onChange={(e) => setAccInitialBalance(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3.5 py-2 text-xs font-mono font-bold tabular-nums text-white placeholder-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
+                  />
+                  <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 font-mono">
+                    VES
+                  </span>
+                </div>
               </div>
             )}
 
             {/* Configuración de Comisiones Bancarias */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-3">
+            <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-3.5 space-y-3">
               <label className="flex items-center justify-between cursor-pointer">
                 <div>
                   <span className="text-xs font-semibold text-slate-200 block">
-                    Descontar comisión bancaria en órdenes de COMPRA
+                    Descontar comisión bancaria en salidas (Compras P2P)
                   </span>
                   <span className="text-[11px] text-slate-400 block mt-0.5">
-                    Aplica automáticamente al salir Bolívares de tu cuenta
+                    Aplica automáticamente según el canal de pago
                   </span>
                 </div>
                 <input
@@ -383,7 +386,7 @@ export default function BankAccountFormModal({
               </label>
 
               {accApplyFee && (
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
                   <div>
                     <label className="block text-[11px] font-medium text-slate-400 mb-1">
                       Comisión Pago Móvil (%)
@@ -393,7 +396,7 @@ export default function BankAccountFormModal({
                       step="0.01"
                       value={accPmFeePct}
                       onChange={(e) => setAccPmFeePct(e.target.value)}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none tabular-nums"
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none tabular-nums font-mono"
                     />
                     <span className="text-[10px] text-slate-500 mt-0.5 block">0.3% estándar</span>
                   </div>
@@ -406,7 +409,7 @@ export default function BankAccountFormModal({
                       step="0.01"
                       value={accTransfFeePct}
                       onChange={(e) => setAccTransfFeePct(e.target.value)}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none tabular-nums"
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none tabular-nums font-mono"
                     />
                     <span className="text-[10px] text-slate-500 mt-0.5 block">0.0% mismo banco</span>
                   </div>
@@ -423,48 +426,32 @@ export default function BankAccountFormModal({
                 className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
               />
               <span>
-                Establecer como <strong>Cuenta Principal por Defecto</strong> (recibe órdenes genéricas como "PagoMovil")
+                Establecer como <strong>Cuenta Principal por Defecto</strong>
               </span>
             </label>
           </div>
 
-          {/* Footer Pinned */}
-          <div className="shrink-0 flex items-center justify-between border-t border-slate-800 bg-slate-950/90 px-5 py-3 text-xs">
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-              <span>Atajo:</span>
-              <kbd className="inline-flex h-5 items-center justify-center rounded border border-slate-700 bg-slate-800 px-1.5 font-mono text-[10px] text-slate-300 shadow-xs">
-                Esc
-              </kbd>
-              <span className="hidden sm:inline">para salir</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="flex h-8 items-center justify-center rounded-xl border border-slate-800 bg-slate-800/90 px-4 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-colors shadow-xs"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex h-8 items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {saving ? (
-                  <span>Guardando...</span>
-                ) : (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-amber-400" />
-                    <span>{editingAccount ? 'Actualizar Cuenta' : 'Guardar Cuenta'}</span>
-                  </>
-                )}
-              </button>
-            </div>
+          {/* Footer Limpio */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800/60 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 hover:border-amber-500/60 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              {saving ? 'Guardando...' : 'Confirmar'}
+            </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

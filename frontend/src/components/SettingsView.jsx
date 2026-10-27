@@ -28,32 +28,36 @@ import {
   AlertTriangle,
   Activity,
   FileSpreadsheet,
+  Clock,
+  Timer,
 } from 'lucide-react';
 import BankInventoryView from './BankInventoryView';
 import BinanceP2PPublicApiCard from './BinanceP2PPublicApiCard';
 import SystemDocumentationSection from './SystemDocumentationSection';
 
 const TABS = [
-  { id: 'BANKS', label: 'Bancos', icon: Building2 },
   { id: 'CONNECTIONS', label: 'Conexiones', icon: Link2 },
   { id: 'DATABASE', label: 'Base de Datos y Respaldo', icon: Database },
   { id: 'DOCS', label: 'Información y Cálculos', icon: Info },
   { id: 'MAINTENANCE', label: 'Mantenimiento y Diagnóstico', icon: SlidersHorizontal },
+  { id: 'BANKS', label: 'Cuentas Bancarias', icon: Building2 },
 ];
 
 export default function SettingsView({
-  initialSection = 'BANKS',
+  initialSection = 'CONNECTIONS',
   health = {},
   refreshTrigger = 0,
+  syncIntervalSeconds = 60,
+  onUpdateSyncInterval,
   onSyncComplete,
   onReturnDashboard,
 }) {
   const normalizeSection = (sec) => {
-    if (sec === 'CONNECTIONS' || sec === 'API' || sec === 'API_DATA') return 'CONNECTIONS';
+    if (sec === 'BANKS') return 'BANKS';
     if (sec === 'DATABASE') return 'DATABASE';
     if (sec === 'DOCS' || sec === 'FORMULAS' || sec === 'INFO') return 'DOCS';
     if (sec === 'MAINTENANCE') return 'MAINTENANCE';
-    return 'BANKS';
+    return 'CONNECTIONS';
   };
 
   const [activeSection, setActiveSection] = useState(() => normalizeSection(initialSection));
@@ -346,8 +350,12 @@ export default function SettingsView({
 
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1 text-slate-300">
-                <Radio className="h-3 w-3 text-emerald-400" />
-                <span>Auto-sync cada 60s</span>
+                <Radio className={`h-3 w-3 ${syncIntervalSeconds > 0 ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <span>
+                  {syncIntervalSeconds > 0
+                    ? `Auto-sync cada ${syncIntervalSeconds >= 60 ? `${syncIntervalSeconds / 60}m` : `${syncIntervalSeconds}s`}`
+                    : 'Auto-sync desactivado'}
+                </span>
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1 text-slate-300">
                 <Lock className="h-3 w-3 text-amber-400" />
@@ -691,6 +699,66 @@ export default function SettingsView({
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* Selector de Frecuencia de Sincronización Automática */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-amber-400" />
+                        <div>
+                          <span className="text-xs font-bold text-white block">
+                            Frecuencia de Sincronización Automática
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            Intervalo en segundo plano para consultar órdenes nuevas de Binance P2P
+                          </span>
+                        </div>
+                      </div>
+
+                      {syncIntervalSeconds > 0 ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>Activo ({syncIntervalSeconds >= 60 ? `${syncIntervalSeconds / 60} min` : `${syncIntervalSeconds}s`})</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+                          <span>Solo manual</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                      {[
+                        { label: 'Desactivado', val: 0, desc: 'Solo manual' },
+                        { label: '15 segundos', val: 15, desc: 'Alta frecuencia' },
+                        { label: '30 segundos', val: 30, desc: 'Trading activo' },
+                        { label: '60 segundos', val: 60, desc: 'Recomendado', defaultTag: true },
+                        { label: '2 minutos', val: 120, desc: 'Bajo consumo' },
+                        { label: '5 minutos', val: 300, desc: 'Modo reposo' },
+                      ].map((opt) => {
+                        const isSelected = syncIntervalSeconds === opt.val;
+                        return (
+                          <button
+                            key={opt.val}
+                            type="button"
+                            onClick={() => onUpdateSyncInterval && onUpdateSyncInterval(opt.val)}
+                            className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
+                                : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-slate-200'
+                            }`}
+                          >
+                            <span className="text-xs font-bold block">{opt.label}</span>
+                            <span className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 leading-relaxed pt-1 border-t border-slate-800/60">
+                      💡 <strong>Límites de Binance:</strong> Binance permite hasta 1.200 peticiones/minuto por IP. La consulta incremental consume únicamente ~3 peticiones por ciclo (&lt; 0.5% del cupo a 60s). El ajuste se almacena de forma persistente.
+                    </p>
                   </div>
 
                   {/* Botón de Sincronización Principal */}

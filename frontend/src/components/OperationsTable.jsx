@@ -115,15 +115,17 @@ function OperationsTable({
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                        o.order_type === 'COMPRA'
-                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                        o.order_status === 'CANCELLED'
+                          ? 'bg-slate-800/80 text-slate-400 border border-slate-700/60 line-through'
+                          : o.order_type === 'COMPRA'
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                       }`}
                     >
                       {o.order_type}
                     </span>
                     {o.order_status === 'CANCELLED' && (
-                      <span className="inline-flex items-center rounded-md bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-rose-400">
+                      <span className="inline-flex items-center rounded-md bg-slate-800/90 border border-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
                         CANCELADA
                       </span>
                     )}
@@ -143,7 +145,7 @@ function OperationsTable({
                       ? 'text-sky-300'
                       : o.order_type === 'COMPRA'
                       ? 'text-emerald-400'
-                      : 'text-amber-400'
+                      : 'text-rose-400'
                   }`}
                 >
                   {o.order_status !== 'CANCELLED' && (o.order_type === 'COMPRA' ? '+' : '-')}
@@ -168,11 +170,11 @@ function OperationsTable({
                   {fmtFiat(o.fiat_amount)}{' '}
                   <span className="text-[10px] text-slate-400">{o.fiat_currency}</span>
                 </td>
-                <td className="py-2.5 px-2 font-sans text-slate-300 align-middle max-w-[170px] truncate" title={o.pay_method}>
-                  {o.pay_method}
+                <td className="py-2.5 px-2 font-sans text-slate-300 align-middle max-w-[140px] truncate" title={o.pay_method}>
+                  <span className="truncate block">{o.pay_method || '—'}</span>
                 </td>
-                <td className="py-2.5 pr-3 pl-2 font-sans text-slate-300 align-middle max-w-[150px] truncate" title={o.counterparty}>
-                  {o.counterparty}
+                <td className="py-2.5 pr-3 pl-2 font-sans text-slate-300 align-middle max-w-[130px] truncate" title={o.counterparty}>
+                  <span className="truncate block font-medium">{o.counterparty || '—'}</span>
                 </td>
               </tr>
             );

@@ -9,10 +9,11 @@ import {
   Calculator,
   Radio,
   History,
+  Building2,
 } from 'lucide-react';
 import OperationsDashboard from './components/OperationsDashboard';
 import HistoryOperationsView from './components/HistoryOperationsView';
-import BankReconcilerView from './components/BankReconcilerView';
+import TreasuryView from './components/TreasuryView';
 import SettingsView from './components/SettingsView';
 import BinanceApiModal from './components/BinanceApiModal';
 
@@ -28,9 +29,9 @@ const NAV_ITEMS = [
     icon: History,
   },
   {
-    id: 'RECONCILER',
-    label: 'Conciliador PDF',
-    icon: FileText,
+    id: 'TREASURY',
+    label: 'Tesorería y Bancos',
+    icon: Building2,
   },
 ];
 
@@ -61,8 +62,12 @@ export default function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isSyncingBg, setIsSyncingBg] = useState(false);
   const [syncToast, setSyncToast] = useState(null);
+  const [syncIntervalSeconds, setSyncIntervalSeconds] = useState(() => {
+    const saved = localStorage.getItem('binance_sync_interval_seconds');
+    return saved !== null ? parseInt(saved, 10) : 60;
+  });
 
-  const openSettings = useCallback((section = 'BANKS') => {
+  const openSettings = useCallback((section = 'CONNECTIONS') => {
     setSettingsSection(section);
     setActiveView('SETTINGS');
   }, []);
@@ -149,14 +154,14 @@ export default function App() {
     });
   }, [checkHealth, runIncrementalSync]);
 
-  // 2. Polling automático cada 60 segundos mientras la API esté configurada
+  // 2. Polling automático según el intervalo configurado en Ajustes (si > 0 y API configurada)
   useEffect(() => {
-    if (!health.binance_api_configured) return;
+    if (!health.binance_api_configured || !syncIntervalSeconds || syncIntervalSeconds <= 0) return;
     const interval = setInterval(() => {
       runIncrementalSync(true);
-    }, 60 * 1000);
+    }, syncIntervalSeconds * 1000);
     return () => clearInterval(interval);
-  }, [health.binance_api_configured, runIncrementalSync]);
+  }, [health.binance_api_configured, syncIntervalSeconds, runIncrementalSync]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -267,8 +272,8 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => openSettings('BANKS')}
-              title="Ajustes: Bancos, Conexiones y Base de Datos"
+              onClick={() => openSettings('CONNECTIONS')}
+              title="Ajustes: Conexiones, Base de Datos y Sistema"
               className={`group flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
                 activeView === 'SETTINGS'
                   ? 'border-amber-500/35 bg-amber-500/15 text-amber-300 shadow-xs'
@@ -312,9 +317,14 @@ export default function App() {
           </div>
         )}
 
-        {visitedViews.has('RECONCILER') && (
-          <div className={activeView === 'RECONCILER' ? 'contents' : 'hidden'}>
-            <BankReconcilerView />
+        {visitedViews.has('TREASURY') && (
+          <div className={activeView === 'TREASURY' ? 'contents' : 'hidden'}>
+            <TreasuryView
+              refreshTrigger={refreshTrigger}
+              onInventoryChange={() => {
+                setRefreshTrigger((prev) => prev + 1);
+              }}
+            />
           </div>
         )}
 
@@ -324,6 +334,11 @@ export default function App() {
               initialSection={settingsSection}
               health={health}
               refreshTrigger={refreshTrigger}
+              syncIntervalSeconds={syncIntervalSeconds}
+              onUpdateSyncInterval={(val) => {
+                setSyncIntervalSeconds(val);
+                localStorage.setItem('binance_sync_interval_seconds', String(val));
+              }}
               onSyncComplete={() => {
                 setRefreshTrigger((prev) => prev + 1);
                 checkHealth();

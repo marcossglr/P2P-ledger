@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Zap,
   Info,
+  Clock,
 } from 'lucide-react';
 
 const inputCls =
@@ -44,6 +45,7 @@ export default function BinanceP2PPublicApiCard() {
     pages: 1,
     publisher_type: '',
     top_n: 5,
+    refresh_interval_seconds: 60,
   });
   const [updatedAt, setUpdatedAt] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -63,6 +65,7 @@ export default function BinanceP2PPublicApiCard() {
       pages: cfg.pages ?? 1,
       publisher_type: cfg.publisher_type || '',
       top_n: cfg.top_n ?? 5,
+      refresh_interval_seconds: cfg.refresh_interval_seconds ?? 60,
     });
     setUpdatedAt(cfg.updated_at || null);
   };
@@ -87,6 +90,7 @@ export default function BinanceP2PPublicApiCard() {
     pages: Number(form.pages),
     publisher_type: form.publisher_type || null,
     top_n: Number(form.top_n),
+    refresh_interval_seconds: Number(form.refresh_interval_seconds ?? 60),
   });
 
   const handleChange = (field) => (e) => {
@@ -350,6 +354,117 @@ export default function BinanceP2PPublicApiCard() {
               className={inputCls}
             />
           </div>
+        </div>
+
+        {/* Frecuencia de Refresco Automático del Mercado */}
+        <div className="border-t border-slate-800/80 pt-3 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-400" />
+              <div>
+                <span className="text-xs font-bold text-white block">
+                  Frecuencia de Refresco del Mercado
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Intervalo con el que se consultan los precios públicos y el spread
+                </span>
+              </div>
+            </div>
+
+            {Number(form.refresh_interval_seconds) > 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>
+                  {Number(form.refresh_interval_seconds) >= 60
+                    ? `${Number(form.refresh_interval_seconds) / 60} min`
+                    : `${form.refresh_interval_seconds}s`}
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+                <span>Solo manual</span>
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+            {[
+              {
+                val: 0,
+                label: 'Desactivado',
+                badge: 'Manual',
+                desc: 'Solo consulta al presionar "Probar Consulta en Vivo". Cero consumo de peticiones.',
+              },
+              {
+                val: 15,
+                label: '15 segundos',
+                badge: 'Alta Frecuencia',
+                desc: 'Máxima frescura de precios. Usar solo en arbitraje activo puntual (riesgo de baneo WAF temporal si se deja fijo).',
+              },
+              {
+                val: 30,
+                label: '30 segundos',
+                badge: 'Trading Activo',
+                desc: 'Seguimiento dinámico de spread en jornadas de alta volatilidad del par.',
+              },
+              {
+                val: 60,
+                label: '60 segundos',
+                badge: 'Recomendado',
+                desc: 'Equilibrio ideal. Cotizaciones al día sin disparar bloqueos de IP ni sobrecargar red.',
+              },
+              {
+                val: 120,
+                label: '2 minutos',
+                badge: 'Bajo Consumo',
+                desc: 'Consulta periódica moderada. Ahorra ancho de banda y evita sospechas de scraping.',
+              },
+              {
+                val: 300,
+                label: '5 minutos',
+                badge: 'Modo Reposo',
+                desc: 'Tasa referencial de fondo para monitoreo general de largo plazo.',
+              },
+            ].map((opt) => {
+              const isSelected = Number(form.refresh_interval_seconds) === opt.val;
+              return (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, refresh_interval_seconds: opt.val }))}
+                  className={`flex flex-col text-left justify-between rounded-xl border p-3 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-amber-500/60 bg-amber-500/15 shadow-xs ring-1 ring-amber-500/40'
+                      : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className={`text-xs font-bold ${isSelected ? 'text-amber-300' : 'text-white'}`}>
+                        {opt.label}
+                      </span>
+                      <span
+                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                          isSelected
+                            ? 'bg-amber-500/25 text-amber-300'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {opt.badge}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-snug">
+                      {opt.desc}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
+            🛡️ <strong>Límite del Endpoint Público de Binance:</strong> Al consultar la web pública de anuncios (<code>adv/search</code>), Binance aplica filtros anti-bot por IP. Mantener intervalos menores a 30s de forma ininterrumpida podría resultar en bloqueos de IP (HTTP 429 / 403).
+          </p>
         </div>
       </div>
 
