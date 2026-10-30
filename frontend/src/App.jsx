@@ -21,6 +21,7 @@ import SettingsView from './components/SettingsView';
 import BinanceApiModal from './components/BinanceApiModal';
 import MarketPairModal from './components/MarketPairModal';
 import { playNewTradeSound, playCompletedTradeSound } from './utils/audioAlerts';
+import { healthApi, binanceApi } from './services/api';
 
 const NAV_ITEMS = [
   {
@@ -131,9 +132,7 @@ export default function App() {
 
   const checkHealth = useCallback(async () => {
     try {
-      const res = await fetch('/api/health');
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await healthApi.check();
       setHealth(data);
 
       const inProgress = data?.stored_in_progress_orders || 0;
@@ -173,30 +172,21 @@ export default function App() {
       isSyncingRef.current = true;
       setIsSyncingBg(true);
       try {
-        const res = await fetch('/api/binance/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force_full_90d: false }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setSyncError(null);
-          setRefreshTrigger((prev) => prev + 1);
-          if (data.has_in_progress) {
-            setHasActiveTrades(true);
-          } else if (data.in_progress_count === 0) {
-            setHasActiveTrades(false);
-          }
-          await checkHealth();
-          if (!silent || data.new_orders > 0) {
-            showToast(
-              data.new_orders > 0
-                ? `+${data.new_orders} nuevas órdenes sincronizadas`
-                : 'Al día con Binance P2P'
-            );
-          }
-        } else {
-          setSyncError(data.detail || 'Error en sincronización');
+        const data = await binanceApi.syncOrders({ force_full_90d: false });
+        setSyncError(null);
+        setRefreshTrigger((prev) => prev + 1);
+        if (data.has_in_progress) {
+          setHasActiveTrades(true);
+        } else if (data.in_progress_count === 0) {
+          setHasActiveTrades(false);
+        }
+        await checkHealth();
+        if (!silent || data.new_orders > 0) {
+          showToast(
+            data.new_orders > 0
+              ? `+${data.new_orders} nuevas órdenes sincronizadas`
+              : 'Al día con Binance P2P'
+          );
         }
       } catch (err) {
         console.error('Error en sincronización incremental:', err);

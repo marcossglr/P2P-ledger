@@ -15,6 +15,7 @@ import BankReconcileModal from './BankReconcileModal';
 import BankMovementsModal from './BankMovementsModal';
 import BankAdjustmentsModal from './BankAdjustmentsModal';
 import BankAccountFormModal from './BankAccountFormModal';
+import { bankInventoryApi } from '../services/api';
 
 export default function BankInventoryView({ refreshTrigger, onInventoryChange }) {
   const [data, setData] = useState(null);
@@ -56,8 +57,7 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
   const fetchInventory = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/bank-inventory');
-      const json = await res.json();
+      const json = await bankInventoryApi.getInventory();
       setData(json);
     } catch (err) {
       console.error('Error cargando inventario bancario en Bs:', err);
@@ -69,15 +69,10 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
   const handleSyncBinanceBanks = async () => {
     setSyncingBanks(true);
     try {
-      const res = await fetch('/api/bank-inventory/sync-binance-methods', {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setData(updated);
-        if (onInventoryChange) {
-          onInventoryChange(updated);
-        }
+      const updated = await bankInventoryApi.syncBinanceMethods();
+      setData(updated);
+      if (onInventoryChange) {
+        onInventoryChange(updated);
       }
     } catch (err) {
       console.error('Error sincronizando métodos de pago de Binance:', err);
@@ -120,30 +115,23 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
     setSavingAccount(true);
     try {
       const editing = accountFormModal.editingAccount;
-      const url = editing
-        ? `/api/bank-inventory/accounts/${editing.id}`
-        : '/api/bank-inventory/accounts';
-      const method = editing ? 'PUT' : 'POST';
+      const payload = {
+        name: accName.trim(),
+        account_alias: accAlias.trim(),
+        match_keywords: accKeywords.trim() || accName.trim().toLowerCase(),
+        is_default: accIsDefault,
+        apply_buy_fee: accApplyFee,
+        pago_movil_fee_pct: parseFloat(accPmFeePct) || 0,
+        transfer_fee_pct: parseFloat(accTransfFeePct) || 0,
+        initial_balance: editing ? undefined : parseFloat(accInitialBalance) || 0,
+      };
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: accName.trim(),
-          account_alias: accAlias.trim(),
-          match_keywords: accKeywords.trim() || accName.trim().toLowerCase(),
-          is_default: accIsDefault,
-          apply_buy_fee: accApplyFee,
-          pago_movil_fee_pct: parseFloat(accPmFeePct) || 0,
-          transfer_fee_pct: parseFloat(accTransfFeePct) || 0,
-          initial_balance: editing ? undefined : parseFloat(accInitialBalance) || 0,
-        }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setData(updated);
-        setAccountFormModal({ open: false, editingAccount: null });
-      }
+      const updated = editing
+        ? await bankInventoryApi.updateAccount(editing.id, payload)
+        : await bankInventoryApi.createAccount(payload);
+
+      setData(updated);
+      setAccountFormModal({ open: false, editingAccount: null });
     } catch (err) {
       console.error('Error guardando cuenta bancaria:', err);
     } finally {
@@ -154,15 +142,10 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
   const handleDeleteAccount = async (acc) => {
     if (!window.confirm(`¿Eliminar la cuenta bancaria "${acc.name}"?`)) return;
     try {
-      const res = await fetch(`/api/bank-inventory/accounts/${acc.id}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setData(updated);
-        if (String(selectedBankFilter) === String(acc.id)) {
-          setSelectedBankFilter('ALL');
-        }
+      const updated = await bankInventoryApi.deleteAccount(acc.id);
+      setData(updated);
+      if (String(selectedBankFilter) === String(acc.id)) {
+        setSelectedBankFilter('ALL');
       }
     } catch (err) {
       console.error('Error eliminando cuenta:', err);
@@ -171,25 +154,18 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
 
   const handleToggleAccountFee = async (acc) => {
     try {
-      const res = await fetch(`/api/bank-inventory/accounts/${acc.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: acc.name,
-          account_alias: acc.account_alias,
-          match_keywords: acc.match_keywords,
-          is_default: acc.is_default,
-          apply_buy_fee: !acc.apply_buy_fee,
-          pago_movil_fee_pct: acc.pago_movil_fee_pct,
-          transfer_fee_pct: acc.transfer_fee_pct,
-        }),
+      const updated = await bankInventoryApi.updateAccount(acc.id, {
+        name: acc.name,
+        account_alias: acc.account_alias,
+        match_keywords: acc.match_keywords,
+        is_default: acc.is_default,
+        apply_buy_fee: !acc.apply_buy_fee,
+        pago_movil_fee_pct: acc.pago_movil_fee_pct,
+        transfer_fee_pct: acc.transfer_fee_pct,
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setData(updated);
-        if (onInventoryChange) {
-          onInventoryChange(updated);
-        }
+      setData(updated);
+      if (onInventoryChange) {
+        onInventoryChange(updated);
       }
     } catch (err) {
       console.error('Error cambiando comisión de cuenta:', err);
@@ -198,23 +174,13 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
 
   const handleReassignOrderBank = async (orderId, newBankId) => {
     try {
-      const res = await fetch('/api/bank-inventory/assign-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order_id: orderId,
-          bank_account_id: Number(newBankId),
-        }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setData(updated);
-        if (onInventoryChange) {
-          onInventoryChange(updated);
-        }
+      const updated = await bankInventoryApi.assignOrder(orderId, Number(newBankId));
+      setData(updated);
+      if (onInventoryChange) {
+        onInventoryChange(updated);
       }
     } catch (err) {
-      console.error('Error reasignando orden a banco:', err);
+      console.error('Error reasignando banco:', err);
     }
   };
 

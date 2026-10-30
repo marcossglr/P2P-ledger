@@ -10,6 +10,7 @@ import {
   Plus,
 } from 'lucide-react';
 import BankAccountFormModal from './BankAccountFormModal';
+import { bankInventoryApi } from '../services/api';
 
 export default function BankReconcileModal({
   isOpen,
@@ -145,20 +146,12 @@ export default function BankReconcileModal({
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/bank-inventory/reconcile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_id: selectedAccount.id,
-          mode,
-          amount: finalAmount,
-          note: noteInput.trim(),
-        }),
+      const data = await bankInventoryApi.reconcileAccount({
+        account_id: selectedAccount.id,
+        mode,
+        amount: finalAmount,
+        note: noteInput.trim(),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || 'Error al actualizar el saldo de la cuenta');
-      }
       if (onSuccess) onSuccess(data);
       onClose();
     } catch (err) {
