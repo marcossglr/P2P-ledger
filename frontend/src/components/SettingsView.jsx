@@ -30,17 +30,24 @@ import {
   FileSpreadsheet,
   Clock,
   Timer,
+  Volume2,
+  VolumeX,
+  Palette,
+  Bell,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
-import BankInventoryView from './BankInventoryView';
+import { playNewTradeSound, playCompletedTradeSound } from '../utils/audioAlerts';
 import BinanceP2PPublicApiCard from './BinanceP2PPublicApiCard';
 import SystemDocumentationSection from './SystemDocumentationSection';
 
 const TABS = [
   { id: 'CONNECTIONS', label: 'Conexiones', icon: Link2 },
   { id: 'DATABASE', label: 'Base de Datos y Respaldo', icon: Database },
+  { id: 'PREFERENCES', label: 'Preferencias', icon: Palette },
   { id: 'DOCS', label: 'Información y Cálculos', icon: Info },
   { id: 'MAINTENANCE', label: 'Mantenimiento y Diagnóstico', icon: SlidersHorizontal },
-  { id: 'BANKS', label: 'Cuentas Bancarias', icon: Building2 },
 ];
 
 export default function SettingsView({
@@ -49,12 +56,23 @@ export default function SettingsView({
   refreshTrigger = 0,
   syncIntervalSeconds = 60,
   onUpdateSyncInterval,
+  soundEnabled = true,
+  onToggleSound,
+  soundNewOrderEnabled = true,
+  onToggleSoundNewOrder,
+  soundCompletedOrderEnabled = true,
+  onToggleSoundCompletedOrder,
+  toastsEnabled = true,
+  onToggleToasts,
+  appTheme = 'DEEP_SLATE',
+  onUpdateAppTheme,
   onSyncComplete,
   onReturnDashboard,
+  onNavigateTreasury,
 }) {
   const normalizeSection = (sec) => {
-    if (sec === 'BANKS') return 'BANKS';
     if (sec === 'DATABASE') return 'DATABASE';
+    if (sec === 'PREFERENCES') return 'PREFERENCES';
     if (sec === 'DOCS' || sec === 'FORMULAS' || sec === 'INFO') return 'DOCS';
     if (sec === 'MAINTENANCE') return 'MAINTENANCE';
     return 'CONNECTIONS';
@@ -87,6 +105,14 @@ export default function SettingsView({
   // Estados para Base de Datos y Mantenimiento
   const [isDraggingCsv, setIsDraggingCsv] = useState(false);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+
+  // Estados para Gestión de Respaldos SQLite
+  const [backups, setBackups] = useState([]);
+  const [dbSizeMb, setDbSizeMb] = useState(0);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [backupActionLoading, setBackupActionLoading] = useState(false);
+  const [restoreConfirmModal, setRestoreConfirmModal] = useState(null); // filename to confirm
+  const [isDraggingBackup, setIsDraggingBackup] = useState(false);
 
   const apiConfigured = Boolean(health.binance_api_configured);
   const maskedKey = health.masked_api_key || '';
@@ -245,267 +271,296 @@ export default function SettingsView({
     }
   };
 
+  // Efecto para cargar los respaldos cuando se selecciona la pestaña DATABASE
+  const fetchBackupsList = async () => {
+    setLoadingBackups(true);
+    try {
+      const res = await fetch('/api/backups');
+      if (res.ok) {
+        const data = await res.json();
+        setBackups(data.backups || []);
+        setDbSizeMb(data.current_db_size_mb || 0);
+      }
+    } catch {
+      // Ignorar error silencioso
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'DATABASE') {
+      fetchBackupsList();
+    }
+  }, [activeSection, refreshTrigger]);
+
+  const handleCreateBackup = async () => {
+    setError(null);
+    setMessage(null);
+    setBackupActionLoading(true);
+    try {
+      const res = await fetch('/api/backups/create', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al generar la copia de seguridad.');
+      setMessage(`Copia de seguridad creada con éxito: ${data.filename} (${data.size_mb} MB)`);
+      fetchBackupsList();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBackupActionLoading(false);
+    }
+  };
+
+  const handleRestoreBackup = async (filename) => {
+    setError(null);
+    setMessage(null);
+    setBackupActionLoading(true);
+    setRestoreConfirmModal(null);
+    try {
+      const res = await fetch('/api/backups/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al restaurar el respaldo.');
+      setMessage(data.message || 'Base de datos restaurada correctamente.');
+      fetchBackupsList();
+      if (onSyncComplete) onSyncComplete();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBackupActionLoading(false);
+    }
+  };
+
+  const handleDeleteBackup = async (filename) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar el respaldo ${filename}?`)) return;
+    setError(null);
+    setMessage(null);
+    setBackupActionLoading(true);
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al eliminar el respaldo.');
+      setMessage(`Respaldo ${filename} eliminado.`);
+      fetchBackupsList();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBackupActionLoading(false);
+    }
+  };
+
+  const handleUploadBackup = async (file) => {
+    if (!file) return;
+    if (!file.name.endsWith('.db')) {
+      setError('El archivo seleccionado debe ser una base de datos SQLite (.db)');
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    setBackupActionLoading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch('/api/backups/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al subir el archivo de respaldo.');
+      setMessage(`Respaldo incorporado a la lista: ${data.filename}`);
+      fetchBackupsList();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBackupActionLoading(false);
+    }
+  };
+
   const canSubmit = apiConfigured || (apiKey.trim().length > 0 && apiSecret.trim().length > 0);
 
   return (
-    <div className="space-y-4">
-      {/* Cabecera Superior Unificada y Sobria */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-3.5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
-            <Settings className="h-4.5 w-4.5" />
+    <div className="mx-auto w-full max-w-6xl">
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        {/* COLUMNA LATERAL IZQUIERDA: Menú de Ajustes Compacto, Vertical y Sticky */}
+        <aside className="w-full md:w-56 shrink-0 md:sticky md:top-20 space-y-3">
+          <div className="flex items-center justify-between pb-1 px-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Ajustes
+            </span>
+            {onReturnDashboard && (
+              <button
+                type="button"
+                onClick={onReturnDashboard}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
+                title="Volver al panel principal"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                <span>Volver</span>
+              </button>
+            )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-white">Ajustes y Configuración</h2>
-              <span className="rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
-                Sistema
-              </span>
+
+          <nav aria-label="Menú de ajustes" className="space-y-1">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeSection === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveSection(tab.id)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-all cursor-pointer text-left ${
+                    isActive
+                      ? 'border border-amber-500/35 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
+                      : 'border border-transparent text-slate-400 hover:border-slate-800 hover:bg-slate-900/80 hover:text-slate-200'
+                  }`}
+                >
+                  <Icon
+                    className={`h-4 w-4 shrink-0 transition-colors ${
+                      isActive ? 'text-amber-400' : 'text-slate-400'
+                    }`}
+                  />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* COLUMNA PRINCIPAL DERECHA: Contenido Enfocado y de Ancho Natural */}
+        <div className="flex-1 min-w-0 w-full space-y-4">
+          {/* Mensajes Globales de Estado */}
+          {error && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 animate-fadeIn">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              <span>{error}</span>
             </div>
-            <p className="text-xs text-slate-400">
-              Administración de tesorería en Bs, conexiones externas, almacenamiento local y herramientas de mantenimiento
-            </p>
-          </div>
-        </div>
+          )}
 
-        {onReturnDashboard && (
-          <button
-            type="button"
-            onClick={onReturnDashboard}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 text-slate-400" />
-            <span>Volver a Operaciones de Hoy</span>
-          </button>
-        )}
-      </div>
+          {message && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 animate-fadeIn">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              <span>{message}</span>
+            </div>
+          )}
 
-      {/* Navegación por Pestañas Principales (Diseño Maduro, Profesional y Consistente) */}
-      <nav
-        aria-label="Pestañas de ajustes"
-        className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/90 p-1 shadow-sm"
-      >
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeSection === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveSection(tab.id)}
-              className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs transition-all cursor-pointer ${
-                isActive
-                  ? 'border border-amber-500/35 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
-                  : 'border border-transparent text-slate-400 hover:border-slate-700/60 hover:bg-slate-800/60 hover:text-slate-200 font-medium'
-              }`}
-            >
-              <Icon
-                className={`h-4 w-4 shrink-0 transition-colors ${
-                  isActive ? 'text-amber-400' : 'text-slate-400'
-                }`}
-              />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Mensajes Globales de Estado */}
-      {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 animate-fadeIn">
-          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {message && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 animate-fadeIn">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-          <span>{message}</span>
-        </div>
-      )}
-
-      {/* 1. SECCIÓN CUENTAS BANCARIAS */}
-      {activeSection === 'BANKS' && (
-        <BankInventoryView
-          refreshTrigger={refreshTrigger}
-          onInventoryChange={onSyncComplete}
-        />
-      )}
-
-      {/* 2. SECCIÓN CONEXIONES (GENERAL CON SECCIÓN BINANCE) */}
+      {/* 1. SECCIÓN CONEXIONES (GENERAL CON SECCIÓN BINANCE) */}
       {activeSection === 'CONNECTIONS' && (
         <div className="space-y-4">
-          {/* Banner Resumen del Centro de Conexiones */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <h3 className="text-sm font-bold text-white">Centro de Conexiones e Integraciones</h3>
+          {/* Selector Sintetizado de Proveedores de Conexión */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* Proveedor: Binance */}
+            <button
+              type="button"
+              onClick={() => setSelectedProvider('BINANCE')}
+              className={`flex items-center justify-between rounded-xl border p-3 text-left transition-all cursor-pointer ${
+                selectedProvider === 'BINANCE'
+                  ? 'border-amber-500/50 bg-amber-500/10 shadow-xs'
+                  : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 border border-amber-500/35 text-amber-400 shrink-0">
+                  <svg className="h-4 w-4 fill-amber-400" viewBox="0 0 24 24">
+                    <path d="M12 3.02L7.04 7.98l2.48 2.48L12 7.98l2.48 2.48 2.48-2.48L12 3.02zM3.02 12l2.48-2.48 2.48 2.48-2.48 2.48L3.02 12zm8.98 8.98l-4.96-4.96 2.48-2.48 2.48 2.48 2.48-2.48 2.48 2.48-4.96 4.96zM18.5 12l2.48-2.48L23.46 12l-2.48 2.48-2.48-2.48zM12 9.94L9.94 12 12 14.06 14.06 12 12 9.94z" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block leading-tight">Binance P2P</span>
+                  <span className="text-xs text-slate-400 mt-0.5 block">Órdenes & Mercado</span>
+                </div>
               </div>
-              <p className="text-xs text-slate-400">
-                Gestiona las pasarelas externas, APIs de exchanges y proveedores de datos conectados al reconciliador.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1 text-slate-300">
-                <Radio className={`h-3 w-3 ${syncIntervalSeconds > 0 ? 'text-emerald-400' : 'text-slate-500'}`} />
-                <span>
-                  {syncIntervalSeconds > 0
-                    ? `Auto-sync cada ${syncIntervalSeconds >= 60 ? `${syncIntervalSeconds / 60}m` : `${syncIntervalSeconds}s`}`
-                    : 'Auto-sync desactivado'}
+              {apiConfigured ? (
+                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Conectado
                 </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  Configurar
+                </span>
+              )}
+            </button>
+
+            {/* Proveedor: Bancos en Bs */}
+            <button
+              type="button"
+              onClick={() => setSelectedProvider('BANKS_API')}
+              className={`flex items-center justify-between rounded-xl border p-3 text-left transition-all cursor-pointer ${
+                selectedProvider === 'BANKS_API'
+                  ? 'border-amber-500/50 bg-amber-500/10 shadow-xs'
+                  : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-300 shrink-0">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block leading-tight">Bancos en Bs</span>
+                  <span className="text-xs text-slate-400 mt-0.5 block">SMS & Webhooks</span>
+                </div>
+              </div>
+              <span className="inline-flex items-center rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-xs font-semibold text-slate-400">
+                Próximamente
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1 text-slate-300">
-                <Lock className="h-3 w-3 text-amber-400" />
-                <span>Permisos Locales 0600</span>
+            </button>
+
+            {/* Proveedor: Otras Plataformas P2P */}
+            <button
+              type="button"
+              onClick={() => setSelectedProvider('OTHER_EXCHANGES')}
+              className={`flex items-center justify-between rounded-xl border p-3 text-left transition-all cursor-pointer ${
+                selectedProvider === 'OTHER_EXCHANGES'
+                  ? 'border-amber-500/50 bg-amber-500/10 shadow-xs'
+                  : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-300 shrink-0">
+                  <Globe className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block leading-tight">Otros Exchanges</span>
+                  <span className="text-xs text-slate-400 mt-0.5 block">Bybit / El Dorado</span>
+                </div>
+              </div>
+              <span className="inline-flex items-center rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-xs font-semibold text-slate-400">
+                En Roadmap
               </span>
-            </div>
-          </div>
-
-          {/* Selector de Proveedores de Conexión (Colores Sobrios y Consistentes) */}
-          <div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-2">
-              Proveedores y Plataformas Disponibles
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Proveedor: Binance (Activo / Destacado) */}
-              <button
-                type="button"
-                onClick={() => setSelectedProvider('BINANCE')}
-                className={`relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer ${
-                  selectedProvider === 'BINANCE'
-                    ? 'border-amber-500/50 bg-amber-500/10 shadow-xs'
-                    : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    {/* Icono Diamante de Binance */}
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 border border-amber-500/35 text-amber-400 shadow-xs">
-                      <svg className="h-4.5 w-4.5 fill-amber-400" viewBox="0 0 24 24">
-                        <path d="M12 3.02L7.04 7.98l2.48 2.48L12 7.98l2.48 2.48 2.48-2.48L12 3.02zM3.02 12l2.48-2.48 2.48 2.48-2.48 2.48L3.02 12zm8.98 8.98l-4.96-4.96 2.48-2.48 2.48 2.48 2.48-2.48 2.48 2.48-4.96 4.96zM18.5 12l2.48-2.48L23.46 12l-2.48 2.48-2.48-2.48zM12 9.94L9.94 12 12 14.06 14.06 12 12 9.94z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-white block">Binance</span>
-                      <span className="text-[10px] text-slate-400">P2P & Mercado</span>
-                    </div>
-                  </div>
-
-                  {apiConfigured ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      Conectado
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                      Configurar
-                    </span>
-                  )}
-                </div>
-
-                <p className="mt-3 text-[11px] text-slate-400 line-clamp-2">
-                  Sincronización de órdenes P2P (180 días) y cotizaciones públicas en vivo.
-                </p>
-              </button>
-
-              {/* Proveedor: Bancos en Bs (Próximamente) */}
-              <button
-                type="button"
-                onClick={() => setSelectedProvider('BANKS_API')}
-                className={`flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer ${
-                  selectedProvider === 'BANKS_API'
-                    ? 'border-amber-500/50 bg-amber-500/10 shadow-xs'
-                    : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
-                      <Building2 className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-white block">Bancos en Bs</span>
-                      <span className="text-[10px] text-slate-400">SMS / Webhooks</span>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
-                    Próximamente
-                  </span>
-                </div>
-                <p className="mt-3 text-[11px] text-slate-400 line-clamp-2">
-                  Recepción directa de pagos móviles y transferencias vía API bancaria o SMS.
-                </p>
-              </button>
-
-              {/* Proveedor: Otras Plataformas P2P / CEX (Próximamente) */}
-              <button
-                type="button"
-                onClick={() => setSelectedProvider('OTHER_EXCHANGES')}
-                className={`flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer ${
-                  selectedProvider === 'OTHER_EXCHANGES'
-                    ? 'border-amber-500/50 bg-amber-500/10 shadow-xs'
-                    : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
-                      <Globe className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-white block">Otros Exchanges</span>
-                      <span className="text-[10px] text-slate-400">Bybit / El Dorado</span>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
-                    En Roadmap
-                  </span>
-                </div>
-                <p className="mt-3 text-[11px] text-slate-400 line-clamp-2">
-                  Soporte multi-exchange para consolidar operaciones P2P de varias plataformas.
-                </p>
-              </button>
-            </div>
+            </button>
           </div>
 
           {/* VISTA DETALLADA DEL PROVEEDOR SELECCIONADO */}
 
-          {/* CASO 1: SECCIÓN DEDICADA A BINANCE */}
+          {/* CASO 1: SECCIÓN DEDICADA A BINANCE (SIN SUB-PESTAÑAS NI RELLENO) */}
           {selectedProvider === 'BINANCE' && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-5">
-              {/* Encabezado Principal de Binance */}
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+              {/* Cabecera de Estado Binance */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-400 shadow-sm">
-                    <svg className="h-5 w-5 fill-amber-400" viewBox="0 0 24 24">
-                      <path d="M12 3.02L7.04 7.98l2.48 2.48L12 7.98l2.48 2.48 2.48-2.48L12 3.02zM3.02 12l2.48-2.48 2.48 2.48-2.48 2.48L3.02 12zm8.98 8.98l-4.96-4.96 2.48-2.48 2.48 2.48 2.48-2.48 2.48 2.48-4.96 4.96zM18.5 12l2.48-2.48L23.46 12l-2.48 2.48-2.48-2.48zM12 9.94L9.94 12 12 14.06 14.06 12 12 9.94z" />
-                    </svg>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-400">
+                    <KeyRound className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-white">Conexión Binance</h3>
-                      <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                        P2P API Oficial
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Sincronización automatizada de transacciones y consulta de estadísticas de mercado en tiempo real
+                    <h3 className="text-sm font-bold text-white">Credenciales Binance API (P2P)</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Sincronización segura de órdenes P2P en tiempo real con WebSocket activo
                     </p>
                   </div>
                 </div>
 
-                {/* Estatus y Botón Rápido */}
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   {apiConfigured ? (
                     <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">
                       <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>API Vinculada</span>
+                      <span>Conectado</span>
                       {maskedKey && (
-                        <span className="font-mono text-slate-300 text-[11px] border-l border-emerald-500/30 pl-2">
+                        <span className="font-mono text-slate-300 text-xs border-l border-emerald-500/30 pl-2">
                           {maskedKey}
                         </span>
                       )}
@@ -513,7 +568,7 @@ export default function SettingsView({
                   ) : (
                     <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300">
                       <span className="h-2 w-2 rounded-full bg-amber-400" />
-                      <span>Configuración Pendiente</span>
+                      <span>Sin Configurar</span>
                     </div>
                   )}
 
@@ -522,394 +577,165 @@ export default function SettingsView({
                       type="button"
                       onClick={handleConnectAndSync}
                       disabled={loading}
-                      title="Sincronizar solo las órdenes nuevas desde la última actualización"
-                      className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-sm hover:bg-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
+                      title="Sincronizar órdenes nuevas ahora"
+                      className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${loading ? 'animate-spin' : ''}`} />
                       <span>{loading ? 'Sincronizando...' : 'Sincronizar'}</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Sub-navegación tipo Segmented Control para Binance */}
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800/80 pb-3">
-                <button
-                  type="button"
-                  onClick={() => setBinanceSubTab('PRIVATE_API')}
-                  className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs transition-all cursor-pointer ${
-                    binanceSubTab === 'PRIVATE_API'
-                      ? 'border border-amber-500/35 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
-                      : 'border border-transparent text-slate-400 hover:border-slate-700/60 hover:bg-slate-800/60 hover:text-slate-200 font-medium'
-                  }`}
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  <span>Órdenes y Transacciones (API Privada)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setBinanceSubTab('PUBLIC_API')}
-                  className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs transition-all cursor-pointer ${
-                    binanceSubTab === 'PUBLIC_API'
-                      ? 'border border-amber-500/35 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
-                      : 'border border-transparent text-slate-400 hover:border-slate-700/60 hover:bg-slate-800/60 hover:text-slate-200 font-medium'
-                  }`}
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  <span>Mercado y Precios P2P (API Pública)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setBinanceSubTab('GUIDE')}
-                  className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs transition-all cursor-pointer ${
-                    binanceSubTab === 'GUIDE'
-                      ? 'border border-amber-500/35 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
-                      : 'border border-transparent text-slate-400 hover:border-slate-700/60 hover:bg-slate-800/60 hover:text-slate-200 font-medium'
-                  }`}
-                >
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  <span>Seguridad y Guía de Permisos</span>
-                </button>
-              </div>
-
-              {/* SUB-PESTAÑA 1: API PRIVADA (ÓRDENES E HISTORIAL P2P) */}
-              {binanceSubTab === 'PRIVATE_API' && (
-                <div className="space-y-4">
-                  {/* Tarjeta de Resumen de Estado */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">
-                          Estado de Credenciales de Lectura
-                        </span>
-                        {apiConfigured ? (
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                            <span className="text-xs font-bold text-emerald-400">
-                              Credenciales Activas y Verificadas
-                            </span>
-                            <span className="font-mono text-xs text-slate-300 ml-1">
-                              ({maskedKey})
-                            </span>
-                            {maskedKey && (
-                              <button
-                                type="button"
-                                onClick={handleCopyKey}
-                                className="ml-1 inline-flex items-center text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
-                                title="Copiar identificador enmascarado"
-                              >
-                                {copiedKey ? (
-                                  <Check className="h-3.5 w-3.5 text-emerald-400" />
-                                ) : (
-                                  <Copy className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="flex h-2.5 w-2.5 rounded-full bg-amber-400" />
-                            <span className="text-xs font-semibold text-amber-300">
-                              Sin credenciales configuradas
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {apiConfigured && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowKeyForm(!showKeyForm)}
-                            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
-                          >
-                            {showKeyForm ? 'Ocultar Formulario' : 'Cambiar Credenciales'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleDisconnectApi}
-                            disabled={loading}
-                            className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors cursor-pointer"
-                          >
-                            Desvincular
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Formulario de Llaves (visible si no está configurada o si el usuario quiere cambiarla) */}
-                    {(showKeyForm || !apiConfigured) && (
-                      <div className="mt-4 space-y-3.5 border-t border-slate-800 pt-4 animate-fadeIn">
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-xs font-semibold text-slate-300">
-                              Binance API Key <span className="text-slate-500 font-normal">(Solo Lectura)</span>
-                            </label>
-                            <button
-                              type="button"
-                              onClick={handlePasteKey}
-                              className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                              <Copy className="h-3 w-3" /> Pegar Portapapeles
-                            </button>
-                          </div>
-                          <input
-                            type="text"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            placeholder="Pega tu API Key de Binance..."
-                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1">
-                            Binance Secret Key
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showSecret ? 'text' : 'password'}
-                              value={apiSecret}
-                              onChange={(e) => setApiSecret(e.target.value)}
-                              placeholder="Pega tu Secret Key de Binance..."
-                              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 pr-10 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowSecret(!showSecret)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                              title={showSecret ? 'Ocultar Secret' : 'Mostrar Secret'}
-                            >
-                              {showSecret ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start gap-2.5 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-[11px] text-slate-400">
-                          <Info className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                          <span>
-                            Solo requieres habilitar el permiso de <strong className="text-slate-200">Enable Reading</strong> (Lectura). Nunca actives retiros ni trading spot. Tus credenciales se almacenan localmente en tu equipo.
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Selector de Frecuencia de Sincronización Automática */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-amber-400" />
-                        <div>
-                          <span className="text-xs font-bold text-white block">
-                            Frecuencia de Sincronización Automática
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            Intervalo en segundo plano para consultar órdenes nuevas de Binance P2P
-                          </span>
-                        </div>
-                      </div>
-
-                      {syncIntervalSeconds > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>Activo ({syncIntervalSeconds >= 60 ? `${syncIntervalSeconds / 60} min` : `${syncIntervalSeconds}s`})</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
-                          <span>Solo manual</span>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
-                      {[
-                        { label: 'Desactivado', val: 0, desc: 'Solo manual' },
-                        { label: '15 segundos', val: 15, desc: 'Alta frecuencia' },
-                        { label: '30 segundos', val: 30, desc: 'Trading activo' },
-                        { label: '60 segundos', val: 60, desc: 'Recomendado', defaultTag: true },
-                        { label: '2 minutos', val: 120, desc: 'Bajo consumo' },
-                        { label: '5 minutos', val: 300, desc: 'Modo reposo' },
-                      ].map((opt) => {
-                        const isSelected = syncIntervalSeconds === opt.val;
-                        return (
-                          <button
-                            key={opt.val}
-                            type="button"
-                            onClick={() => onUpdateSyncInterval && onUpdateSyncInterval(opt.val)}
-                            className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all cursor-pointer ${
-                              isSelected
-                                ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
-                                : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-slate-200'
-                            }`}
-                          >
-                            <span className="text-xs font-bold block">{opt.label}</span>
-                            <span className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <p className="text-[11px] text-slate-500 leading-relaxed pt-1 border-t border-slate-800/60">
-                      💡 <strong>Límites de Binance:</strong> Binance permite hasta 1.200 peticiones/minuto por IP. La consulta incremental consume únicamente ~3 peticiones por ciclo (&lt; 0.5% del cupo a 60s). El ajuste se almacena de forma persistente.
-                    </p>
-                  </div>
-
-                  {/* Botón de Sincronización Principal */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleConnectAndSync}
-                      disabled={loading || !canSubmit}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                      <span>
-                        {loading
-                          ? 'Sincronizando...'
-                          : apiConfigured && !apiKey.trim()
-                          ? 'Sincronizar Órdenes Nuevas'
-                          : 'Guardar Llaves y Sincronizar Historial'}
-                      </span>
-                    </button>
-
-                    {apiConfigured && !apiKey.trim() && (
+              {/* Formulario Compacto de API Key & Secret */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white">Llaves de Acceso Local (HMAC-SHA256)</span>
+                  {apiConfigured && (
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={(ev) => handleConnectAndSync(ev, true)}
-                        disabled={loading}
-                        className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-40 transition-colors cursor-pointer"
+                        onClick={() => setShowKeyForm(!showKeyForm)}
+                        className="text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
                       >
-                        Sincronización completa (180 días)
+                        {showKeyForm ? 'Ocultar campos' : 'Modificar llaves'}
                       </button>
-                    )}
+                      <span className="text-slate-600">·</span>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectApi}
+                        disabled={loading}
+                        className="text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                      >
+                        Desvincular
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-                    <div className="text-[11px] text-slate-500">
-                      La sincronización normal trae solo lo nuevo; la completa recorre hasta 180 días continuos de la API de Binance
+                {(showKeyForm || !apiConfigured) && (
+                  <div className="space-y-3 pt-1 animate-fadeIn">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-300">
+                          Binance API Key <span className="text-slate-500 font-normal">(Permiso: Solo Lectura)</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handlePasteKey}
+                          className="text-xs text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="h-3 w-3" /> Pegar Portapapeles
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="Pega tu API Key de Binance..."
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        Binance Secret Key
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showSecret ? 'text' : 'password'}
+                          value={apiSecret}
+                          onChange={(e) => setApiSecret(e.target.value)}
+                          placeholder="Pega tu Secret Key de Binance..."
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 pr-10 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret(!showSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleConnectAndSync}
+                        disabled={loading || !canSubmit}
+                        className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${loading ? 'animate-spin' : ''}`} />
+                        <span>{loading ? 'Guardando...' : 'Guardar Llaves y Sincronizar'}</span>
+                      </button>
                     </div>
                   </div>
+                )}
 
-                  {/* Respaldo / Historial mayor a 6 meses con CSV */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Upload className="h-4 w-4 text-amber-400" />
-                      <span className="text-xs font-bold text-white">
-                        ¿Tienes operaciones de más de 6 meses? Importación CSV
+                <div className="flex items-center gap-2 text-xs text-slate-400 pt-1 border-t border-slate-800/60">
+                  <Lock className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span>
+                    Almacenamiento 100% local en tu disco con permisos 0600. Nunca actives retiros ni trading spot en Binance.
+                  </span>
+                </div>
+              </div>
+
+              {/* Selector de Frecuencia de Sincronización Automática */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-400" />
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Frecuencia de Polling en Segundo Plano
+                      </span>
+                      <span className="text-xs text-slate-400 mt-0.5 block">
+                        Intervalo para refrescar órdenes (se acelera automáticamente a 10s si hay trades activos)
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      La API de Binance restringe el historial P2P a 180 días. Si necesitas incorporar operaciones más antiguas generadas desde el portal web de Binance, puedes subir el reporte en formato <code className="font-mono text-slate-300">.csv</code>:
-                    </p>
-                    <div className="pt-1.5">
-                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors shadow-xs">
-                        <Upload className="h-3.5 w-3.5 text-amber-400" />
-                        <span>Seleccionar Archivo .CSV de Binance</span>
-                        <input
-                          type="file"
-                          accept=".csv"
-                          className="hidden"
-                          onChange={(e) => handleCsvFallback(e.target.files?.[0])}
-                        />
-                      </label>
-                    </div>
                   </div>
+
+                  {syncIntervalSeconds > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Activo ({syncIntervalSeconds >= 60 ? `${syncIntervalSeconds / 60}m` : `${syncIntervalSeconds}s`})</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs font-semibold text-slate-400">
+                      <span>Solo manual</span>
+                    </span>
+                  )}
                 </div>
-              )}
 
-              {/* SUB-PESTAÑA 2: API PÚBLICA DE MERCADO (PRECIOS Y SPREAD) */}
-              {binanceSubTab === 'PUBLIC_API' && (
-                <BinanceP2PPublicApiCard />
-              )}
-
-              {/* SUB-PESTAÑA 3: SEGURIDAD Y GUÍA DE PERMISOS */}
-              {binanceSubTab === 'GUIDE' && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3">
-                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-amber-400" />
-                      <span>Guía de Creación y Permisos de la API de Binance</span>
-                    </h4>
-                    <p className="text-xs text-slate-400">
-                      Sigue estos sencillos pasos en tu cuenta de Binance para generar tus llaves con la máxima seguridad:
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                      <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 space-y-1.5">
-                        <div className="flex items-center gap-2 text-xs font-bold text-white">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-bold">
-                            1
-                          </span>
-                          <span>Acceder a Gestión de API</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Inicia sesión en <strong className="text-slate-300">Binance.com</strong>, dirígete a tu Perfil (ícono de usuario) y haz clic en <em>Gestión de API</em>.
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 space-y-1.5">
-                        <div className="flex items-center gap-2 text-xs font-bold text-white">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-bold">
-                            2
-                          </span>
-                          <span>Crear Clave de Sistema</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Elige <strong className="text-slate-300">Generada por el Sistema</strong> (System Generated HMAC) y asígnale una etiqueta identificadora, por ejemplo <em>P2P Ledger</em>.
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 space-y-1.5">
-                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold">
-                            3
-                          </span>
-                          <span>Permiso: Solo Lectura</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Marca únicamente la casilla <strong className="text-emerald-300">Enable Reading</strong> (Habilitar Lectura). Es el único permiso necesario para sincronizar tus órdenes P2P.
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 space-y-1.5">
-                        <div className="flex items-center gap-2 text-xs font-bold text-rose-400">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/20 text-rose-400 text-[11px] font-bold">
-                            4
-                          </span>
-                          <span>Prohibir Retiros y Trading</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Asegúrate de que <strong className="text-rose-300">Enable Withdrawals</strong> y <strong className="text-rose-300">Spot & Margin Trading</strong> estén <em>desactivados</em>. Esta aplicación nunca solicitará permisos transaccionales.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Garantías de Privacidad */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3">
-                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-emerald-400" />
-                      <span>Compromiso de Privacidad y Ejecución 100% Local</span>
-                    </h4>
-                    <div className="space-y-2 text-xs text-slate-400 leading-relaxed">
-                      <p>
-                        • <strong className="text-white">Almacenamiento Local Aislado:</strong> Tus credenciales se guardan exclusivamente en el disco duro de esta máquina local con permisos de archivo restringidos (<code className="font-mono text-slate-300">chmod 0600</code>).
-                      </p>
-                      <p>
-                        • <strong className="text-white">Sin Servidores Intermedios:</strong> El reconciliador se comunica de forma directa y cifrada mediante HTTPS con los servidores oficiales de Binance (<code className="font-mono text-slate-300">api.binance.com</code>). Ningún tercero tiene acceso a tus claves.
-                      </p>
-                      <p>
-                        • <strong className="text-white">Desvinculación Instantánea:</strong> Si en cualquier momento deseas eliminar tus llaves de este equipo, puedes hacer clic en <em className="text-slate-300">Desvincular</em> en la pestaña de Órdenes y se borrarán de forma inmediata e irreversible.
-                      </p>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-1">
+                  {[
+                    { label: 'Desactivado', val: 0, desc: 'Solo manual' },
+                    { label: '15 seg', val: 15, desc: 'Rápido' },
+                    { label: '30 seg', val: 30, desc: 'Activo' },
+                    { label: '60 seg', val: 60, desc: 'Recomendado' },
+                    { label: '2 min', val: 120, desc: 'Bajo consumo' },
+                    { label: '5 min', val: 300, desc: 'Reposo' },
+                  ].map((opt) => {
+                    const isSelected = syncIntervalSeconds === opt.val;
+                    return (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() => onUpdateSyncInterval && onUpdateSyncInterval(opt.val)}
+                        className={`flex flex-col items-center justify-center rounded-xl border p-2 text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 font-semibold shadow-xs'
+                            : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <span className="text-xs font-bold block">{opt.label}</span>
+                        <span className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -947,14 +773,16 @@ export default function SettingsView({
                   </div>
                 </div>
                 <div className="pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection('BANKS')}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
-                  >
-                    <span>Gestionar Cuentas Bancarias Manuales</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+                  {onNavigateTreasury && (
+                    <button
+                      type="button"
+                      onClick={onNavigateTreasury}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+                    >
+                      <span>Ir a Tesorería y Cuentas Bancarias</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1002,168 +830,577 @@ export default function SettingsView({
         </div>
       )}
 
-      {/* 3. SECCIÓN BASE DE DATOS Y RESPALDO (GRID BALANCEADO DE ANCHO COMPLETO) */}
+      {/* 3. SECCIÓN BASE DE DATOS Y RESPALDO (ARQUITECTURA DE DATOS + GESTOR DE BACKUPS) */}
       {activeSection === 'DATABASE' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Tarjeta 1: Motor y Estado de Almacenamiento Local (SQLite) */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
-                      <Database className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-white">Almacenamiento Local (SQLite)</h3>
-                      <p className="text-[11px] text-slate-400">
-                        Base de datos transaccional persistente y exportación de respaldos
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                    Operativo
-                  </span>
+          {/* Fila 1: Estado del Almacenamiento Local (SQLite) */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                  <Database className="h-4 w-4" />
                 </div>
-
-                {/* Métricas de Base de Datos */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
-                    <span className="text-[11px] text-slate-400 block font-semibold">
-                      Órdenes Almacenadas
-                    </span>
-                    <span className="tabular-nums text-xl font-bold text-white mt-0.5 block">
-                      {health.stored_binance_orders || 0}{' '}
-                      <span className="text-xs font-normal text-slate-400">op.</span>
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
-                    <span className="text-[11px] text-slate-400 block font-semibold">
-                      Última Sincronización
-                    </span>
-                    <span className="tabular-nums text-xs font-semibold text-slate-200 mt-1 block">
-                      {health.last_synced_at || 'Sin registros'}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
-                    <span className="text-[11px] text-slate-400 block font-semibold">
-                      Motor de Datos
-                    </span>
-                    <span className="text-xs font-semibold text-slate-200 mt-1 block">
-                      SQLite 3 (Local WAL)
-                    </span>
-                  </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Almacenamiento Local Transaccional (SQLite)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Motor de persistencia integrado con modo Write-Ahead Logging (WAL)
+                  </p>
                 </div>
+              </div>
+              <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                Operativo (WAL)
+              </span>
+            </div>
 
-                {/* Características de Privacidad */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-xs text-slate-300 space-y-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-white">
-                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                    <span>Persistencia Segura en tu Equipo</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Toda la información de tus órdenes, libros contables, inventario WAC y cuentas bancarias reside en el archivo local <code className="font-mono text-slate-300">backend/p2p_reconciliation.db</code>. No se transmite información financiera a servidores externos.
+            {/* Métricas de Base de Datos */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                <span className="text-[11px] text-slate-400 block font-medium">Órdenes Guardadas</span>
+                <span className="tabular-nums text-lg font-bold text-white mt-0.5 block">
+                  {health.stored_binance_orders || 0} <span className="text-xs font-normal text-slate-400">regs</span>
+                </span>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                <span className="text-[11px] text-slate-400 block font-medium">Tamaño Base de Datos</span>
+                <span className="tabular-nums text-lg font-bold text-white mt-0.5 block">
+                  {dbSizeMb > 0 ? `${dbSizeMb} MB` : '< 1 MB'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                <span className="text-[11px] text-slate-400 block font-medium">Última Sincronización</span>
+                <span className="tabular-nums text-xs font-semibold text-slate-200 mt-1.5 block truncate" title={health.last_synced_at || 'Sin registros'}>
+                  {health.last_synced_at || 'Sin registros'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                <span className="text-[11px] text-slate-400 block font-medium">Privacidad de Datos</span>
+                <span className="text-xs font-semibold text-emerald-400 mt-1.5 flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5" /> 100% Offline
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Fila 2: GESTOR DE RESPALDOS (.DB) REALES */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Copias de Seguridad (Snapshots SQLite)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Crea copias exactas instantáneas, restáuralas en caso de contingencia o descárgalas a tu equipo
                   </p>
                 </div>
               </div>
 
-              {/* Botón de Exportación Excel Sobrio */}
-              <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="text-[11px] text-slate-400">
-                  Descarga un reporte consolidado con estadísticas y detalles completos:
-                </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs">
+                  <Upload className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Subir Respaldo (.db)</span>
+                  <input
+                    type="file"
+                    accept=".db"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleUploadBackup(e.target.files[0]);
+                    }}
+                  />
+                </label>
                 <button
                   type="button"
-                  onClick={handleExportExcel}
-                  className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                  onClick={handleCreateBackup}
+                  disabled={backupActionLoading}
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
                 >
-                  <FileSpreadsheet className="h-4 w-4 text-amber-400" />
-                  <span>Exportar Respaldo Excel (.xlsx)</span>
+                  <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${backupActionLoading ? 'animate-spin' : ''}`} />
+                  <span>Crear Respaldo Ahora</span>
                 </button>
               </div>
             </div>
 
-            {/* Tarjeta 2: Importador de Archivos CSV de Binance */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
-                    <Upload className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Importación Histórica (.CSV)</h3>
-                    <p className="text-[11px] text-slate-400">
-                      Incorpora reportes descargados de Binance de más de 6 meses
+            {/* Modal de Confirmación para Restaurar Respaldo */}
+            {restoreConfirmModal && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3 animate-fadeIn">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-amber-200">
+                      ¿Restaurar la base de datos desde "{restoreConfirmModal}"?
+                    </h4>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      El sistema reemplazará los datos actuales por los contenidos en esta copia de seguridad. 
+                      Se generará automáticamente un respaldo preventivo de tu estado actual por seguridad.
                     </p>
                   </div>
                 </div>
-
-                {/* Dropzone Estilizado */}
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDraggingCsv(true);
-                  }}
-                  onDragLeave={() => setIsDraggingCsv(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDraggingCsv(false);
-                    if (e.dataTransfer.files?.[0]) {
-                      handleCsvFallback(e.dataTransfer.files[0]);
-                    }
-                  }}
-                  className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all ${
-                    isDraggingCsv
-                      ? 'border-amber-500 bg-amber-500/10'
-                      : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800/80 text-amber-400 mb-3 shadow-xs">
-                    <Upload className="h-6 w-6" />
-                  </div>
-                  <span className="text-xs font-bold text-white block mb-1">
-                    Arrastra aquí tu reporte .CSV o selecciónalo de tu equipo
-                  </span>
-                  <p className="text-[11px] text-slate-400 max-w-sm mb-3">
-                    Compatible con el archivo de exportación estándar de órdenes P2P de Binance.
-                  </p>
-
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400 transition-colors">
-                    <span>Examinar Archivos .CSV</span>
-                    <input
-                      type="file"
-                      accept=".csv"
-                      className="hidden"
-                      onChange={(e) => handleCsvFallback(e.target.files?.[0])}
-                    />
-                  </label>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setRestoreConfirmModal(null)}
+                    disabled={backupActionLoading}
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreBackup(restoreConfirmModal)}
+                    disabled={backupActionLoading}
+                    className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 transition-colors cursor-pointer shadow-xs"
+                  >
+                    {backupActionLoading ? 'Restaurando...' : 'Confirmar Restauración'}
+                  </button>
                 </div>
+              </div>
+            )}
 
-                {/* Guía Rápida de Exportación */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-xs text-slate-400 space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-200 block">
-                    ¿Cómo exportar desde Binance?
-                  </span>
-                  <p className="text-[11px] leading-relaxed">
-                    1. En Binance P2P, ingresa en <em>Órdenes</em> &gt; <em>Historial de Órdenes P2P</em>.
-                    <br />
-                    2. Haz clic en el botón superior derecho <em>Exportar</em>.
-                    <br />
-                    3. Elige el rango deseado (hasta 1 año o personalizado) y descarga el archivo .CSV.
+            {/* Tabla de Respaldos Disponibles */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="border-b border-slate-800 bg-slate-900/80 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="px-4 py-2.5">Archivo de Respaldo</th>
+                      <th className="px-4 py-2.5">Fecha y Hora</th>
+                      <th className="px-4 py-2.5">Tamaño</th>
+                      <th className="px-4 py-2.5 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {loadingBackups ? (
+                      <tr>
+                        <td colSpan="4" className="px-4 py-6 text-center text-slate-500">
+                          <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-1 text-slate-400" />
+                          Cargando respaldos disponibles...
+                        </td>
+                      </tr>
+                    ) : backups.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" className="px-4 py-6 text-center text-slate-500">
+                          Aún no se han generado respaldos de la base de datos. Haz clic en "Crear Respaldo Ahora".
+                        </td>
+                      </tr>
+                    ) : (
+                      backups.map((b) => (
+                        <tr key={b.filename} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="px-4 py-2.5 font-mono text-slate-200 font-medium">
+                            {b.filename}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">
+                            {b.created_at}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-300 tabular-nums">
+                            {b.size_mb >= 1 ? `${b.size_mb} MB` : `${b.size_kb} KB`}
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <a
+                                href={`/api/backups/download/${encodeURIComponent(b.filename)}`}
+                                download={b.filename}
+                                title="Descargar archivo .db a tu equipo"
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                              >
+                                <Download className="h-3 w-3 text-slate-400" />
+                                <span>Descargar</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setRestoreConfirmModal(b.filename)}
+                                disabled={backupActionLoading}
+                                title="Restaurar base de datos a este punto"
+                                className="inline-flex items-center gap-1 rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors cursor-pointer shadow-xs"
+                              >
+                                <RefreshCw className="h-3 w-3 text-amber-400" />
+                                <span>Restaurar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBackup(b.filename)}
+                                disabled={backupActionLoading}
+                                title="Eliminar copia de seguridad"
+                                className="inline-flex items-center p-1.5 rounded-lg border border-transparent text-slate-400 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-400 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Fila 3: Importador de Archivos CSV de Binance */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                  <Upload className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Importación Histórica de Binance (.CSV)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Carga reportes descargados desde Binance P2P con antigüedad mayor a 6 meses
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              {/* Dropzone Estilizado y Compacto */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDraggingCsv(true);
+                }}
+                onDragLeave={() => setIsDraggingCsv(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingCsv(false);
+                  if (e.dataTransfer.files?.[0]) {
+                    handleCsvFallback(e.dataTransfer.files[0]);
+                  }
+                }}
+                className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition-all ${
+                  isDraggingCsv
+                    ? 'border-amber-500 bg-amber-500/10'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
+                }`}
+              >
+                <Upload className="h-7 w-7 text-amber-400 mb-2" />
+                <span className="text-xs font-bold text-white block mb-0.5">
+                  Arrastra tu archivo .CSV o selecciónalo
+                </span>
+                <p className="text-[11px] text-slate-400 mb-2.5">
+                  Reportes de exportación oficiales de Binance P2P
+                </p>
+
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 transition-colors shadow-xs">
+                  <Upload className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Examinar Archivos .CSV</span>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => handleCsvFallback(e.target.files?.[0])}
+                  />
+                </label>
+              </div>
+
+              {/* Instructivo Rápido */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-xs text-slate-400 space-y-1.5">
+                <span className="text-xs font-bold text-slate-200 block mb-1">
+                  Pasos para exportar desde Binance:
+                </span>
+                <p className="text-[11px] leading-relaxed">
+                  1. En Binance P2P, ve a <em>Órdenes</em> &gt; <em>Historial de Órdenes P2P</em>.
+                  <br />
+                  2. Haz clic en el botón <em>Exportar</em> en la esquina superior derecha.
+                  <br />
+                  3. Selecciona el rango deseado (hasta 1 año o personalizado) y descarga el archivo .CSV.
+                </p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. SECCIÓN INFORMACIÓN Y CÁLCULOS */}
+      {/* 4. SECCIÓN PREFERENCIAS DEL USUARIO */}
+      {activeSection === 'PREFERENCES' && (
+        <div className="space-y-4">
+          {/* Bloque 1: Alertas Sonoras y Notificaciones de Audio */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                  <Volume2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Alertas Sonoras y Audio</h3>
+                  <p className="text-xs text-slate-400">
+                    Notificaciones audibles sutiles generadas mediante Web Audio API (cero latencia)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onToggleSound && onToggleSound(!soundEnabled)}
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                  soundEnabled
+                    ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                    : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {soundEnabled ? (
+                  <>
+                    <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Sonido Activado</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Sonido Silenciado</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+              {/* Evento 1: Nueva orden en progreso */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Órdenes Nuevas en Proceso</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={soundNewOrderEnabled}
+                        onChange={(e) => onToggleSoundNewOrder && onToggleSoundNewOrder(e.target.checked)}
+                        disabled={!soundEnabled}
+                        className="h-4 w-4 accent-amber-500 rounded cursor-pointer disabled:opacity-30"
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Arpegio ascendente suave (D5 ➔ A5) que te avisa al instante cuando un comerciante abre un trade.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => playNewTradeSound(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:border-slate-600 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Volume2 className="h-3 w-3 text-amber-400" />
+                    <span>Probar Tono</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Evento 2: Orden completada */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Órdenes Completadas / Liberadas</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={soundCompletedOrderEnabled}
+                        onChange={(e) => onToggleSoundCompletedOrder && onToggleSoundCompletedOrder(e.target.checked)}
+                        disabled={!soundEnabled}
+                        className="h-4 w-4 accent-amber-500 rounded cursor-pointer disabled:opacity-30"
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Doble campana armónica (A5 + E6) que confirma cuando un trade se completa y se acredita el saldo.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => playCompletedTradeSound(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:border-slate-600 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Volume2 className="h-3 w-3 text-emerald-400" />
+                    <span>Probar Tono</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bloque 2: Apariencia y Tema Visual */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                <Palette className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Apariencia y Contraste Visual</h3>
+                <p className="text-xs text-slate-400">
+                  Selecciona la paleta de fondo y descanso visual más cómoda para tus sesiones
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+              {/* Tema 1: Deep Slate (Predeterminado) */}
+              <button
+                type="button"
+                onClick={() => onUpdateAppTheme && onUpdateAppTheme('DEEP_SLATE')}
+                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                  appTheme === 'DEEP_SLATE'
+                    ? 'border-amber-500/60 bg-amber-500/10 shadow-xs'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <div className="flex items-center gap-2">
+                    <Moon className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs font-bold text-white">Oscuro Profundo (Slate/Onyx)</span>
+                  </div>
+                  {appTheme === 'DEEP_SLATE' && (
+                    <span className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                      Activo
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                  Tono oscuro equilibrado con matices azul pizarra, óptimo para el descanso visual.
+                </p>
+                <div className="flex items-center gap-1.5 w-full">
+                  <div className="h-4 w-8 rounded bg-slate-950 border border-slate-800" />
+                  <div className="h-4 w-8 rounded bg-slate-900 border border-slate-700" />
+                  <div className="h-4 w-8 rounded bg-amber-500" />
+                  <div className="h-4 w-8 rounded bg-emerald-500" />
+                </div>
+              </button>
+
+              {/* Tema 2: Pure OLED Black */}
+              <button
+                type="button"
+                onClick={() => onUpdateAppTheme && onUpdateAppTheme('OLED_BLACK')}
+                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                  appTheme === 'OLED_BLACK'
+                    ? 'border-amber-500/60 bg-amber-500/10 shadow-xs'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs font-bold text-white">Negro Puro (OLED / Pitch Black)</span>
+                  </div>
+                  {appTheme === 'OLED_BLACK' && (
+                    <span className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                      Activo
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                  Fondo negro absoluto (#000000) que maximiza el contraste de números y ahorra batería.
+                </p>
+                <div className="flex items-center gap-1.5 w-full">
+                  <div className="h-4 w-8 rounded bg-black border border-neutral-800" />
+                  <div className="h-4 w-8 rounded bg-neutral-900 border border-neutral-700" />
+                  <div className="h-4 w-8 rounded bg-amber-500" />
+                  <div className="h-4 w-8 rounded bg-emerald-500" />
+                </div>
+              </button>
+
+              {/* Tema 3: Navy Midnight (Azul Marino Nocturno) */}
+              <button
+                type="button"
+                onClick={() => onUpdateAppTheme && onUpdateAppTheme('NAVY_MIDNIGHT')}
+                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                  appTheme === 'NAVY_MIDNIGHT'
+                    ? 'border-sky-500/60 bg-sky-500/10 shadow-xs'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <div className="flex items-center gap-2">
+                    <Moon className="h-4 w-4 text-sky-400" />
+                    <span className="text-xs font-bold text-white">Azul Marino Nocturno (Navy)</span>
+                  </div>
+                  {appTheme === 'NAVY_MIDNIGHT' && (
+                    <span className="rounded-md border border-sky-500/30 bg-sky-500/20 px-2 py-0.5 text-xs font-semibold text-sky-300">
+                      Activo
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                  Atmósfera financiera inspirada en terminales Bloomberg con matices azul ultramarino.
+                </p>
+                <div className="flex items-center gap-1.5 w-full">
+                  <div className="h-4 w-8 rounded bg-[#030712] border border-blue-950" />
+                  <div className="h-4 w-8 rounded bg-[#0f172a] border border-blue-900" />
+                  <div className="h-4 w-8 rounded bg-sky-400" />
+                  <div className="h-4 w-8 rounded bg-emerald-400" />
+                </div>
+              </button>
+
+              {/* Tema 4: Light Elegant (Modo Claro de Alto Contraste) */}
+              <button
+                type="button"
+                onClick={() => onUpdateAppTheme && onUpdateAppTheme('LIGHT_ELEGANT')}
+                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                  appTheme === 'LIGHT_ELEGANT'
+                    ? 'border-amber-500/60 bg-amber-500/10 shadow-xs'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <div className="flex items-center gap-2">
+                    <Sun className="h-4 w-4 text-amber-500" />
+                    <span className="text-xs font-bold text-white">Luz Natural (Modo Claro)</span>
+                  </div>
+                  {appTheme === 'LIGHT_ELEGANT' && (
+                    <span className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                      Activo
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                  Fondo claro (#f8fafc) con tarjetas nítidas para trabajar de día o en ambientes iluminados.
+                </p>
+                <div className="flex items-center gap-1.5 w-full">
+                  <div className="h-4 w-8 rounded bg-slate-50 border border-slate-300" />
+                  <div className="h-4 w-8 rounded bg-white border border-slate-300" />
+                  <div className="h-4 w-8 rounded bg-amber-500" />
+                  <div className="h-4 w-8 rounded bg-emerald-600" />
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Bloque 3: Mensajes Emergentes y Toasts */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                  <Bell className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Notificaciones Emergentes en Pantalla</h3>
+                  <p className="text-xs text-slate-400">
+                    Mensajes flotantes en la esquina inferior al completar sincronizaciones
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onToggleToasts && onToggleToasts(!toastsEnabled)}
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                  toastsEnabled
+                    ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                    : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {toastsEnabled ? 'Mensajes Activos' : 'Silenciados'}
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Muestra pequeñas etiquetas discretas como <span className="text-slate-300 font-mono">"+2 nuevas órdenes sincronizadas"</span> o <span className="text-slate-300 font-mono">"Al día con Binance P2P"</span> cuando finaliza cada ciclo de polling en segundo plano.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 5. SECCIÓN INFORMACIÓN Y CÁLCULOS */}
       {activeSection === 'DOCS' && (
         <SystemDocumentationSection />
       )}
 
-      {/* 5. SECCIÓN MANTENIMIENTO Y DIAGNÓSTICO (GRID Y ZONA CRÍTICA SEPARADA) */}
+      {/* 4. SECCIÓN MANTENIMIENTO Y DIAGNÓSTICO (GRID Y ZONA CRÍTICA SEPARADA) */}
       {activeSection === 'MAINTENANCE' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1177,12 +1414,12 @@ export default function SettingsView({
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-white">Entorno de Pruebas y Demo</h3>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-xs text-slate-400">
                         Generación de órdenes simuladas para evaluar cálculos contables
                       </p>
                     </div>
                   </div>
-                  <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                  <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300">
                     Modo Seguro
                   </span>
                 </div>
@@ -1191,7 +1428,7 @@ export default function SettingsView({
                   <p className="leading-relaxed">
                     Este módulo genera operaciones simuladas de Compra y Venta con tasas representativas del mercado venezolano para verificar los cálculos de costo promedio ponderado (WAC), margen de ganancia diaria y cuadres de saldo bancario.
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     • Las órdenes de prueba se etiquetan automáticamente como 'DEMO' y se pueden eliminar en cualquier momento sin afectar tus órdenes reales importadas por API.
                   </p>
                 </div>
@@ -1202,7 +1439,7 @@ export default function SettingsView({
                   type="button"
                   onClick={handleSeedDemo}
                   disabled={loading}
-                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-amber-400" />
                   <span>Cargar Operaciones Demo</span>
@@ -1211,7 +1448,7 @@ export default function SettingsView({
                   type="button"
                   onClick={handleClearDemo}
                   disabled={loading}
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
                 >
                   <Trash2 className="h-3.5 w-3.5 text-slate-400" />
                   <span>Eliminar Órdenes Demo</span>
@@ -1229,37 +1466,39 @@ export default function SettingsView({
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-white">Diagnóstico y Salud del Sistema</h3>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-xs text-slate-400">
                         Estado operativo de los servicios internos
                       </p>
                     </div>
                   </div>
-                  <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                  <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                     Sistema En Línea
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5 text-xs">
                   <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                    <span className="text-[11px] text-slate-500 block">Servidor API</span>
+                    <span className="text-xs text-slate-500 block">Servidor API</span>
                     <span className="font-semibold text-slate-200 mt-0.5 block">FastAPI (Python 3)</span>
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                    <span className="text-[11px] text-slate-500 block">Interfaz de Usuario</span>
+                    <span className="text-xs text-slate-500 block">Interfaz de Usuario</span>
                     <span className="font-semibold text-slate-200 mt-0.5 block">Vite + React 18</span>
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                    <span className="text-[11px] text-slate-500 block">Motor de Datos</span>
+                    <span className="text-xs text-slate-500 block">Motor de Datos</span>
                     <span className="font-semibold text-slate-200 mt-0.5 block">SQLite 3 (Local)</span>
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                    <span className="text-[11px] text-slate-500 block">Frecuencia Auto-Sync</span>
-                    <span className="font-semibold text-emerald-400 mt-0.5 block">Cada 60 segundos</span>
+                    <span className="text-xs text-slate-500 block">Frecuencia Auto-Sync</span>
+                    <span className="font-semibold text-emerald-400 mt-0.5 block">
+                      {syncIntervalSeconds > 0 ? `Cada ${syncIntervalSeconds}s` : 'Manual'}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-[11px] text-slate-500">
+              <div className="border-t border-slate-800 pt-3 flex items-center justify-between text-xs text-slate-500">
                 <span>Versión del Reconciliador: v1.0.0</span>
                 <span>Modo: Monousuario Local</span>
               </div>
@@ -1275,12 +1514,12 @@ export default function SettingsView({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-rose-200">Zona de Restablecimiento Crítico</h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     Restablece la base de datos local y limpia todos los registros
                   </p>
                 </div>
               </div>
-              <span className="rounded-md border border-rose-500/40 bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+              <span className="rounded-md border border-rose-500/40 bg-rose-500/20 px-2 py-0.5 text-xs font-bold text-rose-300">
                 Acción Irreversible
               </span>
             </div>
@@ -1306,15 +1545,17 @@ export default function SettingsView({
                 type="button"
                 onClick={handleClearAllDatabase}
                 disabled={loading || !confirmDeleteAll}
-                className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-rose-900/30 hover:bg-rose-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/20 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3.5 w-3.5 text-rose-400" />
                 <span>Vaciar Base de Datos por Completo</span>
               </button>
             </div>
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

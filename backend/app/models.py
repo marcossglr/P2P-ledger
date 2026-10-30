@@ -87,3 +87,4 @@ class BankTransaction(Base):
     balance = Column(Float, default=0.0)
     matched_order_number = Column(String, nullable=True)
     status = Column(String, default="UNMATCHED")
+

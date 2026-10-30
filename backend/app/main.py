@@ -1,13 +1,16 @@
+import os
+import shutil
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .database import engine, Base, get_db
+from .database import engine, Base, get_db, DB_PATH, BASE_DIR
 from .models import UploadBatch, BinanceOrder, BankTransaction, BankAccount, BankBalanceAdjustment
 from .services.parsers import parse_binance_csv, parse_bank_pdf
 from .services.binance_api import (
@@ -60,6 +63,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Inyecta cabeceras HTTP de protección contra Clickjacking, MIME sniffing y filtrado de referrer."""
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
 
 
 class CredentialsPayload(BaseModel):
@@ -317,14 +331,37 @@ def test_p2p_public_market_connection(payload: Optional[P2PPublicConfigPayload] 
 
 
 @app.get("/api/binance/p2p-public/market-stats")
-def get_p2p_public_market_stats(include_ads: bool = Query(False)):
+def get_p2p_public_market_stats(
+    asset: Optional[str] = Query(None),
+    fiat: Optional[str] = Query(None),
+    bank: Optional[str] = Query(None),
+    amount: Optional[float] = Query(None),
+    include_ads: bool = Query(True),
+    force: bool = Query(False),
+):
     cfg = get_p2p_public_config()
     if not cfg.get("enabled"):
         raise HTTPException(status_code=409, detail="La API pública P2P está deshabilitada en Ajustes.")
+
+    # Overrides dinámicos provenientes de los filtros de la interfaz
+    if asset and isinstance(asset, str):
+        cfg["asset"] = asset.upper().strip()
+    if fiat and isinstance(fiat, str):
+        cfg["fiat"] = fiat.upper().strip()
+    if bank is not None and isinstance(bank, str):
+        bank_clean = bank.strip()
+        if bank_clean and bank_clean.upper() != "ALL":
+            cfg["pay_types"] = [bank_clean]
+        else:
+            cfg["pay_types"] = []
+    if amount is not None and isinstance(amount, (int, float)) and amount > 0:
+        cfg["trans_amount"] = float(amount)
+
     try:
         snap = fetch_p2p_market_snapshot(cfg)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
     if not include_ads:
         snap["buy"].pop("ads", None)
         snap["sell"].pop("ads", None)
@@ -750,6 +787,12 @@ def export_operations(
     )
 
 
+# Límites de tamaño para subidas de archivos (protección contra DoS de memoria y disco)
+MAX_CSV_SIZE_BYTES = 25 * 1024 * 1024       # 25 MB
+MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024       # 50 MB
+MAX_BACKUP_SIZE_BYTES = 250 * 1024 * 1024   # 250 MB
+
+
 @app.post("/api/upload/binance-csv")
 async def upload_binance_csv(
     file: UploadFile = File(...), db: Session = Depends(get_db)
@@ -758,6 +801,11 @@ async def upload_binance_csv(
         raise HTTPException(status_code=400, detail="El archivo debe tener extensión .csv")
 
     content = await file.read()
+    if len(content) > MAX_CSV_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"El archivo excede el tamaño máximo permitido de {MAX_CSV_SIZE_BYTES // (1024 * 1024)} MB",
+        )
     try:
         parsed = parse_binance_csv(content, file.filename)
     except Exception as exc:
@@ -792,6 +840,11 @@ async def upload_bank_pdf(
         raise HTTPException(status_code=400, detail="El archivo debe tener extensión .pdf")
 
     content = await file.read()
+    if len(content) > MAX_PDF_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"El archivo PDF excede el límite máximo de {MAX_PDF_SIZE_BYTES // (1024 * 1024)} MB",
+        )
     try:
         parsed = parse_bank_pdf(content, file.filename)
     except Exception as exc:
@@ -1191,4 +1244,198 @@ def assign_order_to_bank_account(
 
     db.commit()
     return compute_bank_inventory_summary(db)
+
+
+# ==========================================
+# GESTIÓN DE RESPALDOS DE BASE DE DATOS (SQLITE)
+# ==========================================
+
+BACKUPS_DIR = BASE_DIR / "backups"
+BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class RestoreBackupPayload(BaseModel):
+    filename: str
+
+
+@app.get("/api/backups")
+def list_database_backups():
+    """Retorna la lista de respaldos disponibles ordenados del más reciente al más antiguo."""
+    backups = []
+    if BACKUPS_DIR.exists():
+        for entry in BACKUPS_DIR.glob("backup_*.db"):
+            if entry.is_file():
+                stat = entry.stat()
+                backups.append({
+                    "filename": entry.name,
+                    "size_bytes": stat.st_size,
+                    "size_kb": round(stat.st_size / 1024, 2),
+                    "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                    "created_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                })
+    backups.sort(key=lambda x: x["created_at"], reverse=True)
+
+    db_size = 0
+    if DB_PATH.exists():
+        db_size = DB_PATH.stat().st_size
+
+    return {
+        "status": "success",
+        "current_db_size_bytes": db_size,
+        "current_db_size_kb": round(db_size / 1024, 2),
+        "current_db_size_mb": round(db_size / (1024 * 1024), 2),
+        "backups": backups,
+    }
+
+
+@app.post("/api/backups/create")
+def create_database_backup():
+    """Genera un snapshot transaccionalmente seguro de la base de datos SQLite."""
+    if not DB_PATH.exists():
+        raise HTTPException(status_code=404, detail="La base de datos original no existe.")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_filename = f"backup_{timestamp}.db"
+    backup_file_path = BACKUPS_DIR / backup_filename
+
+    try:
+        # Usamos la API nativa de backup de sqlite3 para garantizar consistencia incluso con WAL activo
+        source_conn = sqlite3.connect(str(DB_PATH))
+        dest_conn = sqlite3.connect(str(backup_file_path))
+        with dest_conn:
+            source_conn.backup(dest_conn)
+        dest_conn.close()
+        source_conn.close()
+
+        stat = backup_file_path.stat()
+        return {
+            "status": "created",
+            "filename": backup_filename,
+            "size_bytes": stat.st_size,
+            "size_kb": round(stat.st_size / 1024, 2),
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "created_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except Exception as e:
+        if backup_file_path.exists():
+            backup_file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Error creando respaldo: {str(e)}")
+
+
+@app.get("/api/backups/download/{filename}")
+def download_database_backup(filename: str):
+    """Permite descargar un archivo de respaldo .db específico."""
+    from pathlib import Path
+    safe_filename = Path(filename).name
+    backup_file_path = BACKUPS_DIR / safe_filename
+
+    if not backup_file_path.exists() or not backup_file_path.is_file():
+        raise HTTPException(status_code=404, detail="Archivo de respaldo no encontrado.")
+
+    return FileResponse(
+        path=str(backup_file_path),
+        filename=safe_filename,
+        media_type="application/x-sqlite3",
+    )
+
+
+@app.post("/api/backups/restore")
+def restore_database_backup(payload: RestoreBackupPayload):
+    """Restaura un respaldo existente sobre la base de datos actual."""
+    from pathlib import Path
+    safe_filename = Path(payload.filename).name
+    backup_file_path = BACKUPS_DIR / safe_filename
+
+    if not backup_file_path.exists() or not backup_file_path.is_file():
+        raise HTTPException(status_code=404, detail="El respaldo especificado no existe.")
+
+    try:
+        # 1. Crear un respaldo de emergencia de la BD actual antes de sobrescribirla
+        emergency_name = f"backup_pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        emergency_path = BACKUPS_DIR / emergency_name
+        if DB_PATH.exists():
+            shutil.copy2(str(DB_PATH), str(emergency_path))
+
+        # 2. Cerrar todas las conexiones en el pool de SQLAlchemy
+        engine.dispose()
+
+        # 3. Restaurar usando copia atómica segura
+        shutil.copy2(str(backup_file_path), str(DB_PATH))
+
+        # 4. Eliminar archivos temporales de WAL y SHM si existen para evitar desincronización
+        from pathlib import Path
+        wal_file = Path(f"{DB_PATH}-wal")
+        shm_file = Path(f"{DB_PATH}-shm")
+        if wal_file.exists():
+            try:
+                wal_file.unlink()
+            except Exception:
+                pass
+        if shm_file.exists():
+            try:
+                shm_file.unlink()
+            except Exception:
+                pass
+
+        return {
+            "status": "restored",
+            "message": f"Base de datos restaurada exitosamente desde {safe_filename}. Respaldo previo de seguridad guardado como {emergency_name}.",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al restaurar respaldo: {str(e)}")
+
+
+@app.post("/api/backups/upload")
+async def upload_database_backup(file: UploadFile = File(...)):
+    """Permite subir un archivo de respaldo SQLite externo para almacenarlo en la lista de backups."""
+    if not file.filename.endswith(".db"):
+        raise HTTPException(status_code=400, detail="El archivo debe tener extensión .db")
+
+    from pathlib import Path
+    safe_name = f"backup_uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{Path(file.filename).name}"
+    target_path = BACKUPS_DIR / safe_name
+
+    try:
+        content = await file.read()
+        if len(content) > MAX_BACKUP_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"El archivo de respaldo excede el límite máximo de {MAX_BACKUP_SIZE_BYTES // (1024 * 1024)} MB",
+            )
+        # Verificar header SQLite
+        if not content.startswith(b"SQLite format 3"):
+            raise HTTPException(status_code=400, detail="El archivo subido no es una base de datos SQLite válida.")
+
+        with open(target_path, "wb") as f:
+            f.write(content)
+
+        stat = target_path.stat()
+        return {
+            "status": "uploaded",
+            "filename": safe_name,
+            "size_kb": round(stat.st_size / 1024, 2),
+            "created_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error guardando respaldo subido: {str(e)}")
+
+
+@app.delete("/api/backups/{filename}")
+def delete_database_backup(filename: str):
+    """Elimina un archivo de respaldo específico."""
+    from pathlib import Path
+    safe_filename = Path(filename).name
+    backup_file_path = BACKUPS_DIR / safe_filename
+
+    if not backup_file_path.exists() or not backup_file_path.is_file():
+        raise HTTPException(status_code=404, detail="Archivo de respaldo no encontrado.")
+
+    try:
+        backup_file_path.unlink()
+        return {"status": "deleted", "filename": safe_filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error eliminando respaldo: {str(e)}")
+
 

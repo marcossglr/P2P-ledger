@@ -25,6 +25,7 @@ import OrderDetailsModal from './OrderDetailsModal';
 import BankReconcileModal from './BankReconcileModal';
 import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
+import P2PMarketChartCard from './P2PMarketChartCard';
 
 export default function OperationsDashboard({
   onOpenApiModal,
@@ -34,15 +35,21 @@ export default function OperationsDashboard({
   onNavigateSettings,
   onManualSync,
   isSyncingBg,
+  selectedAsset = 'USDT',
+  fiatCurrency = 'VES',
+  onPairsDetected,
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Estado para Estadísticas y Gráfica del Mercado P2P en vivo (API Pública)
+  const [marketData, setMarketData] = useState(null);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [marketError, setMarketError] = useState(null);
+
   // Filtros rápidos exclusivos para la jornada de hoy
   const [orderType, setOrderType] = useState('ALL');
   const [orderStatus, setOrderStatus] = useState('ALL');
-  const [selectedAsset, setSelectedAsset] = useState('USDT');
-  const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [bankFeePct, setBankFeePct] = useState(0.3);
 
   // Buscador local directo en la tabla de Operaciones Ejecutadas y orden seleccionada
@@ -71,6 +78,20 @@ export default function OperationsDashboard({
     return saved !== null ? saved === 'true' : true;
   });
 
+  // Control para colapsar/expandir la sección de Mercado P2P (Gráfica / Pizarra)
+  const [isMarketExpanded, setIsMarketExpanded] = useState(() => {
+    const saved = localStorage.getItem('p2p_market_expanded');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const toggleMarketExpanded = () => {
+    setIsMarketExpanded((prev) => {
+      const next = !prev;
+      localStorage.setItem('p2p_market_expanded', String(next));
+      return next;
+    });
+  };
+
   const toggleAdsExpanded = () => {
     setIsAdsExpanded((prev) => {
       const next = !prev;
@@ -94,12 +115,8 @@ export default function OperationsDashboard({
       const json = await res.json();
       setData(json);
 
-      // Si el usuario no ha forzado manualmente otro par, sincronizar automáticamente con el par dominante detectado en sus órdenes
-      if (json?.default_asset && !localStorage.getItem('user_custom_asset_selected')) {
-        setSelectedAsset(json.default_asset);
-      }
-      if (json?.default_fiat && !localStorage.getItem('user_custom_fiat_selected')) {
-        setFiatCurrency(json.default_fiat);
+      if (json?.available_assets && onPairsDetected) {
+        onPairsDetected(json.available_assets, json.available_fiats || ['VES']);
       }
     } catch (err) {
       console.error('Error cargando operaciones de hoy:', err);
@@ -111,6 +128,57 @@ export default function OperationsDashboard({
   useEffect(() => {
     fetchTodayDashboard();
   }, [fetchTodayDashboard, refreshTrigger]);
+
+  const fetchMarketStats = useCallback(
+    async (force = false, bank = null, amount = null) => {
+      // Solo mostramos el indicador de carga si aún no tenemos datos previos (carga inicial)
+      // En actualizaciones periódicas de fondo no activamos spinners destructivos
+      setMarketLoading((prev) => (marketData ? false : true));
+      try {
+        const savedBank = bank !== null ? bank : localStorage.getItem('p2p_chart_bank') || 'ALL';
+        const savedAmount = amount !== null ? amount : localStorage.getItem('p2p_chart_amount') || '';
+
+        const params = new URLSearchParams();
+        params.set('include_ads', 'true');
+        if (selectedAsset && selectedAsset !== 'ALL') params.set('asset', selectedAsset);
+        if (fiatCurrency && fiatCurrency !== 'ALL') params.set('fiat', fiatCurrency);
+        if (savedBank && savedBank !== 'ALL') params.set('bank', savedBank);
+        if (savedAmount && Number(savedAmount) > 0) params.set('amount', String(savedAmount));
+        if (force) params.set('force', 'true');
+
+        const res = await fetch(`/api/binance/p2p-public/market-stats?${params.toString()}`);
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json?.detail || 'No se pudo consultar el mercado P2P');
+        }
+        setMarketData(json);
+        setMarketError(null);
+      } catch (err) {
+        // Si ya teníamos datos, no destruimos la tarjeta ante un fallo transitorio de red
+        if (!marketData) {
+          setMarketError(err.message);
+        }
+      } finally {
+        setMarketLoading(false);
+      }
+    },
+    [selectedAsset, fiatCurrency, marketData]
+  );
+
+  useEffect(() => {
+    fetchMarketStats(false);
+  }, [fetchMarketStats, refreshTrigger]);
+
+  // Auto-refresco en memoria cada 6 segundos (se pausa automáticamente si la pestaña no está visible)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return; // No saturar la red ni la API si la pestaña está en segundo plano o minimizada
+      }
+      fetchMarketStats(false);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [fetchMarketStats]);
 
   // Reiniciar a la primera página cuando cambian los filtros o el buscador de tabla
   useEffect(() => {
@@ -141,6 +209,15 @@ export default function OperationsDashboard({
     navigator.clipboard?.writeText(orderNumber);
     setCopiedOrderId(orderNumber);
     setTimeout(() => setCopiedOrderId(null), 1800);
+  };
+
+  const [copiedAdPriceId, setCopiedAdPriceId] = useState(null);
+  const handleCopySuggestedPrice = (e, advNo, priceVal) => {
+    e.stopPropagation();
+    if (priceVal == null) return;
+    navigator.clipboard?.writeText(Number(priceVal).toFixed(2));
+    setCopiedAdPriceId(advNo);
+    setTimeout(() => setCopiedAdPriceId(null), 1800);
   };
 
   const stats = data?.analytics || {};
@@ -267,6 +344,82 @@ export default function OperationsDashboard({
   const totalCapitalConsolidatedUsdt = binanceFundingTotal + totalBankUsdt;
   const totalCapitalConsolidatedBs = totalCapitalConsolidatedUsdt * refRate;
 
+  // Evaluar cada uno de "Mis Anuncios" contra la pizarra en vivo de Binance P2P donde realmente aparece:
+  // - Tu anuncio de VENTA compite en la Pizarra "Comprar" (marketData.buy.ads, ordenada de menor a mayor)
+  // - Tu anuncio de COMPRA compite en la Pizarra "Vender" (marketData.sell.ads, ordenada de mayor a menor)
+  const evaluateMyAdOnBoard = useCallback(
+    (ad) => {
+      if (!ad || !marketData) return null;
+      const isBuyAd = ad.adv_type === 'COMPRA';
+      const rawBoardAds = isBuyAd ? marketData?.sell?.ads || [] : marketData?.buy?.ads || [];
+      if (rawBoardAds.length === 0) return null;
+
+      // Filtrar la pizarra por los bancos del anuncio (si hay coincidencias en el muestreo)
+      const adBanks = (ad.trade_methods || []).map((m) => String(m).toLowerCase());
+      let boardAds = rawBoardAds;
+      let matchedByBank = false;
+      if (adBanks.length > 0) {
+        const filteredByBank = rawBoardAds.filter((bAd) => {
+          const bMethods = [...(bAd.pay_methods || []), ...(bAd.pay_identifiers || [])].map((m) =>
+            String(m).toLowerCase()
+          );
+          return adBanks.some((ab) => bMethods.some((bm) => bm.includes(ab) || ab.includes(bm)));
+        });
+        if (filteredByBank.length > 0) {
+          boardAds = filteredByBank;
+          matchedByBank = true;
+        }
+      }
+
+      const myPrice = Number(ad.price || 0);
+      if (myPrice <= 0) return null;
+
+      const exactIdx = boardAds.findIndex(
+        (bAd) => bAd.adv_no && String(bAd.adv_no) === String(ad.adv_no)
+      );
+
+      // En Pizarra Vender (donde compite tu COMPRA) van primero los que pagan más (> myPrice).
+      // En Pizarra Comprar (donde compite tu VENTA) van primero los que venden más barato (< myPrice).
+      const aheadAds =
+        exactIdx >= 0
+          ? boardAds.slice(0, exactIdx)
+          : boardAds.filter((bAd) =>
+              isBuyAd ? Number(bAd.price) > myPrice : Number(bAd.price) < myPrice
+            );
+
+      const rank = exactIdx >= 0 ? exactIdx + 1 : aheadAds.length + 1;
+      const aheadUsdt = aheadAds.reduce((s, bAd) => s + Number(bAd.available_qty || 0), 0);
+      const bestBoardPrice = Number(boardAds[0]?.price || 0);
+      const deltaVsBest = bestBoardPrice > 0 ? myPrice - bestBoardPrice : null;
+
+      const suggestedRank1Price =
+        bestBoardPrice > 0
+          ? rank === 1
+            ? myPrice
+            : Number((isBuyAd ? bestBoardPrice + 0.01 : bestBoardPrice - 0.01).toFixed(2))
+          : null;
+
+      const isBelowBreakeven =
+        !isBuyAd &&
+        breakevenSellRate > 0 &&
+        suggestedRank1Price != null &&
+        suggestedRank1Price < breakevenSellRate;
+
+      return {
+        boardLabel: isBuyAd ? 'Pizarra Vender' : 'Pizarra Comprar',
+        rank,
+        aheadCount: aheadAds.length,
+        aheadUsdt,
+        bestBoardPrice,
+        deltaVsBest,
+        suggestedRank1Price,
+        isBelowBreakeven,
+        matchedByBank,
+      };
+    },
+    [marketData, breakevenSellRate]
+  );
+
   // Copiar resumen del día estructurado para Telegram / WhatsApp
   const handleCopyDailySummary = () => {
     const netProfitSign = Number(stats.net_profit_usdt || 0) > 0.005 ? '+' : '';
@@ -347,67 +500,28 @@ export default function OperationsDashboard({
       )}
 
       {/* =========================================================================
-          ZONA 1: RENDIMIENTO GENERAL DE LA JORNADA (Métricas globales invariables)
+          ZONA 1: RENDIMIENTO GENERAL DE LA JORNADA (Grid 4x2: Mercado P2P + KPIs)
          ========================================================================= */}
       <section className="space-y-3">
-        {/* Cabecera de la Zona de Rendimiento */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <TrendingUp className="h-3.5 w-3.5" />
-            </div>
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Rendimiento de la Jornada
-              </h2>
-              <span className="text-[11px] text-slate-500">
-                Consolidado global de hoy ({serverToday})
-              </span>
-            </div>
-          </div>
-
-          {/* Acciones globales de la jornada: Moneda Fiat y Copiar Resumen */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCopyDailySummary}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors shadow-xs ${
-                copiedSummary
-                  ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
-                  : 'border-slate-800/80 bg-slate-900/80 text-slate-300 hover:border-slate-700 hover:text-white'
-              }`}
-              title="Copiar resumen estructurado de la jornada de hoy para compartir"
-            >
-              {copiedSummary ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="font-semibold text-emerald-300">¡Copiado!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5 text-amber-400" />
-                  <span>Copiar Resumen</span>
-                </>
-              )}
-            </button>
-
-            {/* Botón Selector Unificado de Par de Mercado (Cripto / Fiat) */}
-            <button
-              type="button"
-              onClick={() => setIsPairModalOpen(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 hover:text-white transition-colors shadow-xs cursor-pointer group"
-              title="Cambiar Criptoactivo y Moneda Fiat de análisis"
-            >
-              <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{selectedAsset}</span>
-              <span className="text-slate-500">/</span>
-              <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{fiatCurrency}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Grid de KPIs Exclusivos de Hoy */}
+        {/* Grid 4x2: Tarjeta Gráfica de Mercado (2 cols x 2 filas a la izquierda) + 4 Tarjetas KPI (2 cols x 2 filas a la derecha) */}
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Izquierda (2x2): Gráfica del Mercado P2P (Evolución + Libro en Vivo) */}
+          <P2PMarketChartCard
+            marketData={marketData}
+            marketLoading={marketLoading}
+            marketError={marketError}
+            onRefresh={(force, b, a) => fetchMarketStats(force, b, a)}
+            onOpenSettings={() => onNavigateSettings && onNavigateSettings('CONNECTIONS')}
+            asset={cryptoAsset}
+            fiat={fiat}
+            wacBuyPrice={stats.wac_buy_price}
+            wapSellPrice={stats.wap_sell_price}
+            breakevenRate={breakevenSellRate}
+            myAds={data?.my_ads || []}
+            orders={orders}
+            myBankAccounts={data?.bank_inventory?.accounts || []}
+          />
+
           {/* Card 1: Rendimiento & Ganancia Neta de Hoy (P&L Sintetizada) */}
           <div className="relative flex flex-col justify-between overflow-hidden rounded-xl border border-slate-800/90 bg-slate-900/60 p-4 shadow-md">
             <div>
@@ -622,17 +736,32 @@ export default function OperationsDashboard({
                 {/* Resumen rápido visible cuando está colapsado */}
                 {!isAdsExpanded && data?.my_ads && data.my_ads.length > 0 && (
                   <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-2 truncate">
-                    {data.my_ads.map((ad, idx) => (
-                      <span key={ad.adv_no || idx} className="inline-flex items-center gap-1 text-slate-300">
-                        <strong className={ad.adv_type === 'COMPRA' ? 'text-emerald-400' : 'text-rose-400'}>
-                          {ad.adv_type}
-                        </strong>
-                        <span className="font-mono">{fmtUsdt(ad.surplus_amount)} {ad.asset}</span>
-                        <span className="text-slate-500">@</span>
-                        <span className="font-mono text-white">{fmtRate(ad.price)} {ad.fiat_unit}</span>
-                        {idx < data.my_ads.length - 1 && <span className="text-slate-600">·</span>}
-                      </span>
-                    ))}
+                    {data.my_ads.map((ad, idx) => {
+                      const boardInfo = ad.is_active ? evaluateMyAdOnBoard(ad) : null;
+                      return (
+                        <span key={ad.adv_no || idx} className="inline-flex items-center gap-1 text-slate-300">
+                          <strong className={ad.adv_type === 'COMPRA' ? 'text-emerald-400' : 'text-rose-400'}>
+                            {ad.adv_type}
+                          </strong>
+                          <span className="font-mono">{fmtUsdt(ad.surplus_amount)} {ad.asset}</span>
+                          <span className="text-slate-500">@</span>
+                          <span className="font-mono text-white">{fmtRate(ad.price)} {ad.fiat_unit}</span>
+                          {boardInfo && (
+                            <span
+                              className={`rounded px-1 py-0 text-[9px] font-bold ${
+                                boardInfo.rank === 1
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-slate-800 text-amber-300 border border-slate-700'
+                              }`}
+                              title={`Aparece en ${boardInfo.boardLabel} de Binance en el puesto #${boardInfo.rank}`}
+                            >
+                              #{boardInfo.rank}
+                            </span>
+                          )}
+                          {idx < data.my_ads.length - 1 && <span className="text-slate-600">·</span>}
+                        </span>
+                      );
+                    })}
                   </p>
                 )}
                 {isAdsExpanded && (
@@ -669,14 +798,15 @@ export default function OperationsDashboard({
                   </span>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {data.my_ads.map((ad) => {
                     const isBuy = ad.adv_type === 'COMPRA';
                     const isOnline = ad.is_active;
+                    const boardInfo = isOnline ? evaluateMyAdOnBoard(ad) : null;
                     return (
                       <div
                         key={ad.adv_no}
-                        className={`relative rounded-xl border p-3.5 transition-all shadow-sm ${
+                        className={`relative rounded-xl border p-4 transition-all shadow-sm flex flex-col justify-between ${
                           isOnline
                             ? isBuy
                               ? 'border-emerald-500/30 bg-slate-900/70 hover:border-emerald-500/50'
@@ -684,11 +814,11 @@ export default function OperationsDashboard({
                             : 'border-slate-800/80 bg-slate-900/30 opacity-75'
                         }`}
                       >
-                        {/* Fila Superior: Tipo, Moneda y Estado */}
-                        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                        {/* Fila Superior: Tipo, Moneda, Puesto y Estado */}
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                              className={`rounded-md px-2 py-0.5 text-xs font-bold ${
                                 isBuy
                                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                   : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
@@ -701,7 +831,21 @@ export default function OperationsDashboard({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
+                            {boardInfo && (
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border ${
+                                  boardInfo.rank === 1
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : boardInfo.rank <= 5
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-slate-800 text-slate-300 border-slate-700'
+                                }`}
+                                title={`Tu anuncio de ${ad.adv_type} se muestra en la ${boardInfo.boardLabel} de Binance en el puesto #${boardInfo.rank}`}
+                              >
+                                {boardInfo.boardLabel}: #{boardInfo.rank}
+                              </span>
+                            )}
                             <span
                               className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
                                 isOnline
@@ -718,39 +862,110 @@ export default function OperationsDashboard({
                           </div>
                         </div>
 
-                        {/* Fila Central: Precio y Saldo Remanente */}
-                        <div className="grid grid-cols-2 gap-2 my-2.5">
-                          <div>
-                            <span className="block text-[10px] uppercase font-semibold text-slate-500">
-                              Precio Fijado
-                            </span>
-                            <span className="text-base font-bold text-white tabular-nums">
-                              {fmtRate(ad.price)} <span className="text-xs font-normal text-slate-400">{ad.fiat_unit}</span>
-                            </span>
+                        {/* Fila Central Dividida en 2 Bloques Amplios: Datos Financieros vs Inteligencia/Automatización */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
+                          {/* Bloque Izquierdo: Precios y Saldo Remanente */}
+                          <div className="rounded-lg border border-slate-800/80 bg-slate-950/50 p-2.5 flex flex-col justify-between gap-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-semibold text-slate-400">
+                                Precio Configurado
+                              </span>
+                              <span className="text-sm font-bold text-white tabular-nums font-mono">
+                                {fmtRate(ad.price)} <span className="text-[10px] font-normal text-slate-400">{ad.fiat_unit}</span>
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between border-t border-slate-800/60 pt-1.5">
+                              <span className="text-[10px] uppercase font-semibold text-slate-400">
+                                Saldo Disponible
+                              </span>
+                              <span className="text-sm font-bold text-emerald-400 tabular-nums font-mono">
+                                {fmtUsdt(ad.surplus_amount)} <span className="text-[10px] font-normal text-slate-400">{ad.asset}</span>
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <span className="block text-[10px] uppercase font-semibold text-slate-500">
-                              Saldo Disponible
-                            </span>
-                            <span className="text-base font-bold text-emerald-400 tabular-nums">
-                              {fmtUsdt(ad.surplus_amount)} <span className="text-xs font-normal text-slate-400">{ad.asset}</span>
-                            </span>
+
+                          {/* Bloque Derecho: Inteligencia de Competencia en Binance */}
+                          <div className="rounded-lg border border-slate-800/80 bg-slate-950/50 p-2.5 flex flex-col justify-between gap-1.5 text-[11px]">
+                            {boardInfo ? (
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 text-[10px]">
+                                    Punta #1 ({boardInfo.matchedByBank && ad.trade_methods?.[0] ? ad.trade_methods[0] : 'General'}):
+                                  </span>
+                                  <span className="font-mono text-xs font-semibold text-white">
+                                    {fmtRate(boardInfo.bestBoardPrice)} {ad.fiat_unit}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-slate-800/60 pt-1">
+                                  <span className="text-slate-400 text-[10px]">
+                                    {boardInfo.rank === 1
+                                      ? 'Estado:'
+                                      : 'Volumen delante:'}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-slate-300">
+                                    {boardInfo.rank === 1
+                                      ? 'Líder en pizarra'
+                                      : `${fmtUsdt(boardInfo.aheadUsdt)} ${ad.asset}`}
+                                  </span>
+                                </div>
+
+                                {boardInfo.rank > 1 && boardInfo.suggestedRank1Price != null && (
+                                  <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
+                                    <span
+                                      className={`text-[10px] ${
+                                        boardInfo.isBelowBreakeven ? 'text-rose-400' : 'text-slate-400'
+                                      }`}
+                                      title={
+                                        boardInfo.isBelowBreakeven
+                                          ? `Atención: tomar #1 (${fmtRate(boardInfo.suggestedRank1Price)}) está por debajo de tu Breakeven (${fmtRate(breakevenSellRate)})`
+                                          : 'Precio sugerido para tomar #1'
+                                      }
+                                    >
+                                      {boardInfo.isBelowBreakeven
+                                        ? `Bajo piso (${fmtRate(breakevenSellRate)})`
+                                        : 'Precio para #1:'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) =>
+                                        handleCopySuggestedPrice(e, ad.adv_no, boardInfo.suggestedRank1Price)
+                                      }
+                                      className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold text-amber-300 cursor-pointer transition-colors"
+                                      title="Clic para copiar tasa sugerida"
+                                    >
+                                      <span>{fmtRate(boardInfo.suggestedRank1Price)}</span>
+                                      {copiedAdPriceId === ad.adv_no ? (
+                                        <Check className="h-3 w-3 text-emerald-400" />
+                                      ) : (
+                                        <Copy className="h-3 w-3 opacity-80" />
+                                      )}
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="flex items-center justify-center h-full text-slate-500 text-[10px]">
+                                Consultando competencia en Binance...
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {/* Fila Inferior: Límites en Fiat y Métodos */}
-                        <div className="pt-2 border-t border-slate-800/60 flex flex-col gap-1.5 text-[11px] text-slate-400">
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500">Límites:</span>
-                            <span className="font-mono text-slate-300 tabular-nums">
+                        {/* Fila Inferior: Límites en Fiat y Métodos de Pago */}
+                        <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-slate-500 text-[10px]">Límites:</span>
+                            <span className="font-mono text-slate-300 tabular-nums text-[10px]">
                               {fmtFiat(ad.min_fiat)} - {fmtFiat(ad.max_fiat)} {ad.fiat_unit}
                             </span>
                           </div>
 
                           {ad.trade_methods && ad.trade_methods.length > 0 && (
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-slate-500 shrink-0">Bancos:</span>
-                              <span className="truncate text-slate-300 font-medium text-right" title={ad.trade_methods.join(', ')}>
+                            <div className="flex items-center gap-1.5 min-w-0 truncate justify-end">
+                              <span className="text-slate-500 text-[10px] shrink-0">Bancos:</span>
+                              <span className="truncate text-slate-300 font-medium text-[10px]" title={ad.trade_methods.join(', ')}>
                                 {ad.trade_methods.join(' · ')}
                               </span>
                             </div>

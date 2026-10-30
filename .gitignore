@@ -39,6 +39,8 @@ backend/.binance_credentials.json
 backend/.binance_funding_cache.json
 .binance_user_ads_cache.json
 backend/.binance_user_ads_cache.json
+.binance_p2p_public_config.json
+backend/.binance_p2p_public_config.json
 
 # Graphify & tool generated outputs
 graphify-out/
