@@ -115,15 +115,15 @@ def clear_operations(only_demo: bool = Query(False), db: Session = Depends(get_d
 
 @router.get("")
 def get_operations_dashboard(
-    order_type: Optional[str] = Query(None),
-    order_status: Optional[str] = Query(None),
-    asset: Optional[str] = Query(None),
-    fiat_currency: Optional[str] = Query("VES"),
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None),
-    only_today: bool = Query(False),
-    search: Optional[str] = Query(None),
-    bank_fee_pct: float = Query(0.0),
+    order_type: Optional[str] = None,
+    order_status: Optional[str] = None,
+    asset: Optional[str] = None,
+    fiat_currency: Optional[str] = "VES",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    only_today: bool = False,
+    search: Optional[str] = None,
+    bank_fee_pct: float = 0.0,
     db: Session = Depends(get_db),
 ):
     today_str = datetime.now().strftime("%Y-%m-%d")
