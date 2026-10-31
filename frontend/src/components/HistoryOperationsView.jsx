@@ -8,25 +8,22 @@ import {
   Percent,
   Receipt,
   Search,
-  Download,
   Building2,
   Users,
-  CalendarDays,
-  SlidersHorizontal,
   History,
   RotateCcw,
   X,
   Copy,
   Check,
-  Calculator,
   ChevronDown,
   ChevronUp,
-  ListFilter,
 } from 'lucide-react';
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
 import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
+import OperationsFilterBar from './history/OperationsFilterBar';
+import { operationsApi } from '../services/api';
 
 export default function HistoryOperationsView({ refreshTrigger, onNavigateFormulas }) {
   const [data, setData] = useState(null);
@@ -73,18 +70,18 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set('only_today', 'false');
-      if (orderType !== 'ALL') params.set('order_type', orderType);
-      if (orderStatus !== 'ALL') params.set('order_status', orderStatus);
-      if (selectedAsset !== 'ALL') params.set('asset', selectedAsset);
-      if (fiatCurrency) params.set('fiat_currency', fiatCurrency);
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
-      params.set('bank_fee_pct', String(bankFeePct || 0));
+      const filters = {
+        only_today: false,
+        bank_fee_pct: bankFeePct || 0,
+      };
+      if (orderType !== 'ALL') filters.order_type = orderType;
+      if (orderStatus !== 'ALL') filters.order_status = orderStatus;
+      if (selectedAsset !== 'ALL') filters.asset = selectedAsset;
+      if (fiatCurrency) filters.fiat_currency = fiatCurrency;
+      if (startDate) filters.start_date = startDate;
+      if (endDate) filters.end_date = endDate;
 
-      const res = await fetch(`/api/operations?${params.toString()}`);
-      const json = await res.json();
+      const json = await operationsApi.getOperations(filters);
       setData(json);
 
       if (json?.default_asset && !localStorage.getItem('user_custom_asset_selected')) {
@@ -173,15 +170,16 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   };
 
   const handleExportExcel = () => {
-    const params = new URLSearchParams();
-    params.set('only_today', 'false');
-    if (orderType !== 'ALL') params.set('order_type', orderType);
-    if (orderStatus !== 'ALL') params.set('order_status', orderStatus);
-    if (fiatCurrency !== 'ALL') params.set('fiat_currency', fiatCurrency);
-    if (startDate) params.set('start_date', startDate);
-    if (endDate) params.set('end_date', endDate);
-    params.set('bank_fee_pct', String(bankFeePct || 0));
-    window.open(`/api/operations/export?${params.toString()}`, '_blank');
+    const filters = {
+      only_today: false,
+      bank_fee_pct: bankFeePct || 0,
+    };
+    if (orderType !== 'ALL') filters.order_type = orderType;
+    if (orderStatus !== 'ALL') filters.order_status = orderStatus;
+    if (fiatCurrency !== 'ALL') filters.fiat_currency = fiatCurrency;
+    if (startDate) filters.start_date = startDate;
+    if (endDate) filters.end_date = endDate;
+    window.open(operationsApi.getExportUrl(filters), '_blank');
   };
 
   const handleCopyOrderNumber = (orderNumber) => {
@@ -276,94 +274,20 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   return (
     <div className="space-y-4">
       {/* Barra Flotante Compacta de Filtros Históricos (Período, Rango, Moneda Fiat y Exportar) */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Selector de Período Histórico (Dropdown con valor por defecto Hoy) */}
-          <div className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-2.5 text-xs shadow-xs">
-            <CalendarDays className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-            <select
-              value={activePreset}
-              onChange={(e) => applyDatePreset(e.target.value)}
-              className="bg-transparent font-medium text-slate-200 focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="TODAY" className="bg-slate-900 text-slate-100">Hoy</option>
-              <option value="YESTERDAY" className="bg-slate-900 text-slate-100">Ayer</option>
-              <option value="7D" className="bg-slate-900 text-slate-100">Últimos 7 días</option>
-              <option value="30D" className="bg-slate-900 text-slate-100">Últimos 30 días</option>
-              <option value="90D" className="bg-slate-900 text-slate-100">Últimos 90 días</option>
-              <option value="MONTH" className="bg-slate-900 text-slate-100">Este Mes</option>
-              <option value="ALL" className="bg-slate-900 text-slate-100">Todo el Historial</option>
-              <option value="CUSTOM" className="bg-slate-900 text-slate-100">Personalizado...</option>
-            </select>
-          </div>
-
-          {/* Rango de fechas manual (visible únicamente cuando activePreset === 'CUSTOM') */}
-          {activePreset === 'CUSTOM' && (
-            <div className="flex h-8 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-slate-900/90 px-2.5 text-xs shadow-xs animate-in fade-in duration-150">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent text-xs text-slate-200 focus:outline-none"
-                title="Fecha inicio"
-              />
-              <span className="text-slate-500">→</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent text-xs text-slate-200 focus:outline-none"
-                title="Fecha fin"
-              />
-              <button
-                onClick={() => applyDatePreset('TODAY')}
-                title="Cerrar personalizado y volver a Hoy"
-                className="ml-1 rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-amber-400 transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Moneda Fiat (Afecta las tarjetas de KPIs analíticos y el balance consolidado) */}
-          {/* Botón Selector Unificado de Par de Mercado (Cripto / Fiat) */}
-          <button
-            type="button"
-            onClick={() => setIsPairModalOpen(true)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 hover:text-white transition-colors shadow-xs cursor-pointer group"
-            title="Cambiar Criptoactivo y Moneda Fiat de análisis"
-          >
-            <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{selectedAsset}</span>
-            <span className="text-slate-500">/</span>
-            <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{fiatCurrency}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
-          </button>
-        </div>
-
-        {/* Extremo derecho: Acciones de Documentación y Exportar con separación limpia */}
-        <div className="flex items-center gap-2 ml-auto">
-          {onNavigateFormulas && (
-            <button
-              type="button"
-              onClick={onNavigateFormulas}
-              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-300 hover:border-amber-500/40 hover:text-amber-300 transition-colors shadow-xs whitespace-nowrap"
-              title="Ver documentación contable y fórmulas de cálculo (WAC/WAP, Breakeven, P&L)"
-            >
-              <Calculator className="h-3.5 w-3.5 text-amber-400" />
-              <span>Fórmulas</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleExportExcel}
-            disabled={orders.length === 0}
-            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 transition-colors shadow-xs whitespace-nowrap"
-          >
-            <Download className="h-3.5 w-3.5 shrink-0" />
-            <span>Exportar (.xlsx)</span>
-          </button>
-        </div>
-      </div>
+      <OperationsFilterBar
+        activePreset={activePreset}
+        applyDatePreset={applyDatePreset}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        selectedAsset={selectedAsset}
+        fiatCurrency={fiatCurrency}
+        onOpenPairModal={() => setIsPairModalOpen(true)}
+        onNavigateFormulas={onNavigateFormulas}
+        onExportExcel={handleExportExcel}
+        ordersCount={orders.length}
+      />
 
       {/* Tarjetas de Resumen Acumulado del Período (Estilo Dashboard Principal: Compactas, Sobrias y Tipografía Uniforme) */}
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
