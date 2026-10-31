@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
 import FileDropzone from './FileDropzone';
 import TablePaginator from './TablePaginator';
+import { reconciliationApi } from '../services/api';
 
 export default function BankReconcilerView() {
   const [bankBatch, setBankBatch] = useState(null);
@@ -21,8 +22,7 @@ export default function BankReconcilerView() {
   const runAutoReconcile = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/reconcile?tolerance_days=2', { method: 'POST' });
-      const data = await res.json();
+      const data = await reconciliationApi.reconcileWithBank(2);
       setReconciliation(data);
       setMatchedPage(1);
       setUnmatchedOrdersPage(1);
@@ -36,14 +36,14 @@ export default function BankReconcilerView() {
 
   const handleManualMatch = async () => {
     if (!selectedOrderId || !selectedBankId) return;
-    await fetch('/api/reconcile/manual', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: selectedOrderId, bank_id: selectedBankId }),
-    });
-    setSelectedOrderId(null);
-    setSelectedBankId(null);
-    runAutoReconcile();
+    try {
+      await reconciliationApi.manualMatch(selectedOrderId, selectedBankId);
+      setSelectedOrderId(null);
+      setSelectedBankId(null);
+      runAutoReconcile();
+    } catch (err) {
+      console.error('Error al conciliar manualmente:', err);
+    }
   };
 
   const matchedPairs = reconciliation?.matched_pairs || [];

@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Upload,
 } from 'lucide-react';
+import { binanceApi, reconciliationApi } from '../services/api';
 
 export default function BinanceApiModal({
   isOpen,
@@ -46,13 +47,7 @@ export default function BinanceApiModal({
         payload.api_secret = apiSecret.trim();
       }
 
-      const res = await fetch('/api/binance/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al sincronizar con Binance API');
+      const data = await binanceApi.syncOrders(payload);
 
       setApiKey('');
       setApiSecret('');
@@ -76,12 +71,7 @@ export default function BinanceApiModal({
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('/api/upload/binance-csv', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al importar CSV');
+      const data = await reconciliationApi.uploadBinanceCsv(formData);
       setMessage(`CSV importado correctamente: ${data.valid_rows} órdenes agregadas a la base de datos.`);
       if (onSyncComplete) onSyncComplete();
     } catch (err) {
