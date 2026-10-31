@@ -9,6 +9,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
 } from 'lucide-react';
+import { bankInventoryApi } from '../services/api';
 
 const AMOUNT_PRESETS = [
   { label: 'Todos', val: '' },
@@ -66,8 +67,8 @@ export default function P2PMarketChartCard({
 
   // Cargar el catálogo general oficial de bancos de Venezuela desde nuestra base de datos / backend
   useEffect(() => {
-    fetch('/api/banks/catalog')
-      .then((r) => r.json())
+    bankInventoryApi
+      .getCatalog()
       .then((data) => {
         if (data?.banks && Array.isArray(data.banks)) {
           setBankCatalog(data.banks);

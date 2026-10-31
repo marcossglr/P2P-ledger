@@ -7,6 +7,7 @@ import {
   Check,
   Sparkles,
 } from 'lucide-react';
+import { bankInventoryApi } from '../services/api';
 
 export default function BankAccountFormModal({
   isOpen,
@@ -41,11 +42,8 @@ export default function BankAccountFormModal({
     const fetchCatalog = async () => {
       setLoadingCatalog(true);
       try {
-        const res = await fetch('/api/banks/catalog');
-        if (res.ok) {
-          const json = await res.json();
-          setCatalog(json.banks || []);
-        }
+        const json = await bankInventoryApi.getCatalog();
+        setCatalog(json.banks || []);
       } catch (err) {
         console.error('Error cargando catálogo de bancos:', err);
       } finally {
@@ -148,38 +146,27 @@ export default function BankAccountFormModal({
 
     try {
       const isEdit = Boolean(editingAccount);
-      const url = isEdit
-        ? `/api/bank-inventory/accounts/${editingAccount.id}`
-        : '/api/bank-inventory/accounts';
-      const method = isEdit ? 'PUT' : 'POST';
+      const payload = {
+        name: accName.trim(),
+        account_alias: accAlias.trim(),
+        match_keywords: accKeywords.trim() || accName.trim().toLowerCase(),
+        is_default: accIsDefault,
+        apply_buy_fee: accApplyFee,
+        pago_movil_fee_pct: parseFloat(accPmFeePct) || 0,
+        transfer_fee_pct: parseFloat(accTransfFeePct) || 0,
+        initial_balance: isEdit ? undefined : parseFloat(accInitialBalance) || 0,
+      };
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: accName.trim(),
-          account_alias: accAlias.trim(),
-          match_keywords: accKeywords.trim() || accName.trim().toLowerCase(),
-          is_default: accIsDefault,
-          apply_buy_fee: accApplyFee,
-          pago_movil_fee_pct: parseFloat(accPmFeePct) || 0,
-          transfer_fee_pct: parseFloat(accTransfFeePct) || 0,
-          initial_balance: isEdit ? undefined : parseFloat(accInitialBalance) || 0,
-        }),
-      });
+      const updatedInventory = isEdit
+        ? await bankInventoryApi.updateAccount(editingAccount.id, payload)
+        : await bankInventoryApi.createAccount(payload);
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.detail || 'Error al guardar la cuenta bancaria.');
-      }
-
-      const updatedInventory = await res.json();
       if (onSuccess) {
         onSuccess(updatedInventory);
       }
       onClose();
     } catch (err) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Error al guardar la cuenta bancaria.');
     } finally {
       setSaving(false);
     }
