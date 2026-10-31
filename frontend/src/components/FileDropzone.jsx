@@ -8,6 +8,7 @@ export default function FileDropzone({
   accept,
   accentColor = 'amber', // 'amber' for Binance, 'emerald' for Bank
   endpoint,
+  maxSizeBytes = 25 * 1024 * 1024, // 25 MB por defecto
   onUploadSuccess,
 }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -34,6 +35,29 @@ export default function FileDropzone({
 
   const handleFile = async (file) => {
     if (!file) return;
+
+    // Validación defensiva en frontend: extensión y tamaño
+    if (accept) {
+      const allowedExts = accept
+        .split(',')
+        .map((ext) => ext.trim().toLowerCase())
+        .filter(Boolean);
+      const fileNameLower = file.name.toLowerCase();
+      const isAllowed = allowedExts.some((ext) => fileNameLower.endsWith(ext));
+      if (!isAllowed) {
+        setError(`Formato de archivo inválido. Extensiones permitidas: ${accept}`);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    }
+
+    if (file.size > maxSizeBytes) {
+      const maxMb = Math.round(maxSizeBytes / (1024 * 1024));
+      setError(`El archivo supera el tamaño máximo permitido (${maxMb} MB).`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setError(null);
     setLoading(true);
 

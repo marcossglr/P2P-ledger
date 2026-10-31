@@ -202,7 +202,7 @@ export default function OperationsDashboard({
   }, [data, bankFeePct]);
 
   const handleCopyOrderNumber = (orderNumber) => {
-    navigator.clipboard?.writeText(orderNumber);
+    navigator.clipboard?.writeText(orderNumber)?.catch(() => {});
     setCopiedOrderId(orderNumber);
     setTimeout(() => setCopiedOrderId(null), 1800);
   };
@@ -211,7 +211,7 @@ export default function OperationsDashboard({
   const handleCopySuggestedPrice = (e, advNo, priceVal) => {
     e.stopPropagation();
     if (priceVal == null) return;
-    navigator.clipboard?.writeText(Number(priceVal).toFixed(2));
+    navigator.clipboard?.writeText(Number(priceVal).toFixed(2))?.catch(() => {});
     setCopiedAdPriceId(advNo);
     setTimeout(() => setCopiedAdPriceId(null), 1800);
   };
@@ -437,7 +437,7 @@ export default function OperationsDashboard({
       .filter(Boolean)
       .join('\n');
 
-    navigator.clipboard?.writeText(lines);
+    navigator.clipboard?.writeText(lines)?.catch(() => {});
     setCopiedSummary(true);
     setTimeout(() => setCopiedSummary(false), 2000);
   };

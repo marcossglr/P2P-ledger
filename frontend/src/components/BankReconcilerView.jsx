@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRightLeft, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle2, AlertTriangle, Link2, AlertCircle } from 'lucide-react';
 import FileDropzone from './FileDropzone';
 import TablePaginator from './TablePaginator';
 import { reconciliationApi } from '../services/api';
@@ -8,6 +8,7 @@ export default function BankReconcilerView() {
   const [bankBatch, setBankBatch] = useState(null);
   const [reconciliation, setReconciliation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [selectedBankId, setSelectedBankId] = useState(null);
   const [activeTab, setActiveTab] = useState('MATCHED');
@@ -21,6 +22,7 @@ export default function BankReconcilerView() {
 
   const runAutoReconcile = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await reconciliationApi.reconcileWithBank(2);
       setReconciliation(data);
@@ -29,6 +31,7 @@ export default function BankReconcilerView() {
       setUnmatchedBankPage(1);
     } catch (err) {
       console.error('Error al conciliar:', err);
+      setError(err.message || 'Error al conciliar movimientos con el banco');
     } finally {
       setLoading(false);
     }
@@ -36,6 +39,7 @@ export default function BankReconcilerView() {
 
   const handleManualMatch = async () => {
     if (!selectedOrderId || !selectedBankId) return;
+    setError(null);
     try {
       await reconciliationApi.manualMatch(selectedOrderId, selectedBankId);
       setSelectedOrderId(null);
@@ -43,6 +47,7 @@ export default function BankReconcilerView() {
       runAutoReconcile();
     } catch (err) {
       console.error('Error al conciliar manualmente:', err);
+      setError(err.message || 'Error al emparejar manualmente');
     }
   };
 
@@ -116,6 +121,13 @@ export default function BankReconcilerView() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-300 animate-fadeIn">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {reconciliation && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">

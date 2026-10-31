@@ -26,6 +26,7 @@ package-lock.json
 *.db-journal
 *.sqlite3
 backend/*.db
+backend/*.db.*
 backend/*.db.bak*
 backend/p2p_reconciliation.db
 backend/p2p_reconciliation.db.bak-canal

@@ -312,6 +312,7 @@ export default function DatabaseBackupsSection({
                           <a
                             href={backupsApi.getDownloadUrl(b.filename)}
                             download={b.filename}
+                            rel="noopener noreferrer"
                             title="Descargar archivo .db a tu equipo"
                             className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
                           >

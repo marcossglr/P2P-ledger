@@ -31,7 +31,11 @@ export default function BinancePrivateApiSection({
   const handlePasteKey = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) setApiKey(text.trim());
+      if (text) {
+        // Sanitizar espacios en blanco, tabulaciones y saltos de línea de la clave
+        const clean = text.replace(/[\r\n\t\s]/g, '');
+        setApiKey(clean);
+      }
     } catch {
       // Ignorar restricciones de portapapeles
     }
@@ -180,6 +184,8 @@ export default function BinancePrivateApiSection({
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Pega tu API Key de Binance..."
+                autoComplete="off"
+                spellCheck={false}
                 className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
               />
             </div>
@@ -194,6 +200,8 @@ export default function BinancePrivateApiSection({
                   value={apiSecret}
                   onChange={(e) => setApiSecret(e.target.value)}
                   placeholder="Pega tu Secret Key de Binance..."
+                  autoComplete="off"
+                  spellCheck={false}
                   className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 pr-10 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
                 />
                 <button

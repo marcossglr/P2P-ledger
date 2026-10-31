@@ -179,11 +179,11 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
     if (fiatCurrency !== 'ALL') filters.fiat_currency = fiatCurrency;
     if (startDate) filters.start_date = startDate;
     if (endDate) filters.end_date = endDate;
-    window.open(operationsApi.getExportUrl(filters), '_blank');
+    window.open(operationsApi.getExportUrl(filters), '_blank', 'noopener,noreferrer');
   };
 
   const handleCopyOrderNumber = (orderNumber) => {
-    navigator.clipboard?.writeText(orderNumber);
+    navigator.clipboard?.writeText(orderNumber)?.catch(() => {});
     setCopiedOrderId(orderNumber);
     setTimeout(() => setCopiedOrderId(null), 1800);
   };

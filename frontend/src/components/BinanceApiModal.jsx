@@ -65,6 +65,14 @@ export default function BinanceApiModal({
 
   const handleCsvFallback = async (file) => {
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setError('Por favor selecciona un archivo con extensión .csv válido.');
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setError('El archivo CSV excede el tamaño máximo permitido (25 MB).');
+      return;
+    }
     setError(null);
     setMessage(null);
     setLoading(true);
@@ -166,6 +174,8 @@ export default function BinanceApiModal({
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       placeholder="Pega tu API Key de solo lectura..."
+                      autoComplete="off"
+                      spellCheck={false}
                       className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
                     />
                   </div>
@@ -178,6 +188,8 @@ export default function BinanceApiModal({
                       value={apiSecret}
                       onChange={(e) => setApiSecret(e.target.value)}
                       placeholder="Pega tu Secret Key..."
+                      autoComplete="off"
+                      spellCheck={false}
                       className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
                     />
                   </div>
