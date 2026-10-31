@@ -4,10 +4,15 @@
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const headers = { ...options.headers };
+
+  if (API_KEY) {
+    headers['X-API-Key'] = API_KEY;
+  }
 
   if (!(options.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';

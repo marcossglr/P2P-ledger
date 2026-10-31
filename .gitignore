@@ -33,7 +33,8 @@ backend/p2p_reconciliation.db.bak-canal
 
 # Credentials & Sensitive Local Caches
 .env
-.env.*
+.env.local
+.env.*.local
 .binance_credentials.json
 backend/.binance_credentials.json
 .binance_funding_cache.json

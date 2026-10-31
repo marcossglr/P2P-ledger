@@ -1,24 +1,30 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
-from pathlib import Path
+from .config import settings, BASE_DIR, DEFAULT_SQLITE_PATH
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "p2p_reconciliation.db"
+DB_PATH = DEFAULT_SQLITE_PATH
+is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
+engine_args = {}
+if is_sqlite:
+    engine_args["connect_args"] = {"check_same_thread": False, "timeout": 30}
+else:
+    # Optimización de pool para PostgreSQL / MySQL en producción
+    engine_args["pool_size"] = 10
+    engine_args["max_overflow"] = 20
+    engine_args["pool_pre_ping"] = True
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False, "timeout": 30}
-)
+engine = create_engine(settings.DATABASE_URL, **engine_args)
 
-# Optimización de alto rendimiento SQLite para lecturas y escrituras concurrentes
-@event.listens_for(engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.execute("PRAGMA cache_size=-64000")  # ~64MB cache en RAM
-    cursor.close()
+# Si es SQLite, activar modo WAL y optimización de concurrencia y caché
+if is_sqlite:
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-64000")  # ~64MB cache en RAM
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

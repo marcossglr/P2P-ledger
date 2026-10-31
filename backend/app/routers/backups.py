@@ -1,8 +1,9 @@
 import shutil
 import sqlite3
+import re
 from datetime import datetime
 from pathlib import Path
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 
@@ -10,13 +11,40 @@ from ..database import engine, DB_PATH, BASE_DIR
 
 router = APIRouter(prefix="/api/backups", tags=["Backups"])
 
-BACKUPS_DIR = BASE_DIR / "backups"
+BACKUPS_DIR = (BASE_DIR / "backups").resolve()
 BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
 MAX_BACKUP_SIZE_BYTES = 250 * 1024 * 1024   # 250 MB
+
+# Patrón estricto para nombres de archivo de backup (previene directory traversal)
+SAFE_FILENAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]+\.db$")
+
+
+def validate_and_resolve_backup_path(filename: str) -> Path:
+    """
+    Valida contra Path Traversal garantizando que:
+    1. El nombre cumpla una expresión regular segura sin barras o referencias relativas '../'.
+    2. La ruta canónica resuelta pertenezca inequívocamente al directorio BACKUPS_DIR.
+    """
+    cleaned_name = Path(filename).name
+    if not SAFE_FILENAME_PATTERN.match(cleaned_name) or ".." in filename:
+        raise HTTPException(status_code=400, detail="Nombre de archivo de respaldo inválido o sospechoso.")
+    
+    target_path = (BACKUPS_DIR / cleaned_name).resolve()
+    if not target_path.is_relative_to(BACKUPS_DIR):
+        raise HTTPException(status_code=403, detail="Acceso denegado a la ruta especificada.")
+    return target_path
 
 
 class RestoreBackupPayload(BaseModel):
     filename: str
+
+    @field_validator("filename")
+    @classmethod
+    def sanitize_filename(cls, v: str) -> str:
+        name = Path(v).name
+        if not SAFE_FILENAME_PATTERN.match(name) or ".." in v:
+            raise ValueError("Nombre de archivo de respaldo no permitido.")
+        return name
 
 
 @router.get("")
@@ -85,15 +113,14 @@ def create_database_backup():
 @router.get("/download/{filename}")
 def download_database_backup(filename: str):
     """Permite descargar un archivo de respaldo .db específico."""
-    safe_filename = Path(filename).name
-    backup_file_path = BACKUPS_DIR / safe_filename
+    backup_file_path = validate_and_resolve_backup_path(filename)
 
     if not backup_file_path.exists() or not backup_file_path.is_file():
         raise HTTPException(status_code=404, detail="Archivo de respaldo no encontrado.")
 
     return FileResponse(
         path=str(backup_file_path),
-        filename=safe_filename,
+        filename=backup_file_path.name,
         media_type="application/x-sqlite3",
     )
 
@@ -101,8 +128,7 @@ def download_database_backup(filename: str):
 @router.post("/restore")
 def restore_database_backup(payload: RestoreBackupPayload):
     """Restaura un respaldo existente sobre la base de datos actual."""
-    safe_filename = Path(payload.filename).name
-    backup_file_path = BACKUPS_DIR / safe_filename
+    backup_file_path = validate_and_resolve_backup_path(payload.filename)
 
     if not backup_file_path.exists() or not backup_file_path.is_file():
         raise HTTPException(status_code=404, detail="El respaldo especificado no existe.")
@@ -131,7 +157,7 @@ def restore_database_backup(payload: RestoreBackupPayload):
 
         return {
             "status": "restored",
-            "message": f"Base de datos restaurada exitosamente desde {safe_filename}. Respaldo previo de seguridad guardado como {emergency_name}.",
+            "message": f"Base de datos restaurada exitosamente desde {backup_file_path.name}. Respaldo previo de seguridad guardado como {emergency_name}.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al restaurar respaldo: {str(e)}")
@@ -143,8 +169,9 @@ async def upload_database_backup(file: UploadFile = File(...)):
     if not file.filename.endswith(".db"):
         raise HTTPException(status_code=400, detail="El archivo debe tener extensión .db")
 
-    safe_name = f"backup_uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{Path(file.filename).name}"
-    target_path = BACKUPS_DIR / safe_name
+    raw_clean_name = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", Path(file.filename).name)
+    safe_name = f"backup_uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{raw_clean_name}"
+    target_path = validate_and_resolve_backup_path(safe_name)
 
     try:
         content = await file.read()
@@ -175,14 +202,13 @@ async def upload_database_backup(file: UploadFile = File(...)):
 @router.delete("/{filename}")
 def delete_database_backup(filename: str):
     """Elimina un archivo de respaldo específico."""
-    safe_filename = Path(filename).name
-    backup_file_path = BACKUPS_DIR / safe_filename
+    backup_file_path = validate_and_resolve_backup_path(filename)
 
     if not backup_file_path.exists() or not backup_file_path.is_file():
         raise HTTPException(status_code=404, detail="Archivo de respaldo no encontrado.")
 
     try:
         backup_file_path.unlink()
-        return {"status": "deleted", "filename": safe_filename}
+        return {"status": "deleted", "filename": backup_file_path.name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error eliminando respaldo: {str(e)}")
