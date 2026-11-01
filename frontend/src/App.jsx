@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   KeyRound,
@@ -23,6 +24,21 @@ import MarketPairModal from './components/MarketPairModal';
 import { playNewTradeSound, playCompletedTradeSound } from './utils/audioAlerts';
 import { healthApi, binanceApi } from './services/api';
 
+const ROUTE_TO_VIEW = {
+  '/': 'DASHBOARD',
+  '/dashboard': 'DASHBOARD',
+  '/history': 'HISTORY',
+  '/treasury': 'TREASURY',
+  '/settings': 'SETTINGS',
+};
+
+const VIEW_TO_ROUTE = {
+  DASHBOARD: '/dashboard',
+  HISTORY: '/history',
+  TREASURY: '/treasury',
+  SETTINGS: '/settings',
+};
+
 const NAV_ITEMS = [
   {
     id: 'DASHBOARD',
@@ -42,11 +58,25 @@ const NAV_ITEMS = [
 ];
 
 export default function App() {
-  const [activeView, setActiveView] = useState('DASHBOARD');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Sincronizar ruta con activeView
+  const currentPath = location.pathname.toLowerCase();
+  const activeView = ROUTE_TO_VIEW[currentPath] || 'DASHBOARD';
+
+  const setActiveView = useCallback(
+    (view) => {
+      const targetRoute = VIEW_TO_ROUTE[view] || '/dashboard';
+      navigate(targetRoute);
+    },
+    [navigate]
+  );
+
   const [settingsSection, setSettingsSection] = useState('CONNECTIONS');
 
   // Vistas visitadas para mantener el estado en memoria (Keep-Alive) sin re-cargas
-  const [visitedViews, setVisitedViews] = useState(() => new Set(['DASHBOARD']));
+  const [visitedViews, setVisitedViews] = useState(() => new Set(['DASHBOARD', activeView]));
 
   useEffect(() => {
     setVisitedViews((prev) => {
@@ -56,6 +86,7 @@ export default function App() {
       return next;
     });
   }, [activeView]);
+
 
   const [health, setHealth] = useState({
     status: 'checking',

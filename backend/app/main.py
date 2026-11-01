@@ -1,7 +1,10 @@
+from pathlib import Path
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
-from .config import settings
+from .config import settings, BASE_DIR
 from .auth import verify_auth
 from .database import engine, Base
 from .services.bank_inventory import ensure_bank_inventory_schema
@@ -57,3 +60,22 @@ app.include_router(operations.router, dependencies=auth_dependency)
 app.include_router(banks.router, dependencies=auth_dependency)
 app.include_router(reconciliation.router, dependencies=auth_dependency)
 app.include_router(backups.router, dependencies=auth_dependency)
+
+# Soporte para servir frontend compilado (Single-Port Local App)
+FRONTEND_DIST_DIR = BASE_DIR.parent / "frontend" / "dist"
+
+if FRONTEND_DIST_DIR.exists() and (FRONTEND_DIST_DIR / "index.html").exists():
+    # Montar archivos estáticos (assets de js, css, fuentes)
+    assets_dir = FRONTEND_DIST_DIR / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Si el archivo exacto existe en dist (ej. favicon, manifest, etc.)
+        target_file = FRONTEND_DIST_DIR / full_path
+        if full_path and target_file.is_file():
+            return FileResponse(target_file)
+        # De lo contrario retornar index.html (SPA fallback)
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
+

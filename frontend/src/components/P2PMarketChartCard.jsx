@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { bankInventoryApi } from '../services/api';
 import MarketDepthChart from './market/MarketDepthChart';
+import { parseSmartAmount, fmtRate } from '../utils/formatters';
+import { useMarketFilters } from '../hooks/useMarketFilters';
 
 const AMOUNT_PRESETS = [
   { label: 'Todos', val: '' },
@@ -22,34 +24,6 @@ const AMOUNT_PRESETS = [
   { label: '100k', val: '100000' },
   { label: '250k', val: '250000' },
 ];
-
-/**
- * Normaliza cualquier entrada de texto de monto (ej: "100k", "100K", "100.000", "50,000", "1.5m") a un número float válido.
- */
-function parseSmartAmount(val) {
-  if (!val || typeof val !== 'string') return null;
-  const clean = val.trim().toLowerCase().replace(/\s+/g, '');
-  if (!clean) return null;
-
-  if (clean.endsWith('k')) {
-    const num = parseFloat(clean.slice(0, -1).replace(/,/g, '.'));
-    return Number.isFinite(num) && num > 0 ? num * 1000 : null;
-  }
-  if (clean.endsWith('m')) {
-    const num = parseFloat(clean.slice(0, -1).replace(/,/g, '.'));
-    return Number.isFinite(num) && num > 0 ? num * 1000000 : null;
-  }
-
-  // Quitar separadores de miles habituales (ej: 100.000 -> 100000 o 100,000 -> 100000)
-  const normalized = clean.includes('.') && clean.includes(',')
-    ? clean.replace(/\./g, '').replace(',', '.')
-    : clean.includes('.') && clean.split('.')[1]?.length === 3
-    ? clean.replace(/\./g, '')
-    : clean.replace(/,/g, '');
-
-  const num = parseFloat(normalized);
-  return Number.isFinite(num) && num > 0 ? num : null;
-}
 
 export default function P2PMarketChartCard({
   marketData,
@@ -90,51 +64,23 @@ export default function P2PMarketChartCard({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showFiltersPanel]);
 
-  // Filtros locales instantáneos sobre toda la data del mercado (persistidos en localStorage)
-  const [selectedBank, setSelectedBank] = useState(
-    () => localStorage.getItem('p2p_chart_bank') || 'ALL'
-  );
-  const [amountFilter, setAmountFilter] = useState(
-    () => localStorage.getItem('p2p_chart_amount') || ''
-  );
-  const [onlyMerchants, setOnlyMerchants] = useState(
-    () => localStorage.getItem('p2p_chart_merchants') === 'true'
-  );
-  const [priceMode, setPriceMode] = useState(
-    () => localStorage.getItem('p2p_chart_price_mode') || 'BEST'
-  ); // 'BEST' | 'TOP5' | 'TOP10' | 'WEIGHTED'
+  // Hook desacoplado para gestión y persistencia de filtros de mercado
+  const {
+    selectedBank,
+    updateBank,
+    amountFilter,
+    updateAmount,
+    onlyMerchants,
+    updateMerchants,
+    priceMode,
+    updatePriceMode,
+    hasActiveFilters,
+  } = useMarketFilters(onRefresh);
 
   // Pestaña activa dentro de la tarjeta: 'CHART' (Gráfica) o 'ORDER_BOOK' (Libro de ofertas)
   const [activeTab, setActiveTab] = useState('CHART');
-
-  const updateBank = (val) => {
-    setSelectedBank(val);
-    localStorage.setItem('p2p_chart_bank', val);
-    if (onRefresh) onRefresh(true, val, parseSmartAmount(amountFilter));
-  };
-  const updateAmount = (val) => {
-    setAmountFilter(val);
-    localStorage.setItem('p2p_chart_amount', val);
-    if (onRefresh) onRefresh(true, selectedBank, parseSmartAmount(val));
-  };
-  const updateMerchants = (val) => {
-    setOnlyMerchants(val);
-    localStorage.setItem('p2p_chart_merchants', String(val));
-  };
-  const updatePriceMode = (val) => {
-    setPriceMode(val);
-    localStorage.setItem('p2p_chart_price_mode', val);
-  };
-
   const [hoverIdx, setHoverIdx] = useState(null);
 
-  const fmtRate = (n, digits = 2) =>
-    n == null || Number.isNaN(Number(n))
-      ? '—'
-      : Number(n).toLocaleString('es-ES', {
-          minimumFractionDigits: digits,
-          maximumFractionDigits: digits,
-        });
 
   // Todos los anuncios crudos traídos de todo el mercado
   const allBuyAds = useMemo(() => marketData?.buy?.ads || [], [marketData]);
@@ -291,9 +237,6 @@ export default function P2PMarketChartCard({
 
     return { buy, sell, spreadAbs, spreadPct };
   }, [filterSideAds, priceMode]);
-
-  const hasActiveFilters =
-    selectedBank !== 'ALL' || amountFilter !== '' || onlyMerchants || priceMode !== 'BEST';
 
   const resetFilters = () => {
     updateBank('ALL');

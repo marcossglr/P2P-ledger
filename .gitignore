@@ -24,12 +24,16 @@ package-lock.json
 # Databases & local persistent storage
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite3
 backend/*.db
 backend/*.db.*
 backend/*.db.bak*
 backend/p2p_reconciliation.db
 backend/p2p_reconciliation.db.bak-canal
+backend/p2p_reconciliation.db-shm
+backend/p2p_reconciliation.db-wal
 
 # Credentials & Sensitive Local Caches
 .env
