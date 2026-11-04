@@ -11,8 +11,9 @@ import {
 } from 'lucide-react';
 import { bankInventoryApi } from '../services/api';
 import MarketDepthChart from './market/MarketDepthChart';
-import { parseSmartAmount, fmtRate } from '../utils/formatters';
+import { parseSmartAmount, fmtRate, fmtTime } from '../utils/formatters';
 import { useMarketFilters } from '../hooks/useMarketFilters';
+import { Button, Input, Badge } from './ui';
 
 const AMOUNT_PRESETS = [
   { label: 'Todos', val: '' },
@@ -270,10 +271,7 @@ export default function P2PMarketChartCard({
       }
     });
 
-    const nowTime = new Date().toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const nowTime = fmtTime(new Date());
 
     if (pts.length >= 2) {
       const sliced = pts.slice(-24);
@@ -365,6 +363,21 @@ export default function P2PMarketChartCard({
     const buyPath = buildPath(buyPts);
     const sellPath = buildPath(sellPts);
 
+    const bottomY = H - padY;
+    const buyAreaPath = buyPts.length > 0 ? [
+      ...buyPts.map((pt, idx) => `${idx === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`),
+      `L${buyPts[buyPts.length - 1].x.toFixed(1)},${bottomY}`,
+      `L${buyPts[0].x.toFixed(1)},${bottomY}`,
+      'Z',
+    ].join(' ') : '';
+
+    const sellAreaPath = sellPts.length > 0 ? [
+      ...sellPts.map((pt, idx) => `${idx === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`),
+      `L${sellPts[sellPts.length - 1].x.toFixed(1)},${bottomY}`,
+      `L${sellPts[0].x.toFixed(1)},${bottomY}`,
+      'Z',
+    ].join(' ') : '';
+
     const spreadAreaPath = [
       ...buyPts.map((pt, idx) => `${idx === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`),
       ...[...sellPts]
@@ -390,6 +403,8 @@ export default function P2PMarketChartCard({
       sellPts,
       buyPath,
       sellPath,
+      buyAreaPath,
+      sellAreaPath,
       spreadAreaPath,
       breakevenY,
       breakevenNum,
@@ -401,15 +416,7 @@ export default function P2PMarketChartCard({
 
   const updatedTimeStr = useMemo(() => {
     if (!marketData?.fetched_at) return null;
-    try {
-      return new Date(marketData.fetched_at).toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return null;
-    }
+    return fmtTime(marketData.fetched_at);
   }, [marketData?.fetched_at]);
 
   return (
@@ -437,13 +444,13 @@ export default function P2PMarketChartCard({
         {/* Acciones Superiores Derechas: Selector Segmented [Gráfica | Pizarra] + Filtros + Refresh */}
         <div className="flex items-center gap-1.5 shrink-0">
           {/* Segmented Control Gráfica / Pizarra */}
-          <div className="inline-flex items-center rounded-lg border border-slate-800 bg-slate-950/70 p-0.5">
+          <div className="inline-flex items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setActiveTab('CHART')}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
                 activeTab === 'CHART'
-                  ? 'bg-slate-800 text-amber-300 font-semibold shadow-xs'
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -452,9 +459,9 @@ export default function P2PMarketChartCard({
             <button
               type="button"
               onClick={() => setActiveTab('ORDER_BOOK')}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
                 activeTab === 'ORDER_BOOK'
-                  ? 'bg-slate-800 text-amber-300 font-semibold shadow-xs'
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -463,31 +470,28 @@ export default function P2PMarketChartCard({
           </div>
 
           {/* Botón Filtros estándar */}
-          <button
+          <Button
             type="button"
+            variant={showFiltersPanel || hasActiveFilters ? 'primary' : 'secondary'}
+            size="sm"
+            icon={SlidersHorizontal}
             onClick={() => setShowFiltersPanel((prev) => !prev)}
-            className={`relative flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors cursor-pointer ${
-              showFiltersPanel || hasActiveFilters
-                ? 'border-amber-500/40 bg-amber-500/15 text-amber-300'
-                : 'border-slate-800/80 bg-slate-900/80 text-slate-300 hover:border-slate-700 hover:text-white'
-            }`}
             title="Configurar filtros del mercado"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Filtros</span>
             {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />}
-          </button>
+          </Button>
 
           {/* Botón Actualizar estándar */}
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="icon"
+            icon={RefreshCw}
+            loading={marketLoading}
             onClick={() => onRefresh && onRefresh(true)}
-            disabled={marketLoading}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800/80 bg-slate-900/80 text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
             title="Actualizar cotizaciones ahora"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${marketLoading ? 'animate-spin text-amber-400' : ''}`} />
-          </button>
+          />
         </div>
       </div>
 
@@ -582,12 +586,13 @@ export default function P2PMarketChartCard({
                   {preset.label}
                 </button>
               ))}
-              <input
+              <Input
                 type="text"
                 value={amountFilter}
                 onChange={(e) => updateAmount(e.target.value)}
                 placeholder="Ej. 100k, 50000"
-                className="h-6 w-28 rounded-md border border-slate-700 bg-slate-900 px-2 font-mono text-[10px] text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                size="xs"
+                className="w-28 font-mono text-[10px]"
               />
             </div>
           </div>
@@ -671,13 +676,15 @@ export default function P2PMarketChartCard({
           <div className="flex flex-col items-center justify-center text-center p-3 rounded-lg border border-slate-800 bg-slate-950/40 gap-1.5">
             <AlertCircle className="h-4 w-4 text-amber-400" />
             <p className="text-[11px] text-slate-300 font-medium line-clamp-2">{marketError}</p>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="xs"
               onClick={() => onRefresh && onRefresh(true)}
-              className="mt-1 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-slate-700 cursor-pointer"
+              className="mt-1"
             >
               Reintentar
-            </button>
+            </Button>
           </div>
         ) : !marketData && marketLoading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8 text-xs text-slate-500">
@@ -689,13 +696,14 @@ export default function P2PMarketChartCard({
             <p className="text-xs text-slate-300 font-medium">
               No hay anuncios que coincidan con este filtro
             </p>
-            <button
+            <Button
               type="button"
+              variant="primary"
+              size="xs"
               onClick={resetFilters}
-              className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 cursor-pointer"
             >
               Ver todo el mercado
-            </button>
+            </Button>
           </div>
         ) : activeTab === 'CHART' && chartGeometry ? (
           <MarketDepthChart
@@ -871,22 +879,19 @@ export default function P2PMarketChartCard({
         </div>
 
         {/* Badge de Spread estructurado: Absoluto + Porcentaje */}
-        <span
-          className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold font-mono border ${
+        <Badge
+          variant={
             Number(filteredStats.spreadPct || 0) > 0.005
-              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+              ? 'success'
               : Number(filteredStats.spreadPct || 0) < -0.005
-              ? 'border-rose-500/25 bg-rose-500/10 text-rose-300'
-              : 'border-slate-800 bg-slate-800/80 text-slate-300'
-          }`}
-          title={
-            filteredStats.spreadAbs != null
-              ? `Diferencia entre Compra y Venta: ${fmtRate(filteredStats.spreadAbs)} ${fiat}`
-              : 'Diferencia comercial'
+              ? 'danger'
+              : 'default'
           }
+          size="sm"
+          className="font-mono text-[11px]"
         >
           {filteredStats.spreadAbs != null && (
-            <span className="text-slate-400 font-normal">
+            <span className="opacity-75">
               Δ {fmtRate(filteredStats.spreadAbs)} ·
             </span>
           )}
@@ -895,7 +900,7 @@ export default function P2PMarketChartCard({
               ? `${filteredStats.spreadPct > 0 ? '+' : ''}${Number(filteredStats.spreadPct).toFixed(2)}% spread`
               : '—'}
           </span>
-        </span>
+        </Badge>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
+import { Button, Select } from './ui';
 
 export default function TablePaginator({
   totalItems = 0,
@@ -63,90 +64,91 @@ export default function TablePaginator({
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500">·</span>
             <label className="text-slate-400">Filas:</label>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                onPageSizeChange(Number(e.target.value));
-                onPageChange(1);
-              }}
-              className="h-7 rounded-lg border border-slate-800 bg-slate-950 px-2 py-0 tabular-nums text-xs text-slate-200 focus:border-amber-500 focus:outline-none cursor-pointer"
-            >
-              {pageSizeOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
+            <div className="w-18">
+              <Select
+                value={pageSize}
+                onChange={(e) => {
+                  onPageSizeChange(Number(e.target.value));
+                  onPageChange(1);
+                }}
+                size="xs"
+              >
+                {pageSizeOptions.map((opt) => (
+                  <option key={opt} value={opt} className="bg-slate-900 text-slate-100">
+                    {opt}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         )}
       </div>
 
       {/* Derecha: Botones de navegación de páginas */}
       <div className="flex items-center gap-1">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="icon-xs"
           onClick={() => onPageChange(1)}
           disabled={safePage <= 1}
           title="Primera página"
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-white disabled:opacity-35 disabled:pointer-events-none"
-        >
-          <ChevronsLeft className="h-3.5 w-3.5" />
-        </button>
+          icon={ChevronsLeft}
+        />
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           onClick={() => onPageChange(safePage - 1)}
           disabled={safePage <= 1}
           title="Página anterior"
-          className="flex h-7 items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2 text-slate-300 hover:border-slate-700 hover:text-white disabled:opacity-35 disabled:pointer-events-none"
+          icon={ChevronLeft}
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
           {!compact && <span>Anterior</span>}
-        </button>
+        </Button>
 
         <div className="flex items-center gap-1 px-1">
           {getVisiblePages().map((p, idx) =>
             p === '...' ? (
-              <span key={`ellipsis-${idx}`} className="px-1.5 text-slate-500">
+              <span key={`ellipsis-${idx}`} className="px-1.5 text-slate-500 select-none">
                 …
               </span>
             ) : (
-              <button
+              <Button
                 key={p}
-                type="button"
+                variant={p === safePage ? 'primary' : 'secondary'}
+                size="xs"
                 onClick={() => onPageChange(p)}
-                className={`flex h-7 min-w-[28px] items-center justify-center rounded-lg px-2 tabular-nums text-xs transition-all ${
+                className={`min-w-[28px] tabular-nums ${
                   p === safePage
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold shadow-xs'
-                    : 'border border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    ? '!bg-amber-500/20 !text-amber-300 !border-amber-500/40 font-semibold shadow-xs'
+                    : ''
                 }`}
               >
                 {p}
-              </button>
+              </Button>
             )
           )}
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           onClick={() => onPageChange(safePage + 1)}
           disabled={safePage >= totalPages}
           title="Página siguiente"
-          className="flex h-7 items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2 text-slate-300 hover:border-slate-700 hover:text-white disabled:opacity-35 disabled:pointer-events-none"
         >
           {!compact && <span>Siguiente</span>}
           <ChevronRight className="h-3.5 w-3.5" />
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="icon-xs"
           onClick={() => onPageChange(totalPages)}
           disabled={safePage >= totalPages}
           title="Última página"
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-white disabled:opacity-35 disabled:pointer-events-none"
-        >
-          <ChevronsRight className="h-3.5 w-3.5" />
-        </button>
+          icon={ChevronsRight}
+        />
       </div>
     </div>
   );

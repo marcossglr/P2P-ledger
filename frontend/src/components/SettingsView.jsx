@@ -42,8 +42,9 @@ import DatabaseBackupsSection from './settings/DatabaseBackupsSection';
 import SystemMaintenanceSection from './settings/SystemMaintenanceSection';
 import BinancePrivateApiSection from './settings/BinancePrivateApiSection';
 import { playNewTradeSound, playCompletedTradeSound } from '../utils/audioAlerts';
-import BinanceP2PPublicApiCard from './BinanceP2PPublicApiCard';
+import { fmtDateTime } from '../utils/formatters';
 import SystemDocumentationSection from './SystemDocumentationSection';
+import { Button, Badge } from './ui';
 
 const TABS = [
   { id: 'CONNECTIONS', label: 'Conexiones', icon: Link2 },
@@ -69,6 +70,10 @@ export default function SettingsView({
   onToggleToasts,
   appTheme = 'DEEP_SLATE',
   onUpdateAppTheme,
+  timeFormat = '24H',
+  onUpdateTimeFormat,
+  timeShowSeconds = false,
+  onToggleTimeShowSeconds,
   onSyncComplete,
   onReturnDashboard,
   onNavigateTreasury,
@@ -112,15 +117,17 @@ export default function SettingsView({
               Ajustes
             </span>
             {onReturnDashboard && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
+                icon={ArrowLeft}
                 onClick={onReturnDashboard}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
                 title="Volver al panel principal"
+                className="text-slate-400 hover:text-amber-300"
               >
-                <ArrowLeft className="h-3 w-3" />
                 <span>Volver</span>
-              </button>
+              </Button>
             )}
           </div>
 
@@ -195,15 +202,13 @@ export default function SettingsView({
                 </div>
               </div>
               {apiConfigured ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <Badge variant="success" dot size="xs">
                   Conectado
-                </span>
+                </Badge>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <Badge variant="warning" dot size="xs">
                   Configurar
-                </span>
+                </Badge>
               )}
             </button>
 
@@ -226,9 +231,9 @@ export default function SettingsView({
                   <span className="text-xs text-slate-400 mt-0.5 block">SMS & Webhooks</span>
                 </div>
               </div>
-              <span className="inline-flex items-center rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-xs font-semibold text-slate-400">
+              <Badge variant="default" size="xs">
                 Próximamente
-              </span>
+              </Badge>
             </button>
 
             {/* Proveedor: Otras Plataformas P2P */}
@@ -250,9 +255,9 @@ export default function SettingsView({
                   <span className="text-xs text-slate-400 mt-0.5 block">Bybit / El Dorado</span>
                 </div>
               </div>
-              <span className="inline-flex items-center rounded-md border border-slate-800 bg-slate-950/70 px-2 py-0.5 text-xs font-semibold text-slate-400">
+              <Badge variant="default" size="xs">
                 En Roadmap
-              </span>
+              </Badge>
             </button>
           </div>
 
@@ -305,14 +310,15 @@ export default function SettingsView({
                 </div>
                 <div className="pt-3">
                   {onNavigateTreasury && (
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       onClick={onNavigateTreasury}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
                     >
                       <span>Ir a Tesorería y Cuentas Bancarias</span>
                       <ChevronRight className="h-4 w-4" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -347,13 +353,14 @@ export default function SettingsView({
                   </p>
                 </div>
                 <div className="pt-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setSelectedProvider('BINANCE')}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
                   >
                     <span>Volver a la Conexión de Binance</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -390,27 +397,15 @@ export default function SettingsView({
                   </p>
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant={soundEnabled ? 'emerald' : 'secondary'}
+                size="sm"
+                icon={soundEnabled ? Volume2 : VolumeX}
                 onClick={() => onToggleSound && onToggleSound(!soundEnabled)}
-                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                  soundEnabled
-                    ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                    : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                }`}
               >
-                {soundEnabled ? (
-                  <>
-                    <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Sonido Activado</span>
-                  </>
-                ) : (
-                  <>
-                    <VolumeX className="h-3.5 w-3.5 text-slate-500" />
-                    <span>Sonido Silenciado</span>
-                  </>
-                )}
-              </button>
+                <span>{soundEnabled ? 'Sonido Activado' : 'Sonido Silenciado'}</span>
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
@@ -434,14 +429,15 @@ export default function SettingsView({
                   </p>
                 </div>
                 <div>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="xs"
+                    icon={Volume2}
                     onClick={() => playNewTradeSound(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:border-slate-600 hover:text-white transition-colors cursor-pointer"
                   >
-                    <Volume2 className="h-3 w-3 text-amber-400" />
                     <span>Probar Tono</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -465,14 +461,15 @@ export default function SettingsView({
                   </p>
                 </div>
                 <div>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="xs"
+                    icon={Volume2}
                     onClick={() => playCompletedTradeSound(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:border-slate-600 hover:text-white transition-colors cursor-pointer"
                   >
-                    <Volume2 className="h-3 w-3 text-emerald-400" />
                     <span>Probar Tono</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -509,9 +506,9 @@ export default function SettingsView({
                     <span className="text-xs font-bold text-white">Oscuro Profundo (Slate/Onyx)</span>
                   </div>
                   {appTheme === 'DEEP_SLATE' && (
-                    <span className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                    <Badge variant="warning" size="xs">
                       Activo
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3">
@@ -541,9 +538,9 @@ export default function SettingsView({
                     <span className="text-xs font-bold text-white">Negro Puro (OLED / Pitch Black)</span>
                   </div>
                   {appTheme === 'OLED_BLACK' && (
-                    <span className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                    <Badge variant="warning" size="xs">
                       Activo
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3">
@@ -573,9 +570,9 @@ export default function SettingsView({
                     <span className="text-xs font-bold text-white">Azul Marino Nocturno (Navy)</span>
                   </div>
                   {appTheme === 'NAVY_MIDNIGHT' && (
-                    <span className="rounded-md border border-sky-500/30 bg-sky-500/20 px-2 py-0.5 text-xs font-semibold text-sky-300">
+                    <Badge variant="info" size="xs">
                       Activo
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3">
@@ -605,9 +602,9 @@ export default function SettingsView({
                     <span className="text-xs font-bold text-white">Luz Natural (Modo Claro)</span>
                   </div>
                   {appTheme === 'LIGHT_ELEGANT' && (
-                    <span className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                    <Badge variant="warning" size="xs">
                       Activo
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-3">
@@ -623,7 +620,102 @@ export default function SettingsView({
             </div>
           </div>
 
-          {/* Bloque 3: Mensajes Emergentes y Toasts */}
+          {/* Bloque 3: Formato de Fecha y Hora */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                  <Clock className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Formato de Fecha y Hora</h3>
+                  <p className="text-xs text-slate-400">
+                    Personaliza cómo se visualiza el reloj y las marcas temporales en toda la aplicación
+                  </p>
+                </div>
+              </div>
+
+              {/* Vista Previa En Vivo */}
+              <div className="flex items-center gap-2 rounded-lg border border-slate-700/70 bg-slate-950/60 px-3 py-1.5 text-xs font-mono text-slate-300">
+                <span className="text-slate-400 font-sans text-[11px]">Vista previa:</span>
+                <span className="font-semibold text-amber-300">
+                  {fmtDateTime(new Date(), { timeFormat, showSeconds: timeShowSeconds })}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+              {/* Opción 24 Horas */}
+              <button
+                type="button"
+                onClick={() => onUpdateTimeFormat && onUpdateTimeFormat('24H')}
+                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                  timeFormat === '24H'
+                    ? 'border-amber-500/60 bg-amber-500/10 shadow-xs'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-white">Formato 24 Horas</span>
+                  </div>
+                  {timeFormat === '24H' && (
+                    <Badge variant="warning" size="xs">
+                      Activo
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-2">
+                  Estándar militar/internacional (ej: <span className="font-mono text-slate-200">14:42{timeShowSeconds ? ':00' : ''}</span>).
+                </p>
+              </button>
+
+              {/* Opción 12 Horas (AM/PM) */}
+              <button
+                type="button"
+                onClick={() => onUpdateTimeFormat && onUpdateTimeFormat('12H')}
+                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                  timeFormat === '12H'
+                    ? 'border-amber-500/60 bg-amber-500/10 shadow-xs'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-white">Formato 12 Horas (AM / PM)</span>
+                  </div>
+                  {timeFormat === '12H' && (
+                    <Badge variant="warning" size="xs">
+                      Activo
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-2">
+                  Estándar tradicional con sufijo de meridiano (ej: <span className="font-mono text-slate-200">02:42{timeShowSeconds ? ':00' : ''} PM</span>).
+                </p>
+              </button>
+            </div>
+
+            {/* Toggle Mostrar Segundos */}
+            <div className="flex items-center justify-between rounded-xl border border-slate-800/80 bg-slate-950/50 p-3 pt-3 mt-2">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-white block">Mostrar Segundos (:SS)</span>
+                <p className="text-xs text-slate-400">
+                  Incluye los segundos en las horas de órdenes, sincronizaciones y eventos temporales.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={timeShowSeconds}
+                  onChange={(e) => onToggleTimeShowSeconds && onToggleTimeShowSeconds(e.target.checked)}
+                  className="h-4 w-4 accent-amber-500 rounded cursor-pointer"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Bloque 4: Mensajes Emergentes y Toasts */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -637,17 +729,15 @@ export default function SettingsView({
                   </p>
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant={toastsEnabled ? 'emerald' : 'secondary'}
+                size="sm"
+                icon={Bell}
                 onClick={() => onToggleToasts && onToggleToasts(!toastsEnabled)}
-                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                  toastsEnabled
-                    ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                    : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                }`}
               >
                 {toastsEnabled ? 'Mensajes Activos' : 'Silenciados'}
-              </button>
+              </Button>
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed">

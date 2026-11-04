@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, FileText, CheckCircle2, AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import { fmtDateTime, fmtDate } from '../utils/formatters';
+import { Button, Badge } from './ui';
 
 export default function FileDropzone({
   title,
@@ -171,26 +173,27 @@ export default function FileDropzone({
                 {result.filename}
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {result.total_pages !== undefined && (
-                <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+                <Badge variant="default" size="xs">
                   {result.total_pages} pág.
-                </span>
+                </Badge>
               )}
-              <span className="rounded-md bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/20">
+              <Badge variant="emerald" size="xs">
                 {result.valid_rows} filas detectadas
-              </span>
-              <button
+              </Badge>
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-xs"
+                icon={Trash2}
                 onClick={(e) => {
                   e.stopPropagation();
                   resetZone();
                 }}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-rose-400 transition-colors"
+                className="text-slate-400 hover:text-rose-400"
                 title="Limpiar carga"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              />
             </div>
           </div>
 
@@ -224,15 +227,12 @@ export default function FileDropzone({
                       <tr key={i} className="text-slate-300">
                         <td className="py-1.5 pr-3 text-slate-400 font-mono">{row.order_number.slice(-8)}</td>
                         <td className="py-1.5 px-2">
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-sans font-semibold ${
-                              row.order_type === 'COMPRA'
-                                ? 'bg-emerald-500/15 text-emerald-400'
-                                : 'bg-amber-500/15 text-amber-400'
-                            }`}
+                          <Badge
+                            variant={row.order_type === 'COMPRA' ? 'emerald' : 'amber'}
+                            size="xs"
                           >
                             {row.order_type}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="py-1.5 px-2 text-right font-medium text-slate-100">
                           {Number(row.fiat_amount).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {row.fiat_currency}
@@ -240,11 +240,11 @@ export default function FileDropzone({
                         <td className="py-1.5 px-2 text-right text-slate-300">
                           {Number(row.crypto_amount).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-1.5 pl-2 text-slate-400 truncate max-w-[110px]">{row.order_date}</td>
+                        <td className="py-1.5 pl-2 text-slate-400 truncate max-w-[110px]">{fmtDateTime(row.order_date)}</td>
                       </tr>
                     ) : (
                       <tr key={i} className="text-slate-300">
-                        <td className="py-1.5 pr-3 text-slate-400">{row.tx_date}</td>
+                        <td className="py-1.5 pr-3 text-slate-400">{fmtDate(row.tx_date)}</td>
                         <td className="py-1.5 px-2 text-amber-300/90 font-mono">{row.reference}</td>
                         <td className="py-1.5 px-2 font-sans text-slate-300 truncate max-w-[140px]">{row.description}</td>
                         <td className="py-1.5 px-2 text-right text-rose-400">

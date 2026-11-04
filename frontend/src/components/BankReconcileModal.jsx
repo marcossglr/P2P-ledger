@@ -1,7 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  X,
   Scale,
   CheckCircle2,
   AlertTriangle,
@@ -11,12 +9,14 @@ import {
 } from 'lucide-react';
 import BankAccountFormModal from './BankAccountFormModal';
 import { bankInventoryApi } from '../services/api';
+import { Modal, Button, Input } from './ui';
 
 export default function BankReconcileModal({
   isOpen,
   onClose,
   accounts = [],
   initialAccountId = null,
+  hideAccountSelector = false,
   onSuccess,
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -27,53 +27,31 @@ export default function BankReconcileModal({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isAddBankOpen, setIsAddBankOpen] = useState(false);
+  const prevIsOpenRef = useRef(false);
 
-  // Inicializar estado al abrir el modal
+  // Inicializar estado únicamente al abrir el modal (evitar reseteos por auto-sync de fondo)
   useEffect(() => {
-    if (!isOpen) return;
-    setErrorMsg('');
-    setNoteInput('');
-    setMode('CUADRE_CONSOLIDADO');
-    setManualSign('MINUS');
+    if (isOpen && !prevIsOpenRef.current) {
+      setErrorMsg('');
+      setNoteInput('');
+      setMode('CUADRE_CONSOLIDADO');
+      setManualSign('MINUS');
 
-    const targetAcc =
-      accounts.find((a) => Number(a.id) === Number(initialAccountId)) ||
-      accounts.find((a) => a.is_default) ||
-      accounts[0] ||
-      null;
+      const targetAcc =
+        accounts.find((a) => Number(a.id) === Number(initialAccountId)) ||
+        accounts.find((a) => a.is_default) ||
+        accounts[0] ||
+        null;
 
-    if (targetAcc) {
-      setSelectedAccountId(targetAcc.id);
-      setAmountInput(String(targetAcc.calculated_balance ?? '0'));
-    } else {
-      setAmountInput('');
-    }
-  }, [isOpen, initialAccountId, accounts]);
-
-  // Soporte para cerrar con tecla Escape (si el sub-modal de añadir banco no está abierto)
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !isAddBankOpen) {
-        onClose();
+      if (targetAcc) {
+        setSelectedAccountId(targetAcc.id);
+        setAmountInput(String(targetAcc.calculated_balance ?? '0'));
+      } else {
+        setAmountInput('');
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isAddBankOpen, onClose]);
-
-  // Bloquear scroll de la página de fondo mientras el modal esté abierto
-  useEffect(() => {
-    if (!isOpen) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+    }
+    prevIsOpenRef.current = Boolean(isOpen);
+  }, [isOpen, initialAccountId, accounts]);
 
   const selectedAccount =
     accounts.find((a) => Number(a.id) === Number(selectedAccountId)) ||
@@ -161,90 +139,99 @@ export default function BankReconcileModal({
     }
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn w-screen h-screen overflow-y-auto"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-slate-950/90 text-slate-100 space-y-4 my-auto"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
+  const reconcileFooter = (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+        <span>Total bancos:</span>
+        <strong className="text-white font-mono font-bold">{fmtBs(totalAllBanksBs)} Bs</strong>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onClose}
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="submit"
+          form="bank-reconcile-form"
+          variant="primary"
+          loading={submitting}
+        >
+          Confirmar
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={hideAccountSelector && selectedAccount ? `Cuadre · ${selectedAccount.name}` : "Cuadre de Cuentas Bancarias"}
+        icon={Scale}
+        footer={reconcileFooter}
+        maxWidth="max-w-lg"
       >
-        {/* Cabecera limpia y directa */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
-              <Scale className="h-4 w-4" />
+        <div className="space-y-4">
+          {/* Mensaje de Error */}
+          {errorMsg && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-200">
+              <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+              <span>{errorMsg}</span>
             </div>
-            <h3 className="text-sm font-bold text-white truncate">
-              Cuadre de Cuentas Bancarias
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            title="Cerrar modal (Esc)"
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+          )}
 
-        {/* Mensaje de Error */}
-        {errorMsg && (
-          <div className="flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-200">
-            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+          <form id="bank-reconcile-form" onSubmit={handleSubmit} className="space-y-4">
+          {/* 1. Selector de Cuenta en Pills (o indicador si hideAccountSelector es true) */}
+          {!hideAccountSelector && (
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Cuenta Bancaria
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {accounts.map((acc) => {
+                  const isSel = Number(acc.id) === Number(selectedAccount?.id);
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => handleAccountSelect(acc.id)}
+                      className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs transition-all cursor-pointer ${
+                        isSel
+                          ? 'border border-amber-500/50 bg-amber-500/15 text-amber-300 shadow-xs font-semibold'
+                          : 'border border-slate-800 bg-slate-950/60 text-slate-300 hover:border-slate-700 hover:text-slate-100 font-medium'
+                      }`}
+                    >
+                      <span>{acc.name}</span>
+                      {acc.is_default && (
+                        <span
+                          className="rounded bg-amber-500/10 border border-amber-500/25 px-1 py-0.5 text-[9px] font-semibold text-amber-300"
+                          title="Cuenta principal predeterminada"
+                        >
+                          Principal
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 1. Selector de Cuenta en Pills */}
-          <div className="space-y-2">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Cuenta Bancaria
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {accounts.map((acc) => {
-                const isSel = Number(acc.id) === Number(selectedAccount?.id);
-                return (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => handleAccountSelect(acc.id)}
-                    className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs transition-all cursor-pointer ${
-                      isSel
-                        ? 'border border-amber-500/50 bg-amber-500/15 text-amber-300 shadow-xs font-semibold'
-                        : 'border border-slate-800 bg-slate-950/60 text-slate-300 hover:border-slate-700 hover:text-slate-100 font-medium'
-                    }`}
-                  >
-                    <span>{acc.name}</span>
-                    {acc.is_default && (
-                      <span
-                        className="rounded bg-amber-500/10 border border-amber-500/25 px-1 py-0.5 text-[9px] font-semibold text-amber-300"
-                        title="Cuenta principal predeterminada"
-                      >
-                        Principal
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-
-              {/* Botón rápido para registrar un banco nacional del catálogo */}
-              <button
-                type="button"
-                onClick={() => setIsAddBankOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-800/50 transition-all cursor-pointer shadow-xs"
-                title="Añadir una nueva cuenta bancaria nacional (BDV, Banesco, Mercantil, etc.)"
-              >
-                <Plus className="h-3.5 w-3.5 text-slate-400" />
-                <span>Añadir Banco</span>
-              </button>
+                {/* Botón rápido para registrar un banco nacional del catálogo */}
+                <button
+                  type="button"
+                  onClick={() => setIsAddBankOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-800/50 transition-all cursor-pointer shadow-xs"
+                  title="Añadir una nueva cuenta bancaria nacional (BDV, Banesco, Mercantil, etc.)"
+                >
+                  <Plus className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Añadir Banco</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 2. Tipo de Operación: Saldo Real vs Movimiento */}
           <div className="flex rounded-xl border border-slate-800/80 bg-slate-950/60 p-1 text-xs">
@@ -305,21 +292,21 @@ export default function BankReconcileModal({
             )}
 
             {/* Input Principal */}
-            <div className="relative">
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
-                placeholder="0.00"
-                autoFocus
-                className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 pr-14 tabular-nums font-mono text-lg font-bold text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-              />
-              <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 font-mono">
-                VES
-              </span>
-            </div>
+            <Input
+              type="number"
+              step="0.01"
+              required
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+              placeholder="0.00"
+              autoFocus
+              className="font-mono text-base font-bold tabular-nums"
+              rightElement={
+                <span className="text-xs font-semibold text-slate-400 font-mono select-none">
+                  VES
+                </span>
+              }
+            />
 
             {/* Saldo de referencia y Diferencia / Ajuste resultante en tiempo real */}
             <div className="space-y-1 px-1 pt-1 text-xs">
@@ -368,61 +355,35 @@ export default function BankReconcileModal({
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Nota (Opcional)
             </label>
-            <input
+            <Input
               type="text"
               value={noteInput}
               onChange={(e) => setNoteInput(e.target.value)}
               placeholder="Ej. Cuadre cierre de turno, gasto externo..."
-              className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3.5 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
             />
           </div>
-
-          {/* Footer limpio con total de bancos y botones */}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-800/60">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <span>Total bancos:</span>
-              <strong className="text-white font-mono font-bold">{fmtBs(totalAllBanksBs)} Bs</strong>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 hover:border-amber-500/60 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {submitting ? 'Guardando...' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
         </form>
-
-        {/* Modal de añadir nueva cuenta bancaria desde el catálogo */}
-        <BankAccountFormModal
-          isOpen={isAddBankOpen}
-          onClose={() => setIsAddBankOpen(false)}
-          existingAccounts={accounts}
-          onSuccess={(updatedInventory) => {
-            if (onSuccess) {
-              onSuccess(updatedInventory);
-            }
-            // Si la cuenta recién creada está disponible, seleccionarla
-            const newAccounts = updatedInventory?.accounts || [];
-            const lastCreated = newAccounts[newAccounts.length - 1];
-            if (lastCreated) {
-              setSelectedAccountId(lastCreated.id);
-              setAmountInput(String(lastCreated.calculated_balance ?? '0'));
-            }
-          }}
-        />
       </div>
-    </div>,
-    document.body
+    </Modal>
+
+    {/* Modal de añadir nueva cuenta bancaria desde el catálogo */}
+    <BankAccountFormModal
+      isOpen={isAddBankOpen}
+      onClose={() => setIsAddBankOpen(false)}
+      existingAccounts={accounts}
+      onSuccess={(updatedInventory) => {
+        if (onSuccess) {
+          onSuccess(updatedInventory);
+        }
+        // Si la cuenta recién creada está disponible, seleccionarla
+        const newAccounts = updatedInventory?.accounts || [];
+        const lastCreated = newAccounts[newAccounts.length - 1];
+        if (lastCreated) {
+          setSelectedAccountId(lastCreated.id);
+          setAmountInput(String(lastCreated.calculated_balance ?? '0'));
+        }
+      }}
+    />
+  </>
   );
 }

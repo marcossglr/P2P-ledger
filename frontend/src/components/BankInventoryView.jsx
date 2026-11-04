@@ -16,6 +16,7 @@ import BankMovementsModal from './BankMovementsModal';
 import BankAdjustmentsModal from './BankAdjustmentsModal';
 import BankAccountFormModal from './BankAccountFormModal';
 import { bankInventoryApi } from '../services/api';
+import { Button, Badge } from './ui';
 
 export default function BankInventoryView({ refreshTrigger, onInventoryChange }) {
   const [data, setData] = useState(null);
@@ -215,9 +216,9 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
             <h2 className="text-base font-bold text-white">
               Cuentas Bancarias en Bolívares
             </h2>
-            <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-300">
+            <Badge variant="default" size="xs">
               {accounts.length}
-            </span>
+            </Badge>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
             Administración de cuentas, comisiones de salida, conciliación automática con Binance P2P y auditoría de saldos.
@@ -227,27 +228,29 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
         {/* Acciones Generales Relevantes */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Detectar Métodos de Binance P2P */}
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
+            icon={RefreshCw}
+            loading={syncingBanks}
             onClick={handleSyncBinanceBanks}
-            disabled={syncingBanks}
             title="Lee los métodos de pago de tus anuncios de Binance P2P y los auto-registra aquí"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
           >
-            <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${syncingBanks ? 'animate-spin' : ''}`} />
             <span>{syncingBanks ? 'Detectando...' : 'Detectar de Binance'}</span>
-          </button>
+          </Button>
 
           {/* Bitácora / Historial de Cuadres */}
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
+            icon={History}
             onClick={() => setHistoryModalOpen(true)}
             title="Ver la bitácora de cortes, cuadres de auditoría y movimientos manuales"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
           >
-            <History className="h-3.5 w-3.5 text-slate-400" />
             <span>Historial ({adjustments.length})</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -296,18 +299,19 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-white">Cuentas Registradas</h3>
-              <span className="rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-300">
+              <Badge variant="default" size="xs">
                 {accounts.length}
-              </span>
+              </Badge>
             </div>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="xs"
+              icon={Plus}
               onClick={openCreateAccountModal}
-              className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer"
             >
-              <Plus className="h-3.5 w-3.5 text-amber-400" />
               <span>Nueva Cuenta</span>
-            </button>
+            </Button>
           </div>
 
           {accounts.length === 0 ? (
@@ -346,9 +350,9 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                             {acc.name}
                           </span>
                           {acc.is_default && (
-                            <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                            <Badge variant="warning" size="xs">
                               Principal
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         <div className="text-[11px] text-slate-400 truncate">
@@ -403,9 +407,9 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                         {currentAccount.name}
                       </h3>
                       {currentAccount.is_default && (
-                        <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                        <Badge variant="warning" size="xs">
                           Cuenta Principal
-                        </span>
+                        </Badge>
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -415,25 +419,28 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="xs"
+                    icon={Settings2}
                     onClick={() => openEditAccountModal(currentAccount)}
                     title="Editar nombre, alias, palabras clave y comisiones"
-                    className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer"
                   >
-                    <Settings2 className="h-3.5 w-3.5 text-slate-400" />
                     <span>Configurar</span>
-                  </button>
+                  </Button>
 
                   {accounts.length > 1 && (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-xs"
                       onClick={() => handleDeleteAccount(currentAccount)}
                       title="Eliminar esta cuenta bancaria"
-                      className="rounded-lg border border-slate-800 bg-slate-950 p-1.5 text-slate-500 hover:border-rose-500/40 hover:text-rose-400 transition-colors cursor-pointer"
+                      className="text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -457,8 +464,11 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                   </span>
 
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
                       type="button"
+                      variant="primary"
+                      size="sm"
+                      icon={Scale}
                       onClick={() =>
                         setReconcileModal({
                           open: true,
@@ -466,14 +476,15 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                           tab: 'SINGLE',
                         })
                       }
-                      className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-sm shadow-amber-500/15 hover:bg-amber-400 transition-colors cursor-pointer"
                     >
-                      <Scale className="h-3.5 w-3.5" />
                       <span>Cuadrar Saldo</span>
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={Receipt}
                       onClick={() =>
                         setMovementsModal({
                           open: true,
@@ -481,11 +492,9 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                         })
                       }
                       title="Ver los movimientos detallados de esta cuenta"
-                      className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer"
                     >
-                      <Receipt className="h-3.5 w-3.5 text-slate-400" />
                       <span>Ver Movimientos ({currentAccount.total_historical_orders || 0})</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -641,6 +650,7 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
         onClose={() => setReconcileModal((prev) => ({ ...prev, open: false }))}
         accounts={accounts}
         initialAccountId={reconcileModal.accountId}
+        hideAccountSelector={true}
         onSuccess={(updatedData) => setData(updatedData)}
       />
 

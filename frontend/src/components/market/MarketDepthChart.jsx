@@ -53,9 +53,18 @@ export default function MarketDepthChart({
         onMouseLeave={() => setHoverIdx(null)}
       >
         <defs>
-          <linearGradient id="p2pSpreadGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.09" />
-            <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.09" />
+          {/* Degradado suave para el área de la curva de Venta (Rosa) */}
+          <linearGradient id="p2pSellGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.18" />
+            <stop offset="85%" stopColor="#f43f5e" stopOpacity="0.02" />
+            <stop offset="100%" stopColor="#f43f5e" stopOpacity="0" />
+          </linearGradient>
+
+          {/* Degradado suave para el área de la curva de Compra (Verde) */}
+          <linearGradient id="p2pBuyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
+            <stop offset="85%" stopColor="#10b981" stopOpacity="0.02" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -115,8 +124,13 @@ export default function MarketDepthChart({
           </g>
         )}
 
-        {/* Área sombreada tenue entre las dos líneas */}
-        <path d={chartGeometry.spreadAreaPath} fill="url(#p2pSpreadGrad)" />
+        {/* Áreas sombreadas con degradados fieles a cada línea */}
+        {chartGeometry.sellAreaPath && (
+          <path d={chartGeometry.sellAreaPath} fill="url(#p2pSellGrad)" />
+        )}
+        {chartGeometry.buyAreaPath && (
+          <path d={chartGeometry.buyAreaPath} fill="url(#p2pBuyGrad)" />
+        )}
 
         {/* Línea Verde: Pizarra Comprar de Binance */}
         <path

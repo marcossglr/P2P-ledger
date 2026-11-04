@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Scale,
 } from 'lucide-react';
+import { Button } from '../ui';
 
 export default function OperationsKpiCards({
   stats = {},
@@ -184,14 +185,14 @@ export default function OperationsKpiCards({
               </span>
             </div>
             {onOpenReconcileModal && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="icon-xs"
+                icon={Scale}
                 onClick={onOpenReconcileModal}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:border-slate-600 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer shrink-0 shadow-xs"
                 title="Cuadrar cuentas bancarias"
-              >
-                <Scale className="h-3.5 w-3.5 text-amber-400" />
-              </button>
+              />
             )}
           </div>
 

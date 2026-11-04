@@ -28,6 +28,7 @@ import OperationsTable from './OperationsTable';
 import P2PMarketChartCard from './P2PMarketChartCard';
 import OperationsKpiCards from './dashboard/OperationsKpiCards';
 import { operationsApi, binanceApi } from '../services/api';
+import { Button, Input, Badge } from './ui';
 
 export default function OperationsDashboard({
   onOpenApiModal,
@@ -268,12 +269,6 @@ export default function OperationsDashboard({
       maximumFractionDigits: 4,
     });
 
-  const extractTimeOnly = (orderDateStr) => {
-    if (!orderDateStr) return '-';
-    const parts = orderDateStr.split(' ');
-    return parts.length > 1 ? parts[1] : orderDateStr;
-  };
-
   // --- Métricas derivadas con prioridad principal en USDT y secundaria en Fiat (Bs) ---
   const refRate =
     Number(stats.wac_buy_price) > 0
@@ -458,20 +453,24 @@ export default function OperationsDashboard({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <button
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon={Sparkles}
               onClick={handleSeedDemo}
-              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors"
             >
-              <Sparkles className="h-4 w-4 text-amber-400" />
               <span>Cargar Operaciones Demo</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              icon={RefreshCw}
               onClick={onOpenApiModal}
-              className="flex items-center gap-2 rounded-lg bg-amber-500 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-md shadow-amber-500/15 hover:bg-amber-400 transition-colors"
             >
-              <RefreshCw className="h-4 w-4" />
               <span>Conectar API de Binance</span>
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -485,13 +484,16 @@ export default function OperationsDashboard({
               Estás visualizando <strong>operaciones de demostración</strong> (incluyendo órdenes simuladas para hoy).
             </span>
           </div>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            icon={Trash2}
             onClick={handleClearDemo}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-900/80 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-slate-900"
+            className="text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
           >
-            <Trash2 className="h-3.5 w-3.5" />
             <span>Borrar datos demo</span>
-          </button>
+          </Button>
         </div>
       )}
 
@@ -930,24 +932,25 @@ export default function OperationsDashboard({
 
             {/* Buscador de Orden Específica */}
             <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
+              <Input
                 type="text"
                 value={tableSearch}
                 onChange={(e) => setTableSearch(e.target.value)}
                 placeholder="Buscar por ID, contraparte, monto..."
-                className="h-8 w-full rounded-xl border border-slate-700/80 bg-slate-950/90 pl-9 pr-8 text-xs text-slate-100 placeholder:text-slate-500 hover:border-slate-600 focus:border-amber-500 focus:outline-none transition-colors shadow-xs"
+                icon={Search}
+                rightElement={
+                  tableSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => setTableSearch('')}
+                      title="Limpiar búsqueda"
+                      className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null
+                }
               />
-              {tableSearch && (
-                <button
-                  type="button"
-                  onClick={() => setTableSearch('')}
-                  title="Limpiar búsqueda"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-white rounded transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
             </div>
           </div>
 

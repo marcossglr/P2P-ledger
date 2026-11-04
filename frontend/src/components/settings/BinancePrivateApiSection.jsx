@@ -9,6 +9,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { binanceApi } from '../../services/api';
+import { Button, Input, Badge } from '../ui';
 
 export default function BinancePrivateApiSection({
   health = {},
@@ -107,33 +108,32 @@ export default function BinancePrivateApiSection({
 
         <div className="flex items-center gap-2">
           {apiConfigured ? (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <Badge variant="success" dot size="sm">
               <span>Conectado</span>
               {maskedKey && (
                 <span className="font-mono text-slate-300 text-xs border-l border-emerald-500/30 pl-2">
                   {maskedKey}
                 </span>
               )}
-            </div>
+            </Badge>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300">
-              <span className="h-2 w-2 rounded-full bg-amber-400" />
+            <Badge variant="warning" dot size="sm">
               <span>Sin Configurar</span>
-            </div>
+            </Badge>
           )}
 
           {apiConfigured && (
-            <button
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
+              icon={RefreshCw}
+              loading={loading}
               onClick={handleConnectAndSync}
-              disabled={loading}
               title="Sincronizar órdenes nuevas ahora"
-              className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
             >
-              <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Sincronizando...' : 'Sincronizar'}</span>
-            </button>
+              {loading ? 'Sincronizando...' : 'Sincronizar'}
+            </Button>
           )}
         </div>
       </div>
@@ -143,23 +143,27 @@ export default function BinancePrivateApiSection({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-white">Llaves de Acceso Local (HMAC-SHA256)</span>
           {apiConfigured && (
-            <div className="flex items-center gap-2">
-              <button
+            <div className="flex items-center gap-1">
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={() => setShowKeyForm(!showKeyForm)}
-                className="text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                className="text-amber-400 hover:text-amber-300"
               >
                 {showKeyForm ? 'Ocultar campos' : 'Modificar llaves'}
-              </button>
-              <span className="text-slate-600">·</span>
-              <button
+              </Button>
+              <span className="text-slate-600 text-xs">·</span>
+              <Button
                 type="button"
+                variant="ghost"
+                size="xs"
                 onClick={handleDisconnectApi}
                 disabled={loading}
-                className="text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
               >
                 Desvincular
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -167,7 +171,7 @@ export default function BinancePrivateApiSection({
         {(showKeyForm || !apiConfigured) && (
           <div className="space-y-3 pt-1 animate-fadeIn">
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-slate-300">
                   Binance API Key <span className="text-slate-500 font-normal">(Permiso: Solo Lectura)</span>
                 </label>
@@ -179,51 +183,53 @@ export default function BinancePrivateApiSection({
                   <Copy className="h-3 w-3" /> Pegar Portapapeles
                 </button>
               </div>
-              <input
+              <Input
                 type="text"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Pega tu API Key de Binance..."
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
+                className="font-mono text-xs"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Binance Secret Key
               </label>
-              <div className="relative">
-                <input
-                  type={showSecret ? 'text' : 'password'}
-                  value={apiSecret}
-                  onChange={(e) => setApiSecret(e.target.value)}
-                  placeholder="Pega tu Secret Key de Binance..."
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 pr-10 font-mono text-xs text-white focus:border-amber-500 focus:outline-none transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSecret(!showSecret)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                >
-                  {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+              <Input
+                type={showSecret ? 'text' : 'password'}
+                value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)}
+                placeholder="Pega tu Secret Key de Binance..."
+                autoComplete="off"
+                spellCheck={false}
+                className="font-mono text-xs"
+                rightElement={
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="p-1 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                }
+              />
             </div>
 
             <div className="pt-2">
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
+                icon={RefreshCw}
+                loading={loading}
+                disabled={!canSubmit}
                 onClick={handleConnectAndSync}
-                disabled={loading || !canSubmit}
-                className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
               >
-                <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${loading ? 'animate-spin' : ''}`} />
-                <span>{loading ? 'Guardando...' : 'Guardar Llaves y Sincronizar'}</span>
-              </button>
+                {loading ? 'Guardando...' : 'Guardar Llaves y Sincronizar'}
+              </Button>
             </div>
           </div>
         )}
@@ -252,14 +258,13 @@ export default function BinancePrivateApiSection({
           </div>
 
           {syncIntervalSeconds > 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <Badge variant="success" dot size="sm">
               <span>Activo ({syncIntervalSeconds >= 60 ? `${syncIntervalSeconds / 60}m` : `${syncIntervalSeconds}s`})</span>
-            </span>
+            </Badge>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs font-semibold text-slate-400">
+            <Badge variant="default" size="sm">
               <span>Solo manual</span>
-            </span>
+            </Badge>
           )}
         </div>
 

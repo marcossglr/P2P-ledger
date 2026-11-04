@@ -23,7 +23,9 @@ import OrderDetailsModal from './OrderDetailsModal';
 import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
 import OperationsFilterBar from './history/OperationsFilterBar';
+import { fmtDate } from '../utils/formatters';
 import { operationsApi } from '../services/api';
+import { Button, Input, Badge } from './ui';
 
 export default function HistoryOperationsView({ refreshTrigger, onNavigateFormulas }) {
   const [data, setData] = useState(null);
@@ -560,12 +562,14 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
                     </p>
                   </div>
                   {startDate && startDate === endDate && (
-                    <button
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
                       onClick={() => applyDatePreset('ALL')}
-                      className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20"
                     >
-                      Mostrar todas las fechas
-                    </button>
+                      <span>Mostrar todas las fechas</span>
+                    </Button>
                   )}
                 </div>
                 <div className="overflow-x-auto">
@@ -598,7 +602,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
                             title={`Filtrar operaciones del ${day.date}`}
                           >
                             <td className="py-2.5 px-3 tabular-nums text-[11px] font-medium text-slate-300 hover:text-amber-300 hover:underline">
-                              {day.date}
+                              {fmtDate(day.date)}
                             </td>
                             <td className="py-2.5 px-2 text-right text-slate-400 tabular-nums">{day.orders_count}</td>
                             <td className="py-2.5 px-2 text-right font-medium text-white tabular-nums">{fmtUsdt(day.buy_usdt)}</td>
@@ -746,24 +750,25 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
 
           {/* Buscador de Orden Específica */}
           <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input
+            <Input
               type="text"
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
               placeholder="Buscar por ID, contraparte, monto..."
-              className="h-8 w-full rounded-xl border border-slate-700/80 bg-slate-950/90 pl-9 pr-8 text-xs text-slate-100 placeholder:text-slate-500 hover:border-slate-600 focus:border-amber-500 focus:outline-none transition-colors shadow-xs"
+              icon={Search}
+              rightElement={
+                tableSearch ? (
+                  <button
+                    type="button"
+                    onClick={() => setTableSearch('')}
+                    title="Limpiar búsqueda"
+                    className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null
+              }
             />
-            {tableSearch && (
-              <button
-                type="button"
-                onClick={() => setTableSearch('')}
-                title="Limpiar búsqueda"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-white rounded transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
         </div>
 

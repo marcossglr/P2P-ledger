@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, Link2, AlertCircle } from 'lucide-react';
 import FileDropzone from './FileDropzone';
 import TablePaginator from './TablePaginator';
+import { fmtDateTime, fmtDate } from '../utils/formatters';
 import { reconciliationApi } from '../services/api';
+import { Button, Badge } from './ui';
 
 export default function BankReconcilerView() {
   const [bankBatch, setBankBatch] = useState(null);
@@ -110,15 +112,17 @@ export default function BankReconcilerView() {
             </ul>
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="emerald"
+            size="md"
+            icon={ArrowRightLeft}
+            loading={loading}
             onClick={runAutoReconcile}
-            disabled={loading}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-xs font-semibold text-slate-950 shadow-lg shadow-emerald-500/10 hover:bg-emerald-400"
+            className="mt-6 w-full py-3"
           >
-            <ArrowRightLeft className="h-4 w-4" />
             <span>{loading ? 'Ejecutando cruce...' : 'Ejecutar Conciliación con Banco'}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -160,13 +164,15 @@ export default function BankReconcilerView() {
             </div>
 
             {selectedOrderId && selectedBankId && (
-              <button
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={Link2}
                 onClick={handleManualMatch}
-                className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
               >
-                <Link2 className="h-4 w-4" />
                 <span>Emparejar Manualmente Seleccionados</span>
-              </button>
+              </Button>
             )}
           </div>
 
@@ -189,12 +195,12 @@ export default function BankReconcilerView() {
                     {paginatedMatched.map((m, i) => (
                       <tr key={i} className="hover:bg-slate-800/30">
                         <td className="py-2 pr-3 font-sans">
-                          <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                          <Badge variant="success" size="xs">
                             {m.match_level}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="py-2 px-2 text-slate-300 font-mono">#{m.order_number.slice(-8)}</td>
-                        <td className="py-2 px-2 text-slate-400 tabular-nums">{m.order_date}</td>
+                        <td className="py-2 px-2 text-slate-400 tabular-nums">{fmtDateTime(m.order_date)}</td>
                         <td className="py-2 px-2 text-right text-amber-300 tabular-nums">{m.fiat_amount}</td>
                         <td className="py-2 px-2 text-emerald-300 font-mono">{m.reference}</td>
                         <td className="py-2 px-2 font-sans text-slate-400 truncate max-w-[200px]">{m.description}</td>
@@ -249,7 +255,7 @@ export default function BankReconcilerView() {
                         </span>
                       </div>
                       <div className="mt-1 flex justify-between text-[11px] text-slate-400">
-                        <span>{o.order_date}</span>
+                        <span>{fmtDateTime(o.order_date)}</span>
                         <span>{o.counterparty}</span>
                       </div>
                     </div>
@@ -299,7 +305,7 @@ export default function BankReconcilerView() {
                         </span>
                       </div>
                       <div className="mt-1 flex justify-between text-[11px] text-slate-400">
-                        <span>{b.tx_date}</span>
+                        <span>{fmtDate(b.tx_date)}</span>
                         <span className="truncate max-w-[180px]">{b.description}</span>
                       </div>
                     </div>

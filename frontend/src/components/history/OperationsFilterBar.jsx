@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   CalendarDays,
+  Calendar,
   ChevronDown,
   Calculator,
   Download,
   X,
 } from 'lucide-react';
+import { fmtDate } from '../../utils/formatters';
+import { Button, Select } from '../ui';
 
 export default function OperationsFilterBar({
   activePreset,
@@ -21,16 +24,31 @@ export default function OperationsFilterBar({
   onExportExcel,
   ordersCount = 0,
 }) {
+  const startInputRef = useRef(null);
+  const endInputRef = useRef(null);
+
+  const openDatePicker = (ref) => {
+    if (!ref?.current) return;
+    if (typeof ref.current.showPicker === 'function') {
+      try {
+        ref.current.showPicker();
+      } catch {
+        ref.current.focus();
+      }
+    } else {
+      ref.current.focus();
+    }
+  };
   return (
     <div className="flex flex-wrap items-center justify-between gap-2.5">
       <div className="flex flex-wrap items-center gap-2">
         {/* Selector de Período Histórico (Dropdown con valor por defecto Hoy) */}
-        <div className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-2.5 text-xs shadow-xs">
-          <CalendarDays className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-          <select
+        <div className="w-44">
+          <Select
             value={activePreset}
             onChange={(e) => applyDatePreset(e.target.value)}
-            className="bg-transparent font-medium text-slate-200 focus:outline-none cursor-pointer pr-1"
+            icon={CalendarDays}
+            size="sm"
           >
             <option value="TODAY" className="bg-slate-900 text-slate-100">Hoy</option>
             <option value="YESTERDAY" className="bg-slate-900 text-slate-100">Ayer</option>
@@ -40,73 +58,104 @@ export default function OperationsFilterBar({
             <option value="MONTH" className="bg-slate-900 text-slate-100">Este Mes</option>
             <option value="ALL" className="bg-slate-900 text-slate-100">Todo el Historial</option>
             <option value="CUSTOM" className="bg-slate-900 text-slate-100">Personalizado...</option>
-          </select>
+          </Select>
         </div>
 
         {/* Rango de fechas manual (visible únicamente cuando activePreset === 'CUSTOM') */}
         {activePreset === 'CUSTOM' && (
           <div className="flex h-8 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-slate-900/90 px-2.5 text-xs shadow-xs animate-in fade-in duration-150">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none"
-              title="Fecha inicio"
-            />
-            <span className="text-slate-500">→</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none"
-              title="Fecha fin"
-            />
-            <button
+            {/* Fecha Inicio con máscara DD/MM/AAAA */}
+            <div
+              onClick={() => openDatePicker(startInputRef)}
+              className="relative flex items-center gap-1 cursor-pointer group"
+              title="Clic para seleccionar fecha de inicio"
+            >
+              <Calendar className="h-3 w-3 text-amber-400/80 group-hover:text-amber-300 transition-colors shrink-0" />
+              <span className="font-mono text-xs text-slate-200 group-hover:text-white tabular-nums transition-colors">
+                {startDate ? fmtDate(startDate) : 'DD/MM/AAAA'}
+              </span>
+              <input
+                ref={startInputRef}
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+            </div>
+
+            <span className="text-slate-500 text-xs select-none">→</span>
+
+            {/* Fecha Fin con máscara DD/MM/AAAA */}
+            <div
+              onClick={() => openDatePicker(endInputRef)}
+              className="relative flex items-center gap-1 cursor-pointer group"
+              title="Clic para seleccionar fecha de fin"
+            >
+              <Calendar className="h-3 w-3 text-amber-400/80 group-hover:text-amber-300 transition-colors shrink-0" />
+              <span className="font-mono text-xs text-slate-200 group-hover:text-white tabular-nums transition-colors">
+                {endDate ? fmtDate(endDate) : 'DD/MM/AAAA'}
+              </span>
+              <input
+                ref={endInputRef}
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon-xs"
               onClick={() => applyDatePreset('TODAY')}
               title="Cerrar personalizado y volver a Hoy"
-              className="ml-1 rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-amber-400 transition-colors"
-            >
-              <X className="h-3 w-3" />
-            </button>
+              icon={X}
+            />
           </div>
         )}
 
         {/* Botón Selector Unificado de Par de Mercado (Cripto / Fiat) */}
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={onOpenPairModal}
-          className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-200 hover:border-slate-700 hover:text-white transition-colors shadow-xs cursor-pointer group"
           title="Cambiar Criptoactivo y Moneda Fiat de análisis"
+          className="group"
         >
           <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{selectedAsset}</span>
           <span className="text-slate-500">/</span>
           <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{fiatCurrency}</span>
           <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
-        </button>
+        </Button>
       </div>
 
       {/* Extremo derecho: Acciones de Documentación y Exportar con separación limpia */}
       <div className="flex items-center gap-2 ml-auto">
         {onNavigateFormulas && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onNavigateFormulas}
-            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/80 px-3 text-xs font-medium text-slate-300 hover:border-amber-500/40 hover:text-amber-300 transition-colors shadow-xs whitespace-nowrap"
+            icon={Calculator}
             title="Ver documentación contable y fórmulas de cálculo (WAC/WAP, Breakeven, P&L)"
           >
-            <Calculator className="h-3.5 w-3.5 text-amber-400" />
             <span>Fórmulas</span>
-          </button>
+          </Button>
         )}
 
-        <button
+        <Button
+          variant="emerald"
+          size="sm"
           onClick={onExportExcel}
           disabled={ordersCount === 0}
-          className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 transition-colors shadow-xs whitespace-nowrap"
+          icon={Download}
         >
-          <Download className="h-3.5 w-3.5 shrink-0" />
           <span>Exportar (.xlsx)</span>
-        </button>
+        </Button>
       </div>
     </div>
   );

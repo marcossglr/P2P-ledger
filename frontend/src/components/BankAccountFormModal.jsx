@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import {
-  X,
   Building2,
   Search,
   Check,
   Sparkles,
 } from 'lucide-react';
 import { bankInventoryApi } from '../services/api';
+import { Modal, Button, Input } from './ui';
 
 export default function BankAccountFormModal({
   isOpen,
@@ -75,29 +74,6 @@ export default function BankAccountFormModal({
       setSelectedCatalogBank(null);
     }
   }, [isOpen, editingAccount, existingAccounts]);
-
-  // Soporte para cerrar con tecla Escape
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  // Bloquear el scroll de fondo
-  useEffect(() => {
-    if (!isOpen) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [isOpen]);
 
   // Selección inteligente de un banco del catálogo
   const handleSelectCatalogBank = (b) => {
@@ -172,41 +148,37 @@ export default function BankAccountFormModal({
     }
   };
 
-  if (!isOpen) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn w-screen h-screen overflow-y-auto"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-slate-950/90 text-slate-100 space-y-4 my-auto max-h-[92vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
+  const modalFooter = (
+    <div className="flex items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={onClose}
+        disabled={saving}
       >
-        {/* Cabecera Estándar Directa */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
-              <Building2 className="h-4 w-4" />
-            </div>
-            <h3 className="text-sm font-bold text-white truncate">
-              {editingAccount
-                ? `Configurar ${editingAccount.name}`
-                : 'Añadir Cuenta Bancaria'}
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            title="Cerrar modal (Esc)"
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors shrink-0 cursor-pointer"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        form="bank-account-form"
+        variant="primary"
+        loading={saving}
+      >
+        Confirmar
+      </Button>
+    </div>
+  );
 
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editingAccount ? `Configurar ${editingAccount.name}` : 'Añadir Cuenta Bancaria'}
+      icon={Building2}
+      footer={modalFooter}
+      maxWidth="max-w-xl"
+    >
+      <div className="space-y-4">
         {/* Error message */}
         {errorMsg && (
           <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-200 shrink-0">
@@ -214,8 +186,8 @@ export default function BankAccountFormModal({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden space-y-4">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+        <form id="bank-account-form" onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
+          <div className="flex-1 space-y-4 pr-1 text-xs">
             {/* Si es creación nueva: Mostrar Catálogo Oficial de Bancos Nacionales */}
             {!editingAccount && (
               <div className="space-y-2.5 rounded-xl border border-slate-800/80 bg-slate-950/40 p-3.5">
@@ -230,16 +202,14 @@ export default function BankAccountFormModal({
                 </div>
 
                 {/* Buscador de Banco */}
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-                  <input
-                    type="text"
-                    value={catalogSearch}
-                    onChange={(e) => setCatalogSearch(e.target.value)}
-                    placeholder="Buscar banco, sigla o código (ej. BDV, Banesco, 0102)..."
-                    className="h-8 w-full rounded-xl border border-slate-800 bg-slate-950/60 pl-8 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                  />
-                </div>
+                <Input
+                  type="text"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="Buscar banco, sigla o código (ej. BDV, Banesco, 0102)..."
+                  icon={Search}
+                  size="sm"
+                />
 
                 {/* Grid / Lista compacta de Bancos con Scroll */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-1">
@@ -290,13 +260,12 @@ export default function BankAccountFormModal({
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Nombre del Banco *
                 </label>
-                <input
+                <Input
                   type="text"
                   required
                   value={accName}
                   onChange={(e) => setAccName(e.target.value)}
                   placeholder="Ej: Banco de Venezuela"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
                 />
               </div>
 
@@ -304,12 +273,11 @@ export default function BankAccountFormModal({
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Alias / Titular (Opcional)
                 </label>
-                <input
+                <Input
                   type="text"
                   value={accAlias}
                   onChange={(e) => setAccAlias(e.target.value)}
                   placeholder="Ej: Cuenta BDV Principal"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
                 />
               </div>
             </div>
@@ -322,12 +290,11 @@ export default function BankAccountFormModal({
                 </label>
                 <span className="text-[10px] text-slate-500">Separadas por comas</span>
               </div>
-              <input
+              <Input
                 type="text"
                 value={accKeywords}
                 onChange={(e) => setAccKeywords(e.target.value)}
                 placeholder="venezuela, bdv, bancodevenezuela, pagomovil bdv"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
               />
             </div>
 
@@ -337,19 +304,19 @@ export default function BankAccountFormModal({
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Saldo Inicial en Banco (Bs)
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={accInitialBalance}
-                    onChange={(e) => setAccInitialBalance(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3.5 py-2 text-xs font-mono font-bold tabular-nums text-white placeholder-slate-600 focus:border-amber-500 focus:outline-none transition-colors"
-                  />
-                  <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 font-mono">
-                    VES
-                  </span>
-                </div>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={accInitialBalance}
+                  onChange={(e) => setAccInitialBalance(e.target.value)}
+                  placeholder="0.00"
+                  className="font-mono font-bold tabular-nums"
+                  rightElement={
+                    <span className="text-xs font-semibold text-slate-400 font-mono select-none">
+                      VES
+                    </span>
+                  }
+                />
               </div>
             )}
 
@@ -378,12 +345,12 @@ export default function BankAccountFormModal({
                     <label className="block text-[11px] font-medium text-slate-400 mb-1">
                       Comisión Pago Móvil (%)
                     </label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={accPmFeePct}
                       onChange={(e) => setAccPmFeePct(e.target.value)}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none tabular-nums font-mono"
+                      className="tabular-nums font-mono"
                     />
                     <span className="text-[10px] text-slate-500 mt-0.5 block">0.3% estándar</span>
                   </div>
@@ -391,12 +358,12 @@ export default function BankAccountFormModal({
                     <label className="block text-[11px] font-medium text-slate-400 mb-1">
                       Comisión Transferencia (%)
                     </label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={accTransfFeePct}
                       onChange={(e) => setAccTransfFeePct(e.target.value)}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none tabular-nums font-mono"
+                      className="tabular-nums font-mono"
                     />
                     <span className="text-[10px] text-slate-500 mt-0.5 block">0.0% mismo banco</span>
                   </div>
@@ -417,28 +384,8 @@ export default function BankAccountFormModal({
               </span>
             </label>
           </div>
-
-          {/* Footer Limpio */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800/60 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 hover:border-amber-500/60 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-            >
-              {saving ? 'Guardando...' : 'Confirmar'}
-            </button>
-          </div>
         </form>
       </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

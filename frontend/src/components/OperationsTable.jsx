@@ -1,5 +1,7 @@
 import React, { useState, memo } from 'react';
 import { Copy, Check, X, Loader2 } from 'lucide-react';
+import { fmtTime, fmtDateTime } from '../utils/formatters';
+import { Button, Badge } from './ui';
 
 /**
  * Componente unificado y reutilizable para el renderizado del Libro de Órdenes P2P
@@ -47,12 +49,6 @@ function OperationsTable({
       maximumFractionDigits: 4,
     });
 
-  const extractTimeOnly = (fullDateStr) => {
-    if (!fullDateStr) return '—';
-    const parts = fullDateStr.split(' ');
-    return parts.length > 1 ? parts[1] : fullDateStr;
-  };
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs">
@@ -89,9 +85,9 @@ function OperationsTable({
               >
                 <td
                   className="py-2.5 px-3 tabular-nums text-[11px] text-slate-400 align-middle whitespace-nowrap"
-                  title={o.order_date}
+                  title={fmtDateTime(o.order_date)}
                 >
-                  {showFullDate ? o.order_date : extractTimeOnly(o.order_date)}
+                  {showFullDate ? fmtDateTime(o.order_date) : fmtTime(o.order_date)}
                 </td>
                 <td className="py-2.5 px-2 align-middle whitespace-nowrap">
                   <button
@@ -113,27 +109,34 @@ function OperationsTable({
                 </td>
                 <td className="py-2.5 px-2 font-sans align-middle whitespace-nowrap">
                   <div className="flex items-center gap-1.5">
-                    <span
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                    <Badge
+                      variant={
                         o.order_status === 'CANCELLED'
-                          ? 'bg-slate-800/80 text-slate-400 border border-slate-700/60 line-through'
+                          ? 'default'
                           : o.order_type === 'COMPRA'
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                      }`}
+                          ? 'emerald'
+                          : 'rose'
+                      }
+                      size="sm"
+                      className={o.order_status === 'CANCELLED' ? 'line-through opacity-60' : ''}
                     >
                       {o.order_type}
-                    </span>
+                    </Badge>
                     {o.order_status === 'CANCELLED' && (
-                      <span className="inline-flex items-center rounded-md bg-slate-800/90 border border-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                      <Badge variant="default" size="xs">
                         CANCELADA
-                      </span>
+                      </Badge>
                     )}
                     {o.order_status === 'IN_PROGRESS' && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-sky-500/15 border border-sky-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400 animate-pulse" title="Orden en proceso (pendiente de pago / liberación)">
+                      <Badge
+                        variant="blue"
+                        size="xs"
+                        className="animate-pulse gap-1"
+                        title="Orden en proceso (pendiente de pago / liberación)"
+                      >
                         <Loader2 className="h-2.5 w-2.5 animate-spin" />
                         PROCESANDO
-                      </span>
+                      </Badge>
                     )}
                   </div>
                 </td>
@@ -188,14 +191,15 @@ function OperationsTable({
                       No se encontró ninguna orden que coincida con &ldquo;{tableSearch.trim()}&rdquo;
                     </p>
                     {onClearSearch && (
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="xs"
+                        icon={X}
                         onClick={onClearSearch}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition-colors"
                       >
-                        <X className="h-3.5 w-3.5" />
-                        <span>Limpiar búsqueda</span>
-                      </button>
+                        Limpiar búsqueda
+                      </Button>
                     )}
                   </div>
                 ) : (

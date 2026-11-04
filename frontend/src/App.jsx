@@ -22,7 +22,9 @@ import SettingsView from './components/SettingsView';
 import BinanceApiModal from './components/BinanceApiModal';
 import MarketPairModal from './components/MarketPairModal';
 import { playNewTradeSound, playCompletedTradeSound } from './utils/audioAlerts';
+import { fmtTime } from './utils/formatters';
 import { healthApi, binanceApi } from './services/api';
+import { Button, Badge } from './components/ui';
 
 const ROUTE_TO_VIEW = {
   '/': 'DASHBOARD',
@@ -123,6 +125,12 @@ export default function App() {
   });
   const [appTheme, setAppTheme] = useState(() => {
     return localStorage.getItem('p2p_app_theme') || 'DEEP_SLATE';
+  });
+  const [timeFormat, setTimeFormat] = useState(() => {
+    return localStorage.getItem('p2p_time_format') === '12H' ? '12H' : '24H';
+  });
+  const [timeShowSeconds, setTimeShowSeconds] = useState(() => {
+    return localStorage.getItem('p2p_time_show_seconds') === 'true';
   });
 
   const prevInProgressCountRef = useRef(0);
@@ -303,7 +311,7 @@ export default function App() {
                     key={item.id}
                     type="button"
                     onClick={() => setActiveView(item.id)}
-                    className={`group flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all ${
+                    className={`group flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                       isActive
                         ? 'bg-amber-500/15 text-amber-300 border border-amber-500/35 font-semibold shadow-xs'
                         : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
@@ -356,7 +364,7 @@ export default function App() {
                   syncError
                     ? `Atención: ${syncError} · Clic para revisar credenciales`
                     : `Sistema conectado y en vivo${
-                        health.last_synced_at ? ` · Último sync: ${health.last_synced_at}` : ''
+                        health.last_synced_at ? ` · Último sync: ${fmtTime(health.last_synced_at, { timeFormat, showSeconds: timeShowSeconds })}` : ''
                       } · Clic para refrescar`
                 }
                 className={`group flex h-8 items-center gap-2 rounded-xl border px-3 text-xs font-medium transition-all shadow-xs cursor-pointer select-none ${
@@ -389,58 +397,48 @@ export default function App() {
                 </span>
               </button>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
+                icon={KeyRound}
                 onClick={() => setIsApiModalOpen(true)}
                 title="Conectar API Key de Binance para sincronización automática"
-                className="flex h-8 items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 transition-all shadow-xs"
               >
-                <KeyRound className="h-3.5 w-3.5 text-amber-400" />
                 <span>Conectar Binance</span>
-              </button>
+              </Button>
             )}
 
             {/* Botón de Sonido / Alertas de Audio */}
-            <button
+            <Button
               type="button"
+              variant={soundEnabled ? 'emerald' : 'secondary'}
+              size="icon"
+              icon={soundEnabled ? Volume2 : VolumeX}
               onClick={() => {
                 const nextState = !soundEnabled;
                 setSoundEnabled(nextState);
                 localStorage.setItem('p2p_sound_alerts_enabled', String(nextState));
                 if (nextState) {
-                  playCompletedTradeSound(); // Test sutil al activar
+                  playCompletedTradeSound();
                   showToast('Alertas de audio activadas');
                 } else {
                   showToast('Alertas de audio silenciadas');
                 }
               }}
               title={soundEnabled ? 'Alertas sonoras activadas (clic para silenciar)' : 'Alertas sonoras silenciadas (clic para activar)'}
-              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all cursor-pointer ${
-                soundEnabled
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                  : 'border-slate-800 bg-slate-900/80 text-slate-500 hover:text-slate-300 hover:border-slate-700'
-              }`}
-            >
-              {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-            </button>
+            />
 
-            <button
+            <Button
               type="button"
+              variant={activeView === 'SETTINGS' ? 'primary' : 'secondary'}
+              size="sm"
+              icon={Settings}
               onClick={() => openSettings('CONNECTIONS')}
               title="Ajustes: Conexiones, Base de Datos y Sistema"
-              className={`group flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
-                activeView === 'SETTINGS'
-                  ? 'border-amber-500/35 bg-amber-500/15 text-amber-300 shadow-xs'
-                  : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-              }`}
             >
-              <Settings
-                className={`h-3.5 w-3.5 transition-colors ${
-                  activeView === 'SETTINGS' ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-200'
-                }`}
-              />
               <span className="hidden sm:inline">Ajustes</span>
-            </button>
+            </Button>
           </div>
         </div>
       </header>
@@ -523,6 +521,16 @@ export default function App() {
               onUpdateAppTheme={(val) => {
                 setAppTheme(val);
                 localStorage.setItem('p2p_app_theme', val);
+              }}
+              timeFormat={timeFormat}
+              onUpdateTimeFormat={(val) => {
+                setTimeFormat(val);
+                localStorage.setItem('p2p_time_format', val);
+              }}
+              timeShowSeconds={timeShowSeconds}
+              onToggleTimeShowSeconds={(val) => {
+                setTimeShowSeconds(val);
+                localStorage.setItem('p2p_time_show_seconds', String(val));
               }}
               onSyncComplete={() => {
                 setRefreshTrigger((prev) => prev + 1);

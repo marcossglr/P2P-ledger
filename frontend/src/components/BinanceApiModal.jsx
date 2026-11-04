@@ -3,12 +3,12 @@ import {
   KeyRound,
   RefreshCw,
   ShieldCheck,
-  X,
   CheckCircle2,
   AlertCircle,
   Upload,
 } from 'lucide-react';
 import { binanceApi, reconciliationApi } from '../services/api';
+import { Modal, Button, Input, Badge } from './ui';
 
 export default function BinanceApiModal({
   isOpen,
@@ -23,8 +23,6 @@ export default function BinanceApiModal({
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [showKeyForm, setShowKeyForm] = useState(!apiConfigured);
-
-  if (!isOpen) return null;
 
   const handleConnectAndSync = async (e, forceFull = false) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -91,178 +89,161 @@ export default function BinanceApiModal({
 
   const canSubmit = apiConfigured || (apiKey.trim().length > 0 && apiSecret.trim().length > 0);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-      {/* Contenedor del Modal con Estándar Design System */}
-      <div
-        className="relative flex flex-col w-full max-w-lg max-h-[90vh] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/95 shadow-2xl shadow-slate-950/90 text-slate-100"
-        role="dialog"
-        aria-modal="true"
+  const binanceModalFooter = (
+    <div className="flex items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={onClose}
       >
-        {/* Cabecera Estándar */}
-        <div className="shrink-0 flex items-center justify-between border-b border-slate-800/80 p-5 bg-slate-950/40">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
-              <KeyRound className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white leading-tight">
-                Conexión API Binance P2P
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Sincronización automatizada de transacciones y libro de órdenes
-              </p>
-            </div>
+        Cerrar
+      </Button>
+      {apiConfigured && !apiKey.trim() && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={loading}
+          onClick={(ev) => handleConnectAndSync(ev, true)}
+        >
+          Completa (180d)
+        </Button>
+      )}
+      <Button
+        type="submit"
+        form="binance-api-form"
+        variant="primary"
+        size="sm"
+        icon={RefreshCw}
+        loading={loading}
+        disabled={!canSubmit}
+      >
+        <span>
+          {loading
+            ? 'Sincronizando...'
+            : apiConfigured && !apiKey.trim()
+            ? 'Sincronizar órdenes nuevas'
+            : 'Conectar y Sincronizar'}
+        </span>
+      </Button>
+    </div>
+  );
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Conexión API Binance P2P"
+      icon={KeyRound}
+      footer={binanceModalFooter}
+      maxWidth="max-w-lg"
+    >
+      <form id="binance-api-form" onSubmit={handleConnectAndSync} className="space-y-4">
+        {/* Aviso de Privacidad / Seguridad */}
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3.5 text-xs text-slate-300">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+          <div>
+            <span className="font-semibold text-emerald-300">Privacidad 100% Local:</span> Tus llaves se almacenan
+            únicamente en tu disco local con permisos restringidos. Solo se requiere una API Key con permiso de{' '}
+            <strong className="text-white">Lectura (Enable Reading)</strong>.
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
-        {/* Formulario y Cuerpo con Scroll Limpio */}
-        <form onSubmit={handleConnectAndSync} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {/* Aviso de Privacidad / Seguridad */}
-            <div className="flex items-start gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3.5 text-xs text-slate-300">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-              <div>
-                <span className="font-semibold text-emerald-300">Privacidad 100% Local:</span> Tus llaves se almacenan
-                únicamente en tu disco local con permisos restringidos. Solo se requiere una API Key con permiso de{' '}
-                <strong className="text-white">Lectura (Enable Reading)</strong>.
-              </div>
-            </div>
-
-            {/* Caja de Estado de Credenciales */}
-            <div className="rounded-xl border border-slate-800/80 bg-slate-950/50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Estado de Credenciales
-                  </p>
-                  {apiConfigured ? (
-                    <p className="mt-1 flex items-center gap-2 text-xs font-medium text-emerald-400">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      API Key activa: <span className="font-mono text-slate-200">{maskedKey}</span>
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs text-amber-400">Ingresa tu API Key para conectar</p>
-                  )}
+        {/* Caja de Estado de Credenciales */}
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Estado de Credenciales
+              </p>
+              {apiConfigured ? (
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant="success" dot size="xs">
+                    API Key activa
+                  </Badge>
+                  <span className="font-mono text-slate-200 text-xs">{maskedKey}</span>
                 </div>
-                {apiConfigured && (
-                  <button
-                    type="button"
-                    onClick={() => setShowKeyForm(!showKeyForm)}
-                    className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
-                  >
-                    {showKeyForm ? 'Ocultar' : 'Cambiar API Key'}
-                  </button>
-                )}
-              </div>
-
-              {(showKeyForm || !apiConfigured) && (
-                <div className="space-y-3 border-t border-slate-800/80 pt-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                      Binance API Key
-                    </label>
-                    <input
-                      type="text"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Pega tu API Key de solo lectura..."
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                      Binance Secret Key
-                    </label>
-                    <input
-                      type="password"
-                      value={apiSecret}
-                      onChange={(e) => setApiSecret(e.target.value)}
-                      placeholder="Pega tu Secret Key..."
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition-colors"
-                    />
-                  </div>
-                </div>
+              ) : (
+                <p className="mt-1 text-xs text-amber-400">Ingresa tu API Key para conectar</p>
               )}
             </div>
-
-            {/* Alternativa CSV */}
-            <div className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-950/40 px-3.5 py-2.5 text-xs text-slate-400">
-              <span>¿Operaciones anteriores a 6 meses?</span>
-              <label className="flex cursor-pointer items-center gap-1.5 font-semibold text-slate-300 hover:text-amber-400 transition-colors">
-                <Upload className="h-3.5 w-3.5 text-amber-400" />
-                <span>Importar CSV</span>
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => handleCsvFallback(e.target.files?.[0])}
-                />
-              </label>
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 animate-fadeIn">
-                <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {message && (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 animate-fadeIn">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span>{message}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Footer de Acciones Estándar */}
-          <div className="shrink-0 flex items-center justify-end gap-2.5 border-t border-slate-800/80 bg-slate-950/60 p-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
-            >
-              Cerrar
-            </button>
-            {apiConfigured && !apiKey.trim() && (
-              <button
+            {apiConfigured && (
+              <Button
                 type="button"
-                onClick={(ev) => handleConnectAndSync(ev, true)}
-                disabled={loading}
-                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-slate-700 hover:text-white disabled:opacity-40 transition-colors cursor-pointer"
+                variant="ghost"
+                size="xs"
+                onClick={() => setShowKeyForm(!showKeyForm)}
+                className="text-amber-400 hover:text-amber-300"
               >
-                Completa (180d)
-              </button>
+                {showKeyForm ? 'Ocultar' : 'Cambiar API Key'}
+              </Button>
             )}
-            <button
-              type="submit"
-              disabled={loading || !canSubmit}
-              className="flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>
-                {loading
-                  ? 'Sincronizando...'
-                  : apiConfigured && !apiKey.trim()
-                  ? 'Sincronizar órdenes nuevas'
-                  : 'Conectar y Sincronizar'}
-              </span>
-            </button>
           </div>
-        </form>
-      </div>
-    </div>
+
+          {(showKeyForm || !apiConfigured) && (
+            <div className="space-y-3 border-t border-slate-800/80 pt-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Binance API Key
+                </label>
+                <Input
+                  type="text"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Pega tu API Key de solo lectura..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Binance Secret Key
+                </label>
+                <Input
+                  type="password"
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  placeholder="Pega tu Secret Key..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Alternativa CSV */}
+        <div className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-950/40 px-3.5 py-2.5 text-xs text-slate-400">
+          <span>¿Operaciones anteriores a 6 meses?</span>
+          <label className="flex cursor-pointer items-center gap-1.5 font-semibold text-slate-300 hover:text-amber-300 transition-colors">
+            <Upload className="h-3.5 w-3.5 text-amber-400" />
+            <span>Importar CSV</span>
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => handleCsvFallback(e.target.files?.[0])}
+            />
+          </label>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 animate-fadeIn">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {message && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 animate-fadeIn">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span>{message}</span>
+          </div>
+        )}
+      </form>
+    </Modal>
   );
 }
