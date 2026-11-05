@@ -218,7 +218,7 @@ function OperationsTable({
 
                 {/* Tasa Unitaria */}
                 <td className="py-2.5 px-2 text-right tabular-nums text-slate-300 align-middle whitespace-nowrap">
-                  {fmtRate(o.unit_price, 2)}
+                  {fmtRate(o.unit_price, 3)}
                 </td>
 
                 {/* Total Fiat */}
