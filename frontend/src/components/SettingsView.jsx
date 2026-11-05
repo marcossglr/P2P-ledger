@@ -755,6 +755,7 @@ export default function SettingsView({
       {/* 4. SECCIÓN MANTENIMIENTO Y DIAGNÓSTICO */}
       {activeSection === 'MAINTENANCE' && (
         <SystemMaintenanceSection
+          health={health}
           syncIntervalSeconds={syncIntervalSeconds}
           onSyncComplete={onSyncComplete}
           setMessage={setMessage}

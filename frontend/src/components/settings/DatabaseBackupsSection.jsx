@@ -167,9 +167,17 @@ export default function DatabaseBackupsSection({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
             <span className="text-[11px] text-slate-400 block font-medium">Órdenes Guardadas</span>
-            <span className="tabular-nums text-lg font-bold text-white mt-0.5 block">
-              {health.stored_binance_orders || 0} <span className="text-xs font-normal text-slate-400">regs</span>
-            </span>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="tabular-nums text-lg font-bold text-white">
+                {health.stored_binance_orders || 0}
+              </span>
+              <span className="text-xs font-normal text-slate-400">regs</span>
+            </div>
+            {health.stored_demo_orders > 0 && (
+              <span className="text-[10px] text-amber-400 font-medium block mt-1">
+                ({health.stored_real_orders || 0} reales • {health.stored_demo_orders} demo)
+              </span>
+            )}
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
             <span className="text-[11px] text-slate-400 block font-medium">Tamaño Base de Datos</span>

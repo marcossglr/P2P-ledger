@@ -9,11 +9,22 @@ def upsert_binance_orders(
     """Inserta o actualiza órdenes de Binance P2P en bloque sin duplicar por order_number."""
     new_count = 0
     updated_count = 0
-    existing_map = {
-        o.order_number: o
-        for o in db.query(BinanceOrder).all()
-        if o.order_number
-    }
+
+    if not records:
+        return {"new_count": 0, "updated_count": 0, "total": 0}
+
+    incoming_nos = [str(r.get("order_number", "")).strip() for r in records if r.get("order_number")]
+    incoming_nos = [no for no in incoming_nos if no]
+
+    existing_map = {}
+    if incoming_nos:
+        # Consultar en lotes si incoming_nos es muy grande para no exceder los límites de SQLite
+        CHUNK_SIZE = 900
+        for i in range(0, len(incoming_nos), CHUNK_SIZE):
+            chunk = incoming_nos[i:i + CHUNK_SIZE]
+            for o in db.query(BinanceOrder).filter(BinanceOrder.order_number.in_(chunk)).all():
+                if o.order_number:
+                    existing_map[o.order_number] = o
 
     for rec in records:
         order_no = str(rec.get("order_number", "")).strip()

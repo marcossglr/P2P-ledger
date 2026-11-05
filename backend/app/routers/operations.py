@@ -61,6 +61,14 @@ def seed_demo_operations(db: Session = Depends(get_db)):
             "source": "DEMO",
         })
 
+    # Solo permitir cargar datos demo si no existen órdenes reales en la base de datos
+    has_real_orders = db.query(BinanceOrder).filter(BinanceOrder.source.in_(["API", "CSV"])).count() > 0
+    if has_real_orders:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pueden sembrar operaciones demo mientras existan órdenes reales importadas por API o CSV.",
+        )
+
     count = upsert_binance_orders(db, prepared, default_source="DEMO")
 
     start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)

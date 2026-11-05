@@ -34,6 +34,7 @@ export default function BinanceApiModal({
       );
       if (!confirmed) return;
     }
+
     setError(null);
     setMessage(null);
     setLoading(true);
@@ -71,6 +72,7 @@ export default function BinanceApiModal({
       setError('El archivo CSV excede el tamaño máximo permitido (25 MB).');
       return;
     }
+
     setError(null);
     setMessage(null);
     setLoading(true);

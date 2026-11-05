@@ -170,26 +170,18 @@ def sync_binance_orders(payload: SyncPayload, db: Session = Depends(get_db)):
         .filter(BinanceOrder.source == "API")
         .scalar()
     )
-    has_full_180d_all = (
-        db.query(UploadBatch)
-        .filter(UploadBatch.source_type == "BINANCE_API", UploadBatch.filename.like("API FULL_180D_ALL%"))
-        .first()
-        is not None
-    )
 
-    if (
-        payload.force_full_180d
-        or payload.force_full_90d
-        or payload.days
-        or is_new_key
-        or not latest_ts
-        or latest_ts <= 0
-        or not has_full_180d_all
-    ):
+    # La sincronización completa (180 días) se ejecuta automáticamente al vincular/cambiar la API
+    # o si nunca se han obtenido órdenes de la API de Binance en la base de datos local.
+    is_first_api_link = is_new_key or not latest_ts or latest_ts <= 0
+
+    if payload.force_full_180d or is_first_api_link:
         sync_mode = f"FULL_{days_back}D_ALL"
         start_ms = full_range_ms
         start_dt = full_range_dt
     else:
+        # En cualquier otro caso (botón manual de usuario, polling en segundo plano, etc.)
+        # se ejecuta de forma incremental estricta (últimas horas) para máxima velocidad.
         sync_mode = "INCREMENTAL"
         overlap_ms = 12 * 3600 * 1000
         start_ms = max(full_range_ms, int(latest_ts) - overlap_ms)
@@ -204,6 +196,10 @@ def sync_binance_orders(payload: SyncPayload, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error inesperado al sincronizar con Binance: {str(e)}")
 
+    # Al ingresar datos reales de la API, purgar automáticamente cualquier orden demo previa
+    if records:
+        db.query(BinanceOrder).filter(BinanceOrder.source == "DEMO").delete()
+
     batch = UploadBatch(
         source_type="BINANCE_API",
         filename=f"API {sync_mode} ({start_dt.strftime('%Y-%m-%d %H:%M')} a {end_dt.strftime('%Y-%m-%d %H:%M')})",
@@ -216,12 +212,21 @@ def sync_binance_orders(payload: SyncPayload, db: Session = Depends(get_db)):
 
     stats = upsert_binance_orders(db, records, batch_id=batch.id, default_source="API")
 
-    try:
-        sync_bank_accounts_from_binance(
-            db, api_key=payload.api_key, api_secret=payload.api_secret
-        )
-    except Exception:
-        pass
+    # Sincronizar cuentas bancarias desde Binance únicamente en la vinculación inicial de la API
+    if is_first_api_link:
+        try:
+            sync_bank_accounts_from_binance(
+                db, api_key=payload.api_key, api_secret=payload.api_secret
+            )
+        except Exception:
+            pass
+
+    # Contar órdenes activas en curso (IN_PROGRESS) para que el frontend maneje alertas y badges
+    in_progress_count = (
+        db.query(BinanceOrder)
+        .filter(BinanceOrder.order_status == "IN_PROGRESS")
+        .count()
+    )
 
     return {
         "status": "synced",
@@ -229,6 +234,8 @@ def sync_binance_orders(payload: SyncPayload, db: Session = Depends(get_db)):
         "fetched_count": len(records),
         "new_orders": stats["new_count"],
         "updated_orders": stats["updated_count"],
+        "has_in_progress": in_progress_count > 0,
+        "in_progress_count": in_progress_count,
         "last_synced_at": datetime.now().strftime("%H:%M:%S"),
         "period": f"{start_dt.strftime('%Y-%m-%d %H:%M')} → {end_dt.strftime('%Y-%m-%d %H:%M')}",
     }

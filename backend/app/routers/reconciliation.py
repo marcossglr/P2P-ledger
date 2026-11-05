@@ -32,6 +32,10 @@ async def upload_binance_csv(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Error al procesar CSV: {str(exc)}")
 
+    # Al ingresar datos reales por CSV, purgar automáticamente cualquier orden demo previa
+    if parsed.get("records"):
+        db.query(BinanceOrder).filter(BinanceOrder.source == "DEMO").delete()
+
     batch = UploadBatch(
         source_type="BINANCE_CSV",
         filename=file.filename,

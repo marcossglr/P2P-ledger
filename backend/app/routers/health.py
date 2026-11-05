@@ -13,6 +13,8 @@ def health_check(db: Session = Depends(get_db)):
     creds = get_saved_credentials()
     has_creds = bool(creds["api_key"] and creds["api_secret"])
     orders_count = db.query(BinanceOrder).count()
+    demo_orders_count = db.query(BinanceOrder).filter(BinanceOrder.source == "DEMO").count()
+    real_orders_count = orders_count - demo_orders_count
     completed_count = (
         db.query(BinanceOrder)
         .filter((BinanceOrder.order_status == "COMPLETED") | (BinanceOrder.order_status.is_(None)))
@@ -36,6 +38,8 @@ def health_check(db: Session = Depends(get_db)):
         "binance_api_configured": has_creds,
         "masked_api_key": f"{creds['api_key'][:6]}...{creds['api_key'][-4:]}" if len(creds["api_key"]) > 10 else "",
         "stored_binance_orders": orders_count,
+        "stored_real_orders": real_orders_count,
+        "stored_demo_orders": demo_orders_count,
         "stored_completed_orders": completed_count,
         "stored_cancelled_orders": cancelled_count,
         "stored_bank_transactions": bank_count,

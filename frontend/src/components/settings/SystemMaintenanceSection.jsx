@@ -9,6 +9,7 @@ import { operationsApi } from '../../services/api';
 import { Button, Badge } from '../ui';
 
 export default function SystemMaintenanceSection({
+  health = {},
   syncIntervalSeconds = 0,
   onSyncComplete,
   setMessage,
@@ -16,6 +17,11 @@ export default function SystemMaintenanceSection({
 }) {
   const [loading, setLoading] = useState(false);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+
+  const demoCount = Number(health.stored_demo_orders || 0);
+  const realCount = Number(health.stored_real_orders || 0);
+  const hasApiConfigured = Boolean(health.binance_api_configured);
+  const hasRealData = realCount > 0 || hasApiConfigured;
 
   const handleSeedDemo = async () => {
     if (setError) setError(null);
@@ -82,60 +88,85 @@ export default function SystemMaintenanceSection({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Tarjeta 1: Entorno de Pruebas y Simulación (Seguro) */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
-                  <Sparkles className="h-4 w-4" />
+      <div className={`grid grid-cols-1 ${!hasRealData ? 'lg:grid-cols-2' : ''} gap-4`}>
+        {/* Tarjeta 1: Entorno de Pruebas y Simulación (Solo visible si no hay datos reales ni API conectada) */}
+        {!hasRealData && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-amber-400">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Entorno de Pruebas y Demo</h3>
+                    <p className="text-xs text-slate-400">
+                      Generación de órdenes simuladas para evaluar cálculos contables
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Entorno de Pruebas y Demo</h3>
-                  <p className="text-xs text-slate-400">
-                    Generación de órdenes simuladas para evaluar cálculos contables
-                  </p>
-                </div>
+                <Badge variant="warning" size="xs">
+                  Modo Seguro
+                </Badge>
               </div>
-              <Badge variant="warning" size="xs">
-                Modo Seguro
-              </Badge>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-xs text-slate-400 space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <span className="text-slate-300 font-medium">Estado de órdenes en Base de Datos:</span>
+                  <div className="flex items-center gap-1.5 font-mono text-xs">
+                    <span className="text-emerald-400 font-semibold">{realCount} reales</span>
+                    <span className="text-slate-600">•</span>
+                    <span className={demoCount > 0 ? "text-amber-400 font-semibold" : "text-slate-400"}>
+                      {demoCount} demo
+                    </span>
+                  </div>
+                </div>
+                <p className="leading-relaxed">
+                  Este módulo genera operaciones simuladas de Compra y Venta con tasas representativas del mercado venezolano para verificar los cálculos de costo promedio ponderado (WAC), margen de ganancia diaria y cuadres de saldo bancario.
+                </p>
+                <p className="text-xs text-slate-500">
+                  • Las órdenes de prueba se eliminan automáticamente en cuanto conectes tu API de Binance o importes un archivo CSV real.
+                </p>
+              </div>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 text-xs text-slate-400 space-y-2">
-              <p className="leading-relaxed">
-                Este módulo genera operaciones simuladas de Compra y Venta con tasas representativas del mercado venezolano para verificar los cálculos de costo promedio ponderado (WAC), margen de ganancia diaria y cuadres de saldo bancario.
-              </p>
-              <p className="text-xs text-slate-500">
-                • Las órdenes de prueba se etiquetan automáticamente como 'DEMO' y se pueden eliminar en cualquier momento sin afectar tus órdenes reales importadas por API.
-              </p>
+            <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center gap-2.5">
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={Sparkles}
+                loading={loading}
+                onClick={handleSeedDemo}
+              >
+                <span>Cargar Operaciones Demo</span>
+              </Button>
+              {demoCount > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={Trash2}
+                  loading={loading}
+                  onClick={handleClearDemo}
+                >
+                  <span>Eliminar {demoCount} Órdenes Demo</span>
+                </Button>
+              )}
+              {demoCount === 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={Trash2}
+                  disabled={true}
+                >
+                  <span>Sin Órdenes Demo</span>
+                </Button>
+              )}
             </div>
           </div>
-
-          <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center gap-2.5">
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              icon={Sparkles}
-              loading={loading}
-              onClick={handleSeedDemo}
-            >
-              <span>Cargar Operaciones Demo</span>
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              icon={Trash2}
-              loading={loading}
-              onClick={handleClearDemo}
-            >
-              <span>Eliminar Órdenes Demo</span>
-            </Button>
-          </div>
-        </div>
+        )}
 
         {/* Tarjeta 2: Diagnóstico y Salud del Sistema */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-4 flex flex-col justify-between">
