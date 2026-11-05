@@ -275,6 +275,14 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   const sellFiatTotal = Number(stats.sell_fiat_total || 0);
   const netCashFlowFiat = sellFiatTotal - buyFiatTotal;
 
+  // Métricas operativas de órdenes
+  const completedOrdersCount = Number(stats.completed_orders ?? stats.total_orders ?? orders.length);
+  const buyOrdersCount = Number(stats.buy_count || 0);
+  const sellOrdersCount = Number(stats.sell_count || 0);
+  const cancelledOrdersCount = Number(stats.cancelled_orders || 0);
+  const completionRatePct = stats.completion_rate_pct != null ? Number(stats.completion_rate_pct) : null;
+  const avgTicketUsdt = completedOrdersCount > 0 ? Number(stats.total_usdt_volume || 0) / completedOrdersCount : 0;
+
   return (
     <div className="space-y-4">
       {/* Barra Flotante Compacta de Filtros Históricos (Período, Rango, Moneda Fiat y Exportar) */}
@@ -294,7 +302,7 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
       />
 
       {/* Tarjetas de Resumen Acumulado del Período (Estilo Dashboard Principal: Compactas, Sobrias y Tipografía Uniforme) */}
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
         {/* Card 1: Ganancia Neta Acumulada (P&L) */}
         <div className="relative flex flex-col justify-between overflow-hidden rounded-xl border border-slate-800/90 bg-slate-900/60 p-4 shadow-md">
           <div>
@@ -524,6 +532,71 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
                 <span className="inline-flex items-center gap-1 text-slate-400">
                   <span>Bancos:</span>
                   <span className="tabular-nums font-medium text-slate-300">{fmtFiat(stats.estimated_bank_fees_fiat)} {fiat}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 6: Órdenes & Operatividad del Período */}
+        <div className="relative flex flex-col justify-between overflow-hidden rounded-xl border border-slate-800/90 bg-slate-900/60 p-4 shadow-md">
+          <div>
+            {/* Cabecera uniforme */}
+            <div className="min-h-[38px] flex flex-col justify-center">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Órdenes & Operativa
+              </span>
+              <span
+                className="block text-[11px] text-slate-500 mt-0.5 truncate"
+                title={
+                  completionRatePct != null
+                    ? `${completionRatePct}% efectividad · ${cancelledOrdersCount} canceladas`
+                    : 'Actividad de órdenes en el período'
+                }
+              >
+                {completionRatePct != null ? (
+                  <>
+                    <strong className="text-slate-300 font-semibold">{completionRatePct}%</strong> efectividad
+                    {cancelledOrdersCount > 0 && (
+                      <span className="text-slate-400"> · {cancelledOrdersCount} canc.</span>
+                    )}
+                  </>
+                ) : (
+                  'Actividad de órdenes en el período'
+                )}
+              </span>
+            </div>
+
+            {/* Métrica principal y dato secundario */}
+            <div className="mt-2.5">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-2xl font-bold tracking-tight text-white tabular-nums block">
+                  {completedOrdersCount} <span className="text-xs font-sans font-normal text-slate-400">órdenes</span>
+                </span>
+                {avgTicketUsdt > 0 && (
+                  <span
+                    className="text-xs tabular-nums text-slate-400 cursor-help"
+                    title={`Ticket promedio: ~${fmtUsdt(avgTicketUsdt)} USDT por orden completada`}
+                  >
+                    (~{fmtUsdt(avgTicketUsdt)} USDT/ord)
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 min-h-[20px] flex items-center flex-wrap gap-x-1.5 text-xs text-slate-400">
+                <span
+                  className="inline-flex items-center gap-1 text-emerald-400 cursor-help"
+                  title={`Compras completadas: ${buyOrdersCount}`}
+                >
+                  <ArrowDownRight className="h-3.5 w-3.5 shrink-0" />
+                  <span className="tabular-nums font-medium">{buyOrdersCount} comp.</span>
+                </span>
+                <span className="text-slate-600 select-none">·</span>
+                <span
+                  className="inline-flex items-center gap-1 text-amber-400 cursor-help"
+                  title={`Ventas completadas: ${sellOrdersCount}`}
+                >
+                  <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                  <span className="tabular-nums font-medium">{sellOrdersCount} vent.</span>
                 </span>
               </div>
             </div>
