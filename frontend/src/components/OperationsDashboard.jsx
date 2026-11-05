@@ -103,8 +103,11 @@ export default function OperationsDashboard({
     });
   };
 
-  const fetchTodayDashboard = useCallback(async () => {
-    setLoading(true);
+  const fetchTodayDashboard = useCallback(async (isInitial = false) => {
+    // Si es la carga inicial (no hay datos aún), mostramos loading completo
+    if (isInitial || !data) {
+      setLoading(true);
+    }
     try {
       const queryParams = {
         only_today: true,
@@ -126,11 +129,11 @@ export default function OperationsDashboard({
     } finally {
       setLoading(false);
     }
-  }, [orderType, orderStatus, selectedAsset, fiatCurrency, bankFeePct, onPairsDetected]);
+  }, [data, orderType, orderStatus, selectedAsset, fiatCurrency, bankFeePct, onPairsDetected]);
 
   useEffect(() => {
     fetchTodayDashboard();
-  }, [fetchTodayDashboard, refreshTrigger]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, bankFeePct, refreshTrigger]);
 
   const fetchMarketStats = useCallback(
     async (force = false, bank = null, amount = null) => {

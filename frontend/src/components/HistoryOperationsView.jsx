@@ -69,8 +69,10 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   // Control para colapsar/expandir el desglose multi-día
   const [showDailyBreakdown, setShowDailyBreakdown] = useState(true);
 
-  const fetchHistory = useCallback(async () => {
-    setLoading(true);
+  const fetchHistory = useCallback(async (isInitial = false) => {
+    if (isInitial || !data) {
+      setLoading(true);
+    }
     try {
       const filters = {
         only_today: false,
@@ -97,11 +99,11 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
     } finally {
       setLoading(false);
     }
-  }, [orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct]);
+  }, [data, orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct]);
 
   useEffect(() => {
     fetchHistory();
-  }, [fetchHistory, refreshTrigger]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct, refreshTrigger]);
 
   // Sincronizar automáticamente la tasa de comisión bancaria configurada en los ajustes de bancos
   useEffect(() => {
@@ -780,7 +782,16 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
           loading={loading}
           tableSearch={tableSearch}
           onClearSearch={() => setTableSearch('')}
-          emptyMessage="No se encontraron operaciones históricas con los filtros seleccionados."
+          emptyMessage={
+            <div className="mx-auto max-w-md space-y-2 py-4">
+              <p className="text-sm font-medium text-slate-300">
+                No se encontraron operaciones registradas en el período seleccionado.
+              </p>
+              <p className="text-xs text-slate-500">
+                Prueba ajustando el rango de fechas, los filtros de tipo/estado o seleccionando el botón &ldquo;Todo el historial&rdquo;.
+              </p>
+            </div>
+          }
         />
 
         <TablePaginator
