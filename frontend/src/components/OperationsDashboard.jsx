@@ -137,7 +137,7 @@ export default function OperationsDashboard({
 
   const fetchMarketStats = useCallback(
     async (force = false, bank = null, amount = null) => {
-      setMarketLoading((prev) => (marketData ? false : true));
+      setMarketLoading((prev) => (prev ? prev : false));
       try {
         const savedBank = bank !== null ? bank : localStorage.getItem('p2p_chart_bank') || 'ALL';
         const savedAmount = amount !== null ? amount : localStorage.getItem('p2p_chart_amount') || '';
@@ -155,29 +155,38 @@ export default function OperationsDashboard({
         setMarketData(json);
         setMarketError(null);
       } catch (err) {
-        if (!marketData) {
-          setMarketError(err.message);
-        }
+        setMarketError((prev) => prev || err.message);
       } finally {
         setMarketLoading(false);
       }
     },
-    [selectedAsset, fiatCurrency, marketData]
+    [selectedAsset, fiatCurrency]
   );
 
   useEffect(() => {
     fetchMarketStats(false);
   }, [fetchMarketStats, refreshTrigger]);
 
-  // Auto-refresco en memoria cada 6 segundos (se pausa automáticamente si la pestaña no está visible)
+  // Auto-refresco dinámico con jitter aleatorio entre 15 y 20 segundos (se pausa si la pestaña no está visible)
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) {
-        return; // No saturar la red ni la API si la pestaña está en segundo plano o minimizada
-      }
-      fetchMarketStats(false);
-    }, 6000);
-    return () => clearInterval(timer);
+    let timerId = null;
+
+    const scheduleNextPoll = () => {
+      // Intervalo aleatorio entre 15.000 ms y 20.000 ms
+      const randomInterval = Math.floor(Math.random() * (20000 - 15000 + 1)) + 15000;
+      timerId = setTimeout(async () => {
+        if (typeof document === 'undefined' || !document.hidden) {
+          await fetchMarketStats(false);
+        }
+        scheduleNextPoll();
+      }, randomInterval);
+    };
+
+    scheduleNextPoll();
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
   }, [fetchMarketStats]);
 
   // Reiniciar a la primera página cuando cambian los filtros o el buscador de tabla
