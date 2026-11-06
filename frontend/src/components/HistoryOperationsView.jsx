@@ -20,23 +20,27 @@ import {
 } from 'lucide-react';
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
-import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
+import OrdersToolbar from './OrdersToolbar';
 import OperationsFilterBar from './history/OperationsFilterBar';
 import HistoryKpiCards from './history/HistoryKpiCards';
 import { fmtDate } from '../utils/formatters';
 import { operationsApi } from '../services/api';
 import { Button, Input, Badge } from './ui';
 
-export default function HistoryOperationsView({ refreshTrigger, onNavigateFormulas }) {
+export default function HistoryOperationsView({
+  refreshTrigger,
+  onNavigateFormulas,
+  selectedAsset = 'USDT',
+  fiatCurrency = 'VES',
+  onPairsDetected,
+}) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Filtros de consulta histórica
   const [orderType, setOrderType] = useState('ALL');
   const [orderStatus, setOrderStatus] = useState('ALL');
-  const [selectedAsset, setSelectedAsset] = useState('USDT');
-  const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [activePreset, setActivePreset] = useState('TODAY');
   // Usar la fecha local del navegador (no UTC de toISOString) para evitar desfase de día
   const [startDate, setStartDate] = useState(() => {
@@ -59,7 +63,6 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
   const [tableSearch, setTableSearch] = useState('');
   const [copiedOrderId, setCopiedOrderId] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [isPairModalOpen, setIsPairModalOpen] = useState(false);
 
   // Paginación para la tabla de Rendimiento Diario y el Libro Histórico
   const [dailyPage, setDailyPage] = useState(1);
@@ -89,18 +92,15 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
       const json = await operationsApi.getOperations(filters);
       setData(json);
 
-      if (json?.default_asset && !localStorage.getItem('user_custom_asset_selected')) {
-        setSelectedAsset(json.default_asset);
-      }
-      if (json?.default_fiat && !localStorage.getItem('user_custom_fiat_selected')) {
-        setFiatCurrency(json.default_fiat);
+      if (json?.available_assets && onPairsDetected) {
+        onPairsDetected(json.available_assets, json.available_fiats || ['VES']);
       }
     } catch (err) {
       console.error('Error cargando histórico de operaciones:', err);
     } finally {
       setLoading(false);
     }
-  }, [data, orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct]);
+  }, [data, orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct, onPairsDetected]);
 
   useEffect(() => {
     fetchHistory();
@@ -294,9 +294,6 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
         setStartDate={setStartDate}
         endDate={endDate}
         setEndDate={setEndDate}
-        selectedAsset={selectedAsset}
-        fiatCurrency={fiatCurrency}
-        onOpenPairModal={() => setIsPairModalOpen(true)}
         onNavigateFormulas={onNavigateFormulas}
         onExportExcel={handleExportExcel}
         ordersCount={orders.length}
@@ -463,98 +460,17 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
       {/* Libro Histórico de Operaciones P2P */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
         {/* Barra de Filtros y Búsqueda sobre la tabla con todo el ancho disponible */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Filtros de la tabla (Tipo y Estado con badges de conteo) */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Filtro: Tipo de Orden */}
-            <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs shadow-xs">
-              {[
-                { id: 'ALL', label: 'Todas' },
-                { id: 'COMPRA', label: 'Compras' },
-                { id: 'VENTA', label: 'Ventas' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setOrderType(tab.id)}
-                  className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
-                    orderType === tab.id
-                      ? tab.id === 'COMPRA'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold'
-                        : tab.id === 'VENTA'
-                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold'
-                        : 'bg-slate-800 text-white shadow'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Filtro: Estado de Orden */}
-            <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs shadow-xs">
-              {[
-                {
-                  id: 'ALL',
-                  label: `Todos (${stats.all_orders_count ?? orders.length})`,
-                },
-                {
-                  id: 'COMPLETED',
-                  label: `Completadas (${stats.completed_orders ?? stats.total_orders ?? 0})`,
-                },
-                {
-                  id: 'IN_PROGRESS',
-                  label: `En Proceso (${stats.in_progress_orders ?? 0})`,
-                },
-                {
-                  id: 'CANCELLED',
-                  label: `Canceladas (${stats.cancelled_orders ?? 0})`,
-                },
-              ].map((stTab) => (
-                <button
-                  key={stTab.id}
-                  onClick={() => setOrderStatus(stTab.id)}
-                  className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
-                    orderStatus === stTab.id
-                      ? stTab.id === 'CANCELLED'
-                        ? 'bg-slate-800 text-slate-300 border border-slate-700 font-semibold line-through'
-                        : stTab.id === 'IN_PROGRESS'
-                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold'
-                        : stTab.id === 'COMPLETED'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
-                        : 'bg-slate-800 text-white shadow'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {stTab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Buscador de Orden Específica */}
-          <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-            <Input
-              type="text"
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
-              placeholder="Buscar por ID, contraparte, monto..."
-              icon={Search}
-              rightElement={
-                tableSearch ? (
-                  <button
-                    type="button"
-                    onClick={() => setTableSearch('')}
-                    title="Limpiar búsqueda"
-                    className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null
-              }
-            />
-          </div>
-        </div>
+        <OrdersToolbar
+          orderType={orderType}
+          onOrderTypeChange={setOrderType}
+          orderStatus={orderStatus}
+          onOrderStatusChange={setOrderStatus}
+          stats={stats}
+          ordersCount={orders.length}
+          tableSearch={tableSearch}
+          onTableSearchChange={setTableSearch}
+          onClearSearch={() => setTableSearch('')}
+        />
 
         <OperationsTable
           orders={paginatedOrders}
@@ -597,22 +513,6 @@ export default function HistoryOperationsView({ refreshTrigger, onNavigateFormul
         bankFeePct={bankFeePct}
         wacBuyPrice={stats.wac_buy_price}
         wapSellPrice={stats.wap_sell_price}
-      />
-
-      {/* Modal Selector de Par de Mercado */}
-      <MarketPairModal
-        isOpen={isPairModalOpen}
-        onClose={() => setIsPairModalOpen(false)}
-        selectedAsset={selectedAsset}
-        selectedFiat={fiatCurrency}
-        availableAssets={data?.available_assets || ['USDT']}
-        availableFiats={data?.available_fiats || ['VES']}
-        onSelectPair={(newAsset, newFiat) => {
-          localStorage.setItem('user_custom_asset_selected', 'true');
-          localStorage.setItem('user_custom_fiat_selected', 'true');
-          setSelectedAsset(newAsset);
-          setFiatCurrency(newFiat);
-        }}
       />
     </div>
   );

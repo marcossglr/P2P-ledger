@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Button, Select } from './ui';
 
-export default function TablePaginator({
+function TablePaginator({
   totalItems = 0,
   currentPage = 1,
   pageSize = 10,
@@ -64,7 +64,7 @@ export default function TablePaginator({
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500">·</span>
             <label className="text-slate-400">Filas:</label>
-            <div className="w-18">
+            <div className="w-20">
               <Select
                 value={pageSize}
                 onChange={(e) => {
@@ -153,3 +153,5 @@ export default function TablePaginator({
     </div>
   );
 }
+
+export default memo(TablePaginator);

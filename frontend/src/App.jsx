@@ -471,6 +471,12 @@ export default function App() {
             <HistoryOperationsView
               refreshTrigger={refreshTrigger}
               onNavigateFormulas={() => openSettings('DOCS')}
+              selectedAsset={selectedAsset}
+              fiatCurrency={fiatCurrency}
+              onPairsDetected={(assets, fiats) => {
+                if (assets?.length) setAvailableAssets(assets);
+                if (fiats?.length) setAvailableFiats(fiats);
+              }}
             />
           </div>
         )}

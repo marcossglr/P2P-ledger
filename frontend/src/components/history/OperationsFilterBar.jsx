@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import {
   CalendarDays,
   Calendar,
-  ChevronDown,
   Calculator,
   Download,
   X,
@@ -17,9 +16,6 @@ export default function OperationsFilterBar({
   setStartDate,
   endDate,
   setEndDate,
-  selectedAsset,
-  fiatCurrency,
-  onOpenPairModal,
   onNavigateFormulas,
   onExportExcel,
   ordersCount = 0,
@@ -27,8 +23,10 @@ export default function OperationsFilterBar({
   const startInputRef = useRef(null);
   const endInputRef = useRef(null);
 
+  const isCustom = activePreset === 'CUSTOM';
+
   const openDatePicker = (ref) => {
-    if (!ref?.current) return;
+    if (!isCustom || !ref?.current) return;
     if (typeof ref.current.showPicker === 'function') {
       try {
         ref.current.showPicker();
@@ -61,76 +59,91 @@ export default function OperationsFilterBar({
           </Select>
         </div>
 
-        {/* Rango de fechas manual (visible únicamente cuando activePreset === 'CUSTOM') */}
-        {activePreset === 'CUSTOM' && (
-          <div className="flex h-8 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-slate-900/90 px-2.5 text-xs shadow-xs animate-in fade-in duration-150">
-            {/* Fecha Inicio con máscara DD/MM/AAAA */}
-            <div
-              onClick={() => openDatePicker(startInputRef)}
-              className="relative flex items-center gap-1 cursor-pointer group"
-              title="Clic para seleccionar fecha de inicio"
+        {/* Rango de fechas: editable cuando activePreset === 'CUSTOM', inactivo/referencial en otros presets */}
+        <div
+          className={`flex h-8 items-center gap-2 rounded-xl border px-3 text-xs shadow-xs transition-all ${
+            isCustom
+              ? 'border-amber-500/30 bg-slate-900/90'
+              : 'border-slate-800 bg-slate-900/40 opacity-70 select-none'
+          }`}
+        >
+          {/* Fecha Inicio con máscara DD/MM/AAAA */}
+          <div
+            onClick={() => isCustom && openDatePicker(startInputRef)}
+            className={`relative flex items-center gap-1.5 py-0.5 ${
+              isCustom ? 'cursor-pointer group' : 'cursor-not-allowed'
+            }`}
+            title={isCustom ? 'Clic para seleccionar fecha de inicio' : 'Activa el filtro "Personalizado..." para modificar las fechas'}
+          >
+            <Calendar
+              className={`h-3.5 w-3.5 shrink-0 transition-colors ${
+                isCustom ? 'text-amber-400 group-hover:text-amber-300' : 'text-slate-500'
+              }`}
+            />
+            <span
+              className={`font-mono text-xs tabular-nums tracking-wide transition-colors ${
+                isCustom ? 'text-slate-200 group-hover:text-white' : 'text-slate-400'
+              }`}
             >
-              <Calendar className="h-3 w-3 text-amber-400/80 group-hover:text-amber-300 transition-colors shrink-0" />
-              <span className="font-mono text-xs text-slate-200 group-hover:text-white tabular-nums transition-colors">
-                {startDate ? fmtDate(startDate) : 'DD/MM/AAAA'}
-              </span>
-              <input
-                ref={startInputRef}
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden="true"
-              />
-            </div>
+              {startDate ? fmtDate(startDate) : '--/--/----'}
+            </span>
+            <input
+              ref={startInputRef}
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              disabled={!isCustom}
+              className="sr-only"
+              tabIndex={isCustom ? 0 : -1}
+              aria-hidden="true"
+            />
+          </div>
 
-            <span className="text-slate-500 text-xs select-none">→</span>
+          <span className="text-slate-600 text-xs select-none px-0.5">→</span>
 
-            {/* Fecha Fin con máscara DD/MM/AAAA */}
-            <div
-              onClick={() => openDatePicker(endInputRef)}
-              className="relative flex items-center gap-1 cursor-pointer group"
-              title="Clic para seleccionar fecha de fin"
+          {/* Fecha Fin con máscara DD/MM/AAAA */}
+          <div
+            onClick={() => isCustom && openDatePicker(endInputRef)}
+            className={`relative flex items-center gap-1.5 py-0.5 ${
+              isCustom ? 'cursor-pointer group' : 'cursor-not-allowed'
+            }`}
+            title={isCustom ? 'Clic para seleccionar fecha de fin' : 'Activa el filtro "Personalizado..." para modificar las fechas'}
+          >
+            <Calendar
+              className={`h-3.5 w-3.5 shrink-0 transition-colors ${
+                isCustom ? 'text-amber-400 group-hover:text-amber-300' : 'text-slate-500'
+              }`}
+            />
+            <span
+              className={`font-mono text-xs tabular-nums tracking-wide transition-colors ${
+                isCustom ? 'text-slate-200 group-hover:text-white' : 'text-slate-400'
+              }`}
             >
-              <Calendar className="h-3 w-3 text-amber-400/80 group-hover:text-amber-300 transition-colors shrink-0" />
-              <span className="font-mono text-xs text-slate-200 group-hover:text-white tabular-nums transition-colors">
-                {endDate ? fmtDate(endDate) : 'DD/MM/AAAA'}
-              </span>
-              <input
-                ref={endInputRef}
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden="true"
-              />
-            </div>
+              {endDate ? fmtDate(endDate) : '--/--/----'}
+            </span>
+            <input
+              ref={endInputRef}
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              disabled={!isCustom}
+              className="sr-only"
+              tabIndex={isCustom ? 0 : -1}
+              aria-hidden="true"
+            />
+          </div>
 
+          {isCustom && (
             <Button
               variant="ghost"
               size="icon-xs"
               onClick={() => applyDatePreset('TODAY')}
               title="Cerrar personalizado y volver a Hoy"
               icon={X}
+              className="ml-0.5 -mr-1 text-slate-400 hover:text-rose-400"
             />
-          </div>
-        )}
-
-        {/* Botón Selector Unificado de Par de Mercado (Cripto / Fiat) */}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onOpenPairModal}
-          title="Cambiar Criptoactivo y Moneda Fiat de análisis"
-          className="group"
-        >
-          <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{selectedAsset}</span>
-          <span className="text-slate-500">/</span>
-          <span className="font-mono text-slate-200 group-hover:text-white transition-colors">{fiatCurrency}</span>
-          <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
-        </Button>
+          )}
+        </div>
       </div>
 
       {/* Extremo derecho: Acciones de Documentación y Exportar con separación limpia */}

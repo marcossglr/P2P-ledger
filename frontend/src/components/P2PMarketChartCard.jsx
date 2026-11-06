@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, memo } from 'react';
 import {
   RefreshCw,
   SlidersHorizontal,
@@ -26,7 +26,7 @@ const AMOUNT_PRESETS = [
   { label: '250k', val: '250000' },
 ];
 
-export default function P2PMarketChartCard({
+function P2PMarketChartCard({
   marketData,
   marketLoading,
   marketError,
@@ -905,3 +905,5 @@ export default function P2PMarketChartCard({
     </div>
   );
 }
+
+export default memo(P2PMarketChartCard);

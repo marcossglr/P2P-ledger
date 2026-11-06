@@ -1,24 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  ArrowUpRight,
-  ArrowDownRight,
-  Scale,
-  Receipt,
-  Search,
   RefreshCw,
   Sparkles,
   Trash2,
   History,
-  X,
-  Copy,
-  Check,
-  TrendingUp,
   ListFilter,
-  Megaphone,
-  Radio,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
@@ -27,8 +13,23 @@ import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
 import P2PMarketChartCard from './P2PMarketChartCard';
 import OperationsKpiCards from './dashboard/OperationsKpiCards';
-import { operationsApi, binanceApi } from '../services/api';
-import { Button, Input, Badge } from './ui';
+import MyAdsSection from './dashboard/MyAdsSection';
+import TodayOrdersToolbar from './dashboard/TodayOrdersToolbar';
+import { useP2PMarketBoard } from '../hooks/useP2PMarketBoard';
+import { useOperationsDashboard } from '../hooks/useOperationsDashboard';
+import {
+  computeOperationsMetrics,
+  buildDailySummaryText,
+  fmtFiat,
+  fmtUsdt,
+  fmtRate,
+} from '../utils/operationsMetrics';
+import { Button } from './ui';
+
+// Constantes referenciales vacías para evitar re-renders por props inestables ([])
+const EMPTY_ARRAY = [];
+const DEFAULT_AVAILABLE_ASSETS = ['USDT'];
+const DEFAULT_AVAILABLE_FIATS = ['VES'];
 
 export default function OperationsDashboard({
   onOpenApiModal,
@@ -42,18 +43,24 @@ export default function OperationsDashboard({
   fiatCurrency = 'VES',
   onPairsDetected,
 }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // Estado para Estadísticas y Gráfica del Mercado P2P en vivo (API Pública)
-  const [marketData, setMarketData] = useState(null);
-  const [marketLoading, setMarketLoading] = useState(false);
-  const [marketError, setMarketError] = useState(null);
-
   // Filtros rápidos exclusivos para la jornada de hoy
   const [orderType, setOrderType] = useState('ALL');
   const [orderStatus, setOrderStatus] = useState('ALL');
-  const [bankFeePct, setBankFeePct] = useState(0.3);
+
+  // Hook central de datos del dashboard de hoy
+  const {
+    data,
+    loading,
+    bankFeePct,
+    handleSeedDemo,
+    handleClearDemo,
+    updateBankInventory,
+  } = useOperationsDashboard({
+    selectedAsset,
+    fiatCurrency,
+    refreshTrigger,
+    onPairsDetected,
+  });
 
   // Buscador local directo en la tabla de Operaciones Ejecutadas y orden seleccionada
   const [tableSearch, setTableSearch] = useState('');
@@ -75,167 +82,54 @@ export default function OperationsDashboard({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Control para colapsar/expandir la sección de Mis Anuncios
-  const [isAdsExpanded, setIsAdsExpanded] = useState(() => {
-    const saved = localStorage.getItem('p2p_ads_expanded');
-    return saved !== null ? saved === 'true' : true;
-  });
-
-  // Control para colapsar/expandir la sección de Mercado P2P (Gráfica / Pizarra)
-  const [isMarketExpanded, setIsMarketExpanded] = useState(() => {
-    const saved = localStorage.getItem('p2p_market_expanded');
-    return saved !== null ? saved === 'true' : true;
-  });
-
-  const toggleMarketExpanded = () => {
-    setIsMarketExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem('p2p_market_expanded', String(next));
-      return next;
-    });
-  };
-
-  const toggleAdsExpanded = () => {
-    setIsAdsExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem('p2p_ads_expanded', String(next));
-      return next;
-    });
-  };
-
-  const fetchTodayDashboard = useCallback(async (isInitial = false) => {
-    // Si es la carga inicial (no hay datos aún), mostramos loading completo
-    if (isInitial || !data) {
-      setLoading(true);
-    }
-    try {
-      const queryParams = {
-        only_today: true,
-        bank_fee_pct: bankFeePct || 0,
-      };
-      if (orderType !== 'ALL') queryParams.order_type = orderType;
-      if (orderStatus !== 'ALL') queryParams.order_status = orderStatus;
-      if (selectedAsset !== 'ALL') queryParams.asset = selectedAsset;
-      if (fiatCurrency !== 'ALL') queryParams.fiat_currency = fiatCurrency;
-
-      const json = await operationsApi.getOperations(queryParams);
-      setData(json);
-
-      if (json?.available_assets && onPairsDetected) {
-        onPairsDetected(json.available_assets, json.available_fiats || ['VES']);
-      }
-    } catch (err) {
-      console.error('Error cargando operaciones de hoy:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [data, orderType, orderStatus, selectedAsset, fiatCurrency, bankFeePct, onPairsDetected]);
-
-  useEffect(() => {
-    fetchTodayDashboard();
-  }, [orderType, orderStatus, selectedAsset, fiatCurrency, bankFeePct, refreshTrigger]);
-
-  const fetchMarketStats = useCallback(
-    async (force = false, bank = null, amount = null) => {
-      setMarketLoading((prev) => (prev ? prev : false));
-      try {
-        const savedBank = bank !== null ? bank : localStorage.getItem('p2p_chart_bank') || 'ALL';
-        const savedAmount = amount !== null ? amount : localStorage.getItem('p2p_chart_amount') || '';
-
-        const queryParams = {
-          include_ads: true,
-        };
-        if (selectedAsset && selectedAsset !== 'ALL') queryParams.asset = selectedAsset;
-        if (fiatCurrency && fiatCurrency !== 'ALL') queryParams.fiat = fiatCurrency;
-        if (savedBank && savedBank !== 'ALL') queryParams.bank = savedBank;
-        if (savedAmount && Number(savedAmount) > 0) queryParams.amount = Number(savedAmount);
-        if (force) queryParams.force = true;
-
-        const json = await binanceApi.getPublicMarketStats(queryParams);
-        setMarketData(json);
-        setMarketError(null);
-      } catch (err) {
-        setMarketError((prev) => prev || err.message);
-      } finally {
-        setMarketLoading(false);
-      }
-    },
-    [selectedAsset, fiatCurrency]
-  );
-
-  useEffect(() => {
-    fetchMarketStats(false);
-  }, [fetchMarketStats, refreshTrigger]);
-
-  // Auto-refresco dinámico con jitter aleatorio entre 15 y 20 segundos (se pausa si la pestaña no está visible)
-  useEffect(() => {
-    let timerId = null;
-
-    const scheduleNextPoll = () => {
-      // Intervalo aleatorio entre 15.000 ms y 20.000 ms
-      const randomInterval = Math.floor(Math.random() * (20000 - 15000 + 1)) + 15000;
-      timerId = setTimeout(async () => {
-        if (typeof document === 'undefined' || !document.hidden) {
-          await fetchMarketStats(false);
-        }
-        scheduleNextPoll();
-      }, randomInterval);
-    };
-
-    scheduleNextPoll();
-
-    return () => {
-      if (timerId) clearTimeout(timerId);
-    };
-  }, [fetchMarketStats]);
-
   // Reiniciar a la primera página cuando cambian los filtros o el buscador de tabla
   useEffect(() => {
     setCurrentPage(1);
   }, [orderType, orderStatus, selectedAsset, fiatCurrency, tableSearch]);
 
-  const handleSeedDemo = async () => {
-    await operationsApi.seedDemo();
-    fetchTodayDashboard();
-  };
-
-  const handleClearDemo = async () => {
-    await operationsApi.clearOperations(true);
-    fetchTodayDashboard();
-  };
-
-  // Sincronizar automáticamente la tasa de comisión configurada en los ajustes de bancos
-  useEffect(() => {
-    const acc =
-      data?.bank_inventory?.accounts?.find((a) => a.is_default) ||
-      data?.bank_inventory?.accounts?.[0];
-    if (acc?.pago_movil_fee_pct != null && Number(acc.pago_movil_fee_pct) !== bankFeePct) {
-      setBankFeePct(Number(acc.pago_movil_fee_pct));
-    }
-  }, [data, bankFeePct]);
-
-  const handleCopyOrderNumber = (orderNumber) => {
-    navigator.clipboard?.writeText(orderNumber)?.catch(() => {});
-    setCopiedOrderId(orderNumber);
-    setTimeout(() => setCopiedOrderId(null), 1800);
-  };
-
-  const [copiedAdPriceId, setCopiedAdPriceId] = useState(null);
-  const handleCopySuggestedPrice = (e, advNo, priceVal) => {
-    e.stopPropagation();
-    if (priceVal == null) return;
-    navigator.clipboard?.writeText(Number(priceVal).toFixed(2))?.catch(() => {});
-    setCopiedAdPriceId(advNo);
-    setTimeout(() => setCopiedAdPriceId(null), 1800);
-  };
+  // Callbacks memorizados para estabilidad de renderizado
+  const handleClearSearch = useCallback(() => setTableSearch(''), []);
+  const handleCloseOrderDetails = useCallback(() => setSelectedOrder(null), []);
+  const handleCloseReconcileModal = useCallback(
+    () => setReconcileModal((prev) => ({ ...prev, open: false })),
+    []
+  );
+  const handleClosePairModal = useCallback(() => setIsPairModalOpen(false), []);
+  const handleOpenReconcileModal = useCallback(() => {
+    setReconcileModal({
+      open: true,
+      accountId: data?.bank_inventory?.accounts?.[0]?.id || null,
+      tab: 'SINGLE',
+    });
+  }, [data?.bank_inventory?.accounts]);
+  const handleNavigateConnections = useCallback(() => {
+    if (onNavigateSettings) onNavigateSettings('CONNECTIONS');
+  }, [onNavigateSettings]);
 
   const stats = data?.analytics || {};
   const orders = data?.orders || [];
 
   const filteredOrders = useMemo(() => {
+    let result = orders;
+
+    // 1. Filtrar por tipo de orden (Compras / Ventas)
+    if (orderType !== 'ALL') {
+      result = result.filter((o) => o.order_type === orderType);
+    }
+
+    // 2. Filtrar por estado de la orden
+    if (orderStatus !== 'ALL') {
+      result = result.filter((o) => {
+        const st = (o.order_status || 'COMPLETED').toUpperCase();
+        return st === orderStatus;
+      });
+    }
+
+    // 3. Filtrar por texto de búsqueda
     const q = tableSearch.trim().toLowerCase().replace(/^#/, '');
-    if (!q) return orders;
-    return orders.filter((o) => {
+    if (!q) return result;
+
+    return result.filter((o) => {
       const orderNum = String(o.order_number || '').toLowerCase();
       const counterparty = String(o.counterparty || '').toLowerCase();
       const payMethod = String(o.pay_method || '').toLowerCase();
@@ -251,7 +145,7 @@ export default function OperationsDashboard({
         unitPrice.includes(q)
       );
     });
-  }, [orders, tableSearch]);
+  }, [orders, orderType, orderStatus, tableSearch]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -263,186 +157,40 @@ export default function OperationsDashboard({
   const fiat = stats.primary_fiat || 'VES';
   const cryptoAsset = stats.target_asset || selectedAsset || 'USDT';
 
-  const fmtFiat = (n) =>
-    Number(n || 0).toLocaleString('es-ES', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-  const fmtUsdt = (n) =>
-    Number(n || 0).toLocaleString('es-ES', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-  const fmtRate = (n) =>
-    Number(n || 0).toLocaleString('es-ES', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 4,
-    });
-
-  // --- Métricas derivadas con prioridad principal en USDT y secundaria en Fiat (Bs) ---
-  const refRate =
-    Number(stats.wac_buy_price) > 0
-      ? Number(stats.wac_buy_price)
-      : Number(stats.wap_sell_price) > 0
-      ? Number(stats.wap_sell_price)
-      : Number(data?.bank_inventory?.consolidated?.reference_rate || 1);
-
-  // Ganancia bruta contable en USDT
-  const grossProfitUsdt =
-    refRate > 0 ? (stats.gross_profit_fiat || 0) / refRate : 0;
-
-  // Comisiones bancarias convertidas a USDT
-  const bankFeesUsdt =
-    refRate > 0 ? (stats.estimated_bank_fees_fiat || 0) / refRate : 0;
-
-  // Total de comisiones unificadas en USDT y en Fiat
-  const totalCommissionsAllUsdt =
-    (stats.total_commission_usdt || 0) + bankFeesUsdt;
-  const totalCommissionsAllFiat =
-    (stats.commission_fiat_cost || 0) + (stats.estimated_bank_fees_fiat || 0);
-
-  // Margen neto % sobre el volumen USDT realmente arbitrado
-  const matchedUsdt = Number(stats.matched_usdt_volume || 0);
-  const netMarginPct =
-    matchedUsdt > 0 ? ((stats.net_profit_usdt || 0) / matchedUsdt) * 100 : 0;
-
-  // Tasa de venta Breakeven (punto de equilibrio con comisiones)
-  const breakevenSellRate =
-    Number(stats.wac_buy_price || 0) > 0 && matchedUsdt > 0
-      ? Number(stats.wac_buy_price) + totalCommissionsAllFiat / matchedUsdt
-      : Number(stats.wac_buy_price || 0);
-
-  // Ticket promedio por operación en USDT
-  const completedCount = Number(
-    stats.completed_orders ?? stats.total_orders ?? orders.length ?? 0
-  );
-  const avgTicketUsdt =
-    completedCount > 0
-      ? Number(stats.total_usdt_volume || 0) / completedCount
-      : 0;
-
-  // Saldo bancario consolidado
-  const totalBankBs = Number(
-    data?.bank_inventory?.consolidated?.total_calculated_balance_bs || 0
-  );
-  const totalBankUsdt = Number(
-    data?.bank_inventory?.consolidated?.equivalent_usdt ||
-      (refRate > 0 ? totalBankBs / refRate : 0)
+  // --- Métricas derivadas financieras consolidadas ---
+  const metrics = useMemo(
+    () =>
+      computeOperationsMetrics({
+        stats,
+        bankInventory: data?.bank_inventory,
+        fundingWallet: data?.funding_wallet,
+        ordersCount: orders.length,
+      }),
+    [stats, data?.bank_inventory, data?.funding_wallet, orders.length]
   );
 
-  // Fondos en Binance (Cuenta Fondos P2P)
-  const fundingWallet = data?.funding_wallet || {
-    free: 0,
-    locked: 0,
-    total: 0,
-    source: 'NONE',
-  };
-  const binanceFundingTotal = Number(fundingWallet.total || 0);
-  const binanceFundingFree = Number(fundingWallet.free || 0);
-  const binanceFundingLocked = Number(fundingWallet.locked || 0);
-
-  // Posición Consolidada Global (Binance Fondos USDT + Bancos en Bs convertidos a USDT)
-  const totalCapitalConsolidatedUsdt = binanceFundingTotal + totalBankUsdt;
-  const totalCapitalConsolidatedBs = totalCapitalConsolidatedUsdt * refRate;
-
-  // Evaluar cada uno de "Mis Anuncios" contra la pizarra en vivo de Binance P2P donde realmente aparece:
-  // - Tu anuncio de VENTA compite en la Pizarra "Comprar" (marketData.buy.ads, ordenada de menor a mayor)
-  // - Tu anuncio de COMPRA compite en la Pizarra "Vender" (marketData.sell.ads, ordenada de mayor a menor)
-  const evaluateMyAdOnBoard = useCallback(
-    (ad) => {
-      if (!ad || !marketData) return null;
-      const isBuyAd = ad.adv_type === 'COMPRA';
-      const rawBoardAds = isBuyAd ? marketData?.sell?.ads || [] : marketData?.buy?.ads || [];
-      if (rawBoardAds.length === 0) return null;
-
-      // Filtrar la pizarra por los bancos del anuncio (si hay coincidencias en el muestreo)
-      const adBanks = (ad.trade_methods || []).map((m) => String(m).toLowerCase());
-      let boardAds = rawBoardAds;
-      let matchedByBank = false;
-      if (adBanks.length > 0) {
-        const filteredByBank = rawBoardAds.filter((bAd) => {
-          const bMethods = [...(bAd.pay_methods || []), ...(bAd.pay_identifiers || [])].map((m) =>
-            String(m).toLowerCase()
-          );
-          return adBanks.some((ab) => bMethods.some((bm) => bm.includes(ab) || ab.includes(bm)));
-        });
-        if (filteredByBank.length > 0) {
-          boardAds = filteredByBank;
-          matchedByBank = true;
-        }
-      }
-
-      const myPrice = Number(ad.price || 0);
-      if (myPrice <= 0) return null;
-
-      const exactIdx = boardAds.findIndex(
-        (bAd) => bAd.adv_no && String(bAd.adv_no) === String(ad.adv_no)
-      );
-
-      // En Pizarra Vender (donde compite tu COMPRA) van primero los que pagan más (> myPrice).
-      // En Pizarra Comprar (donde compite tu VENTA) van primero los que venden más barato (< myPrice).
-      const aheadAds =
-        exactIdx >= 0
-          ? boardAds.slice(0, exactIdx)
-          : boardAds.filter((bAd) =>
-              isBuyAd ? Number(bAd.price) > myPrice : Number(bAd.price) < myPrice
-            );
-
-      const rank = exactIdx >= 0 ? exactIdx + 1 : aheadAds.length + 1;
-      const aheadUsdt = aheadAds.reduce((s, bAd) => s + Number(bAd.available_qty || 0), 0);
-      const bestBoardPrice = Number(boardAds[0]?.price || 0);
-      const deltaVsBest = bestBoardPrice > 0 ? myPrice - bestBoardPrice : null;
-
-      const suggestedRank1Price =
-        bestBoardPrice > 0
-          ? rank === 1
-            ? myPrice
-            : Number((isBuyAd ? bestBoardPrice + 0.01 : bestBoardPrice - 0.01).toFixed(2))
-          : null;
-
-      const isBelowBreakeven =
-        !isBuyAd &&
-        breakevenSellRate > 0 &&
-        suggestedRank1Price != null &&
-        suggestedRank1Price < breakevenSellRate;
-
-      return {
-        boardLabel: isBuyAd ? 'Pizarra Vender' : 'Pizarra Comprar',
-        rank,
-        aheadCount: aheadAds.length,
-        aheadUsdt,
-        bestBoardPrice,
-        deltaVsBest,
-        suggestedRank1Price,
-        isBelowBreakeven,
-        matchedByBank,
-      };
-    },
-    [marketData, breakevenSellRate]
-  );
+  // Hook del Mercado P2P en vivo y evaluación de competencia en pizarra
+  const {
+    marketData,
+    marketLoading,
+    marketError,
+    fetchMarketStats,
+    evaluateMyAdOnBoard,
+  } = useP2PMarketBoard({
+    selectedAsset: cryptoAsset,
+    fiatCurrency: fiat,
+    refreshTrigger,
+    breakevenSellRate: metrics.breakevenSellRate,
+  });
 
   // Copiar resumen del día estructurado para Telegram / WhatsApp
   const handleCopyDailySummary = () => {
-    const netProfitSign = Number(stats.net_profit_usdt || 0) > 0.005 ? '+' : '';
-    const marginText =
-      matchedUsdt > 0
-        ? ` [${netMarginPct > 0.005 ? '+' : ''}${netMarginPct.toFixed(2)}% margen]`
-        : '';
-    const spreadSign = Number(stats.spread_pct || 0) > 0.005 ? '+' : '';
-
-    const lines = [
-      `📊 Resumen de Jornada P2P (${serverToday})`,
-      `• Ganancia Neta: ${netProfitSign}${fmtUsdt(stats.net_profit_usdt)} USDT (${fmtFiat(stats.net_profit_fiat)} ${fiat})${marginText}`,
-      `• Volumen Operado: ${fmtUsdt(stats.total_usdt_volume)} USDT (${completedCount} órdenes)`,
-      `  ↳ Compras: ${fmtUsdt(stats.buy_usdt_total)} USDT · Ventas: ${fmtUsdt(stats.sell_usdt_total)} USDT`,
-      `• WAC Compra: ${fmtRate(stats.wac_buy_price)} | WAP Venta: ${fmtRate(stats.wap_sell_price)} | Spread: ${spreadSign}${Number(stats.spread_pct || 0).toFixed(2)}%`,
-      breakevenSellRate > 0 ? `• Tasa Piso Breakeven: ${fmtRate(breakevenSellRate)} ${fiat}` : null,
-      `• Posición Consolidada: ${fmtUsdt(totalCapitalConsolidatedUsdt)} USDT (incluye ${fmtFiat(totalBankBs)} ${fiat})`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const lines = buildDailySummaryText({
+      stats,
+      metrics,
+      serverToday,
+      fiat,
+    });
 
     navigator.clipboard?.writeText(lines)?.catch(() => {});
     setCopiedSummary(true);
@@ -520,16 +268,16 @@ export default function OperationsDashboard({
             marketData={marketData}
             marketLoading={marketLoading}
             marketError={marketError}
-            onRefresh={(force, b, a) => fetchMarketStats(force, b, a)}
-            onOpenSettings={() => onNavigateSettings && onNavigateSettings('CONNECTIONS')}
+            onRefresh={fetchMarketStats}
+            onOpenSettings={handleNavigateConnections}
             asset={cryptoAsset}
             fiat={fiat}
             wacBuyPrice={stats.wac_buy_price}
             wapSellPrice={stats.wap_sell_price}
-            breakevenRate={breakevenSellRate}
-            myAds={data?.my_ads || []}
+            breakevenRate={metrics.breakevenSellRate}
+            myAds={data?.my_ads || EMPTY_ARRAY}
             orders={orders}
-            myBankAccounts={data?.bank_inventory?.accounts || []}
+            myBankAccounts={data?.bank_inventory?.accounts || EMPTY_ARRAY}
           />
 
           {/* Tarjetas KPI de la Jornada (Ganancia, Spread, Volumen y Posición Consolidada) */}
@@ -537,21 +285,15 @@ export default function OperationsDashboard({
             stats={stats}
             cryptoAsset={cryptoAsset}
             fiat={fiat}
-            grossProfitUsdt={grossProfitUsdt}
-            totalCommissionsAllUsdt={totalCommissionsAllUsdt}
-            matchedUsdt={matchedUsdt}
-            netMarginPct={netMarginPct}
-            breakevenSellRate={breakevenSellRate}
-            completedCount={completedCount}
-            totalCapitalConsolidatedUsdt={totalCapitalConsolidatedUsdt}
-            totalBankBs={totalBankBs}
-            onOpenReconcileModal={() =>
-              setReconcileModal({
-                open: true,
-                accountId: data?.bank_inventory?.accounts?.[0]?.id || null,
-                tab: 'SINGLE',
-              })
-            }
+            grossProfitUsdt={metrics.grossProfitUsdt}
+            totalCommissionsAllUsdt={metrics.totalCommissionsAllUsdt}
+            matchedUsdt={metrics.matchedUsdt}
+            netMarginPct={metrics.netMarginPct}
+            breakevenSellRate={metrics.breakevenSellRate}
+            completedCount={metrics.completedCount}
+            totalCapitalConsolidatedUsdt={metrics.totalCapitalConsolidatedUsdt}
+            totalBankBs={metrics.totalBankBs}
+            onOpenReconcileModal={handleOpenReconcileModal}
             fmtUsdt={fmtUsdt}
             fmtFiat={fmtFiat}
             fmtRate={fmtRate}
@@ -563,289 +305,18 @@ export default function OperationsDashboard({
           ZONA INTERMEDIA: ANUNCIOS ACTIVOS EN BINANCE P2P
          ========================================================================= */}
       {apiConfigured && (
-        <section className="rounded-xl border border-slate-800 bg-slate-900/60 shadow-sm overflow-hidden transition-all">
-          {/* Cabecera interactiva / Acordeón Completo */}
-          <div
-            onClick={toggleAdsExpanded}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleAdsExpanded();
-              }
-            }}
-            className="flex w-full items-center justify-between gap-3 p-3.5 sm:px-4 cursor-pointer group select-none hover:bg-slate-850/50 transition-colors"
-            title={isAdsExpanded ? 'Clic para colapsar sección de anuncios' : 'Clic para expandir sección de anuncios'}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:border-amber-500/40 group-hover:bg-amber-500/20 transition-all shrink-0">
-                <Megaphone className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 group-hover:text-white transition-colors">
-                    Mis Anuncios en Binance P2P
-                  </h2>
-                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 shrink-0">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{(data?.my_ads || []).filter((a) => a.is_active).length} activos</span>
-                  </span>
-                </div>
-                {/* Resumen rápido visible cuando está colapsado */}
-                {!isAdsExpanded && data?.my_ads && data.my_ads.length > 0 && (
-                  <p className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-2 truncate">
-                    {data.my_ads.map((ad, idx) => {
-                      const boardInfo = ad.is_active ? evaluateMyAdOnBoard(ad) : null;
-                      return (
-                        <span key={ad.adv_no || idx} className="inline-flex items-center gap-1 text-slate-300">
-                          <strong className={ad.adv_type === 'COMPRA' ? 'text-emerald-400' : 'text-rose-400'}>
-                            {ad.adv_type}
-                          </strong>
-                          <span className="font-mono">{fmtUsdt(ad.surplus_amount)} {ad.asset}</span>
-                          <span className="text-slate-500">@</span>
-                          <span className="font-mono text-white">{fmtRate(ad.price)} {ad.fiat_unit}</span>
-                          {boardInfo && (
-                            <span
-                              className={`rounded px-1 py-0 text-[9px] font-bold ${
-                                boardInfo.rank === 1
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                  : 'bg-slate-800 text-amber-300 border border-slate-700'
-                              }`}
-                              title={`Aparece en ${boardInfo.boardLabel} de Binance en el puesto #${boardInfo.rank}`}
-                            >
-                              #{boardInfo.rank}
-                            </span>
-                          )}
-                          {idx < data.my_ads.length - 1 && <span className="text-slate-600">·</span>}
-                        </span>
-                      );
-                    })}
-                  </p>
-                )}
-                {isAdsExpanded && (
-                  <span className="block text-[11px] text-slate-500 mt-0.5">
-                    Estado en vivo de tus ofertas publicadas, saldo remanente y cotización configurada
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Indicador Chevron */}
-            <div className="flex items-center gap-1.5 text-slate-400 group-hover:text-slate-200 transition-colors shrink-0 pl-2">
-              <span className="hidden sm:inline text-[11px] font-medium text-slate-500 group-hover:text-slate-400">
-                {isAdsExpanded ? 'Colapsar' : 'Expandir'}
-              </span>
-              <ChevronDown
-                className={`h-4 w-4 transition-transform duration-200 ${
-                  isAdsExpanded ? 'rotate-180 text-amber-400' : 'text-slate-400'
-                }`}
-              />
-            </div>
-          </div>
-
-          {/* Tarjetas o Grid de Anuncios (Solo si está expandido) */}
-          {isAdsExpanded && (
-            <div className="border-t border-slate-800/80 p-3.5 sm:p-4 bg-slate-950/30">
-              {(!data?.my_ads || data.my_ads.length === 0) ? (
-                <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 text-center">
-                  <p className="text-xs text-slate-400">
-                    No tienes anuncios publicados o activos en este momento en tu cuenta de Binance P2P.
-                  </p>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    Cuando publiques un anuncio de compra o venta en Binance, aparecerá aquí con su saldo y precio.
-                  </span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {data.my_ads.map((ad) => {
-                    const isBuy = ad.adv_type === 'COMPRA';
-                    const isOnline = ad.is_active;
-                    const boardInfo = isOnline ? evaluateMyAdOnBoard(ad) : null;
-                    return (
-                      <div
-                        key={ad.adv_no}
-                        className={`relative rounded-xl border p-4 transition-all shadow-sm flex flex-col justify-between ${
-                          isOnline
-                            ? isBuy
-                              ? 'border-emerald-500/30 bg-slate-900/70 hover:border-emerald-500/50'
-                              : 'border-rose-500/30 bg-slate-900/70 hover:border-rose-500/50'
-                            : 'border-slate-800/80 bg-slate-900/30 opacity-75'
-                        }`}
-                      >
-                        {/* Fila Superior: Tipo, Moneda, Puesto y Estado */}
-                        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`rounded-md px-2 py-0.5 text-xs font-bold ${
-                                isBuy
-                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                              }`}
-                            >
-                              {ad.adv_type} {ad.asset}
-                            </span>
-                            <span className="text-xs font-semibold text-slate-300">
-                              / {ad.fiat_unit}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {boardInfo && (
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border ${
-                                  boardInfo.rank === 1
-                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                                    : boardInfo.rank <= 5
-                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                    : 'bg-slate-800 text-slate-300 border-slate-700'
-                                }`}
-                                title={`Tu anuncio de ${ad.adv_type} se muestra en la ${boardInfo.boardLabel} de Binance en el puesto #${boardInfo.rank}`}
-                              >
-                                {boardInfo.boardLabel}: #{boardInfo.rank}
-                              </span>
-                            )}
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
-                                isOnline
-                                  ? 'bg-emerald-500/15 text-emerald-400'
-                                  : 'bg-slate-800 text-slate-400'
-                              }`}
-                            >
-                              {isOnline && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                              {ad.status_label}
-                            </span>
-                            <span className="text-[10px] font-mono text-slate-500" title={`ID: ${ad.adv_no}`}>
-                              #{ad.adv_no ? ad.adv_no.slice(-6) : ''}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Fila Central Dividida en 2 Bloques Amplios: Datos Financieros vs Inteligencia/Automatización */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
-                          {/* Bloque Izquierdo: Precios y Saldo Remanente */}
-                          <div className="rounded-lg border border-slate-800/80 bg-slate-950/50 p-2.5 flex flex-col justify-between gap-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] uppercase font-semibold text-slate-400">
-                                Precio Configurado
-                              </span>
-                              <span className="text-sm font-bold text-white tabular-nums font-mono">
-                                {fmtRate(ad.price)} <span className="text-[10px] font-normal text-slate-400">{ad.fiat_unit}</span>
-                              </span>
-                            </div>
-
-                            <div className="flex items-center justify-between border-t border-slate-800/60 pt-1.5">
-                              <span className="text-[10px] uppercase font-semibold text-slate-400">
-                                Saldo Disponible
-                              </span>
-                              <span className="text-sm font-bold text-emerald-400 tabular-nums font-mono">
-                                {fmtUsdt(ad.surplus_amount)} <span className="text-[10px] font-normal text-slate-400">{ad.asset}</span>
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Bloque Derecho: Inteligencia de Competencia en Binance */}
-                          <div className="rounded-lg border border-slate-800/80 bg-slate-950/50 p-2.5 flex flex-col justify-between gap-1.5 text-[11px]">
-                            {boardInfo ? (
-                              <>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-slate-400 text-[10px]">
-                                    Punta #1 ({boardInfo.matchedByBank && ad.trade_methods?.[0] ? ad.trade_methods[0] : 'General'}):
-                                  </span>
-                                  <span className="font-mono text-xs font-semibold text-white">
-                                    {fmtRate(boardInfo.bestBoardPrice)} {ad.fiat_unit}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center justify-between border-t border-slate-800/60 pt-1">
-                                  <span className="text-slate-400 text-[10px]">
-                                    {boardInfo.rank === 1
-                                      ? 'Estado:'
-                                      : 'Volumen delante:'}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-slate-300">
-                                    {boardInfo.rank === 1
-                                      ? 'Líder en pizarra'
-                                      : `${fmtUsdt(boardInfo.aheadUsdt)} ${ad.asset}`}
-                                  </span>
-                                </div>
-
-                                {boardInfo.rank > 1 && boardInfo.suggestedRank1Price != null && (
-                                  <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
-                                    <span
-                                      className={`text-[10px] ${
-                                        boardInfo.isBelowBreakeven ? 'text-rose-400' : 'text-slate-400'
-                                      }`}
-                                      title={
-                                        boardInfo.isBelowBreakeven
-                                          ? `Atención: tomar #1 (${fmtRate(boardInfo.suggestedRank1Price)}) está por debajo de tu Breakeven (${fmtRate(breakevenSellRate)})`
-                                          : 'Precio sugerido para tomar #1'
-                                      }
-                                    >
-                                      {boardInfo.isBelowBreakeven
-                                        ? `Bajo piso (${fmtRate(breakevenSellRate)})`
-                                        : 'Precio para #1:'}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={(e) =>
-                                        handleCopySuggestedPrice(e, ad.adv_no, boardInfo.suggestedRank1Price)
-                                      }
-                                      className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold text-amber-300 cursor-pointer transition-colors"
-                                      title="Clic para copiar tasa sugerida"
-                                    >
-                                      <span>{fmtRate(boardInfo.suggestedRank1Price)}</span>
-                                      {copiedAdPriceId === ad.adv_no ? (
-                                        <Check className="h-3 w-3 text-emerald-400" />
-                                      ) : (
-                                        <Copy className="h-3 w-3 opacity-80" />
-                                      )}
-                                    </button>
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="flex items-center justify-center h-full text-slate-500 text-[10px]">
-                                Consultando competencia en Binance...
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Fila Inferior: Límites en Fiat y Métodos de Pago */}
-                        <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-3 text-[11px] text-slate-400">
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="text-slate-500 text-[10px]">Límites:</span>
-                            <span className="font-mono text-slate-300 tabular-nums text-[10px]">
-                              {fmtFiat(ad.min_fiat)} - {fmtFiat(ad.max_fiat)} {ad.fiat_unit}
-                            </span>
-                          </div>
-
-                          {ad.trade_methods && ad.trade_methods.length > 0 && (
-                            <div className="flex items-center gap-1.5 min-w-0 truncate justify-end">
-                              <span className="text-slate-500 text-[10px] shrink-0">Bancos:</span>
-                              <span className="truncate text-slate-300 font-medium text-[10px]" title={ad.trade_methods.join(', ')}>
-                                {ad.trade_methods.join(' · ')}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+        <MyAdsSection
+          ads={data?.my_ads || EMPTY_ARRAY}
+          evaluateMyAdOnBoard={evaluateMyAdOnBoard}
+          breakevenSellRate={metrics.breakevenSellRate}
+          fmtUsdt={fmtUsdt}
+          fmtFiat={fmtFiat}
+          fmtRate={fmtRate}
+        />
       )}
 
-      {/* Separador Visual entre Zonas */}
-      <div className="relative py-2">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-slate-800/80"></div>
-        </div>
-      </div>
+      {/* Separador Visual Sutil entre Zonas */}
+      <div className="border-t border-slate-800/40 my-1" />
 
       {/* =========================================================================
           ZONA 2: ÓRDENES DEL DÍA (Tabla con filtros directos de exploración)
@@ -873,98 +344,17 @@ export default function OperationsDashboard({
         {/* Tabla en Tiempo Real de las Operaciones de Hoy */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
           {/* Barra de Filtros y Búsqueda sobre la tabla con todo el ancho disponible */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
-            {/* Filtros de la tabla (Tipo y Estado) */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Filtro: Tipo de Orden */}
-              <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs shadow-xs">
-                {[
-                  { id: 'ALL', label: 'Todas' },
-                  { id: 'COMPRA', label: 'Compras' },
-                  { id: 'VENTA', label: 'Ventas' },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setOrderType(tab.id)}
-                    className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
-                      orderType === tab.id
-                        ? tab.id === 'COMPRA'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold'
-                          : tab.id === 'VENTA'
-                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold'
-                          : 'bg-slate-800 text-white shadow'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Filtro: Estado de Orden */}
-              <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs shadow-xs">
-                {[
-                  {
-                    id: 'ALL',
-                    label: `Todos (${stats.all_orders_count ?? orders.length})`,
-                  },
-                  {
-                    id: 'COMPLETED',
-                    label: `Completadas (${stats.completed_orders ?? stats.total_orders ?? 0})`,
-                  },
-                  {
-                    id: 'IN_PROGRESS',
-                    label: `En Proceso (${stats.in_progress_orders ?? 0})`,
-                  },
-                  {
-                    id: 'CANCELLED',
-                    label: `Canceladas (${stats.cancelled_orders ?? 0})`,
-                  },
-                ].map((stTab) => (
-                  <button
-                    key={stTab.id}
-                    onClick={() => setOrderStatus(stTab.id)}
-                    className={`flex h-6 items-center rounded-lg px-2.5 font-medium transition-colors ${
-                      orderStatus === stTab.id
-                        ? stTab.id === 'CANCELLED'
-                          ? 'bg-slate-800 text-slate-300 border border-slate-700 font-semibold line-through'
-                          : stTab.id === 'IN_PROGRESS'
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold'
-                          : stTab.id === 'COMPLETED'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold'
-                          : 'bg-slate-800 text-white shadow'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {stTab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Buscador de Orden Específica */}
-            <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-              <Input
-                type="text"
-                value={tableSearch}
-                onChange={(e) => setTableSearch(e.target.value)}
-                placeholder="Buscar por ID, contraparte, monto..."
-                icon={Search}
-                rightElement={
-                  tableSearch ? (
-                    <button
-                      type="button"
-                      onClick={() => setTableSearch('')}
-                      title="Limpiar búsqueda"
-                      className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null
-                }
-              />
-            </div>
-          </div>
+          <TodayOrdersToolbar
+            orderType={orderType}
+            onOrderTypeChange={setOrderType}
+            orderStatus={orderStatus}
+            onOrderStatusChange={setOrderStatus}
+            stats={stats}
+            ordersCount={orders.length}
+            tableSearch={tableSearch}
+            onTableSearchChange={setTableSearch}
+            onClearSearch={handleClearSearch}
+          />
 
           <OperationsTable
             orders={paginatedOrders}
@@ -973,7 +363,7 @@ export default function OperationsDashboard({
             showFullDate={false}
             loading={loading}
             tableSearch={tableSearch}
-            onClearSearch={() => setTableSearch('')}
+            onClearSearch={handleClearSearch}
             emptyMessage={
               <div className="mx-auto max-w-md space-y-2">
                 <p className="text-sm font-medium text-slate-300">
@@ -1010,45 +400,49 @@ export default function OperationsDashboard({
         </div>
       </section>
 
-      {/* Vista Flotante de Detalles de la Orden Seleccionada */}
-      <OrderDetailsModal
-        order={selectedOrder}
-        ordersList={filteredOrders}
-        onClose={() => setSelectedOrder(null)}
-        onSelectOrder={(ord) => setSelectedOrder(ord)}
-        onFilterCounterparty={(cp) => setTableSearch(cp)}
-        bankFeePct={bankFeePct}
-        wacBuyPrice={stats.wac_buy_price}
-        wapSellPrice={stats.wap_sell_price}
-      />
+      {/* Vista Flotante de Detalles de la Orden Seleccionada (Solo si hay orden activa) */}
+      {selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          ordersList={filteredOrders}
+          onClose={handleCloseOrderDetails}
+          onSelectOrder={setSelectedOrder}
+          onFilterCounterparty={setTableSearch}
+          bankFeePct={bankFeePct}
+          wacBuyPrice={stats.wac_buy_price}
+          wapSellPrice={stats.wap_sell_price}
+        />
+      )}
 
-      {/* Modal de Cuadre Rápido de Posición Consolidada en Bs */}
-      <BankReconcileModal
-        isOpen={reconcileModal.open}
-        onClose={() => setReconcileModal((prev) => ({ ...prev, open: false }))}
-        accounts={data?.bank_inventory?.accounts || []}
-        initialAccountId={reconcileModal.accountId}
-        initialTab={reconcileModal.tab}
-        onSuccess={(updatedInv) => {
-          setData((prev) => (prev ? { ...prev, bank_inventory: updatedInv } : prev));
-        }}
-      />
+      {/* Modal de Cuadre Rápido de Posición Consolidada en Bs (Solo si está abierto) */}
+      {reconcileModal.open && (
+        <BankReconcileModal
+          isOpen={reconcileModal.open}
+          onClose={handleCloseReconcileModal}
+          accounts={data?.bank_inventory?.accounts || EMPTY_ARRAY}
+          initialAccountId={reconcileModal.accountId}
+          initialTab={reconcileModal.tab}
+          onSuccess={updateBankInventory}
+        />
+      )}
 
-      {/* Modal Selector de Par de Mercado */}
-      <MarketPairModal
-        isOpen={isPairModalOpen}
-        onClose={() => setIsPairModalOpen(false)}
-        selectedAsset={selectedAsset}
-        selectedFiat={fiatCurrency}
-        availableAssets={data?.available_assets || ['USDT']}
-        availableFiats={data?.available_fiats || ['VES']}
-        onSelectPair={(newAsset, newFiat) => {
-          localStorage.setItem('user_custom_asset_selected', 'true');
-          localStorage.setItem('user_custom_fiat_selected', 'true');
-          setSelectedAsset(newAsset);
-          setFiatCurrency(newFiat);
-        }}
-      />
+      {/* Modal Selector de Par de Mercado (Solo si está abierto) */}
+      {isPairModalOpen && (
+        <MarketPairModal
+          isOpen={isPairModalOpen}
+          onClose={handleClosePairModal}
+          selectedAsset={selectedAsset}
+          selectedFiat={fiatCurrency}
+          availableAssets={data?.available_assets || DEFAULT_AVAILABLE_ASSETS}
+          availableFiats={data?.available_fiats || DEFAULT_AVAILABLE_FIATS}
+          onSelectPair={(newAsset, newFiat) => {
+            localStorage.setItem('user_custom_asset_selected', 'true');
+            localStorage.setItem('user_custom_fiat_selected', 'true');
+            setSelectedAsset?.(newAsset);
+            setFiatCurrency?.(newFiat);
+          }}
+        />
+      )}
     </div>
   );
 }

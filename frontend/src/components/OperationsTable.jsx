@@ -18,8 +18,8 @@ const OrderStatusBadges = memo(function OrderStatusBadges({ orderType, orderStat
           isCancelled
             ? 'default'
             : isBuy
-            ? 'emerald'
-            : 'rose'
+            ? 'success'
+            : 'danger'
         }
         size="sm"
         className={isCancelled ? 'line-through opacity-60' : ''}
@@ -33,7 +33,7 @@ const OrderStatusBadges = memo(function OrderStatusBadges({ orderType, orderStat
       )}
       {isInProgress && (
         <Badge
-          variant="blue"
+          variant="info"
           size="xs"
           className="animate-pulse gap-1"
           title="Orden en proceso (pendiente de pago / liberación)"
@@ -54,31 +54,31 @@ const TableSkeletonRows = memo(function TableSkeletonRows({ rowCount = 5, showFu
     <>
       {Array.from({ length: rowCount }).map((_, idx) => (
         <tr key={`skeleton-${idx}`} className="animate-pulse border-b border-slate-800/40">
-          <td className="py-3 px-3">
+          <td className="py-2.5 px-3">
             <div className={`h-3.5 rounded bg-slate-800/70 ${showFullDate ? 'w-28' : 'w-14'}`} />
           </td>
-          <td className="py-3 px-2">
+          <td className="py-2.5 px-2">
             <div className="h-3.5 w-16 rounded bg-slate-800/70" />
           </td>
-          <td className="py-3 px-2">
+          <td className="py-2.5 px-2">
             <div className="h-5 w-14 rounded-full bg-slate-800/70" />
           </td>
-          <td className="py-3 px-2 text-right">
+          <td className="py-2.5 px-2 text-right">
             <div className="ml-auto h-3.5 w-20 rounded bg-slate-800/70" />
           </td>
-          <td className="py-3 px-2 text-right">
+          <td className="py-2.5 px-2 text-right">
             <div className="ml-auto h-3.5 w-12 rounded bg-slate-800/70" />
           </td>
-          <td className="py-3 px-2 text-right">
+          <td className="py-2.5 px-2 text-right">
             <div className="ml-auto h-3.5 w-16 rounded bg-slate-800/70" />
           </td>
-          <td className="py-3 px-2 text-right">
+          <td className="py-2.5 px-2 text-right">
             <div className="ml-auto h-3.5 w-24 rounded bg-slate-800/70" />
           </td>
-          <td className="py-3 px-2">
+          <td className="py-2.5 px-2">
             <div className="h-3.5 w-20 rounded bg-slate-800/70" />
           </td>
-          <td className="py-3 pr-3 pl-2">
+          <td className="py-2.5 pr-3 pl-2">
             <div className="h-3.5 w-20 rounded bg-slate-800/70" />
           </td>
         </tr>
@@ -180,7 +180,7 @@ function OperationsTable({
                     {copiedOrderId === o.order_number ? (
                       <Check className="h-3 w-3 text-emerald-400" />
                     ) : (
-                      <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 text-slate-500 transition-opacity" />
+                      <Copy className="h-3 w-3 opacity-40 group-hover:opacity-100 text-slate-400 group-hover:text-amber-300 transition-all" />
                     )}
                   </button>
                 </td>

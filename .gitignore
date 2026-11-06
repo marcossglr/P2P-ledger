@@ -11,6 +11,12 @@ env/
 backend/.venv/
 backend/venv/
 
+# Testing & Coverage
+.pytest_cache/
+backend/.pytest_cache/
+.coverage
+htmlcov/
+
 # Node & Frontend dependencies and builds
 node_modules/
 frontend/node_modules/
@@ -21,7 +27,7 @@ build/
 frontend/.vite/
 package-lock.json
 
-# Databases & local persistent storage
+# Databases, Backups & local persistent storage
 *.db
 *.db-journal
 *.db-shm
@@ -34,6 +40,8 @@ backend/p2p_reconciliation.db
 backend/p2p_reconciliation.db.bak-canal
 backend/p2p_reconciliation.db-shm
 backend/p2p_reconciliation.db-wal
+backups/
+backend/backups/
 
 # Credentials & Sensitive Local Caches
 .env
@@ -57,3 +65,9 @@ graphify-out/
 *.temp
 .DS_Store
 Thumbs.db
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
