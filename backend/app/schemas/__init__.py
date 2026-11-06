@@ -23,6 +23,11 @@ class ManualMatchPayload(BaseModel):
 class BankAccountPayload(BaseModel):
     name: str
     account_alias: Optional[str] = ""
+    bank_code: Optional[str] = ""
+    account_number: Optional[str] = ""
+    holder_name: Optional[str] = ""
+    holder_id: Optional[str] = ""
+    phone_number: Optional[str] = ""
     match_keywords: Optional[str] = ""
     is_default: bool = False
     apply_buy_fee: bool = True

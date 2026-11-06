@@ -187,15 +187,16 @@ def infer_canonical_bank_from_pay_method(pay_method: Optional[str]) -> Optional[
 
 def sync_bank_accounts_from_binance(
     db: Session,
-    pay_methods: Optional[List[str]] = None,
+    pay_methods: Optional[List[Any]] = None,
     api_key: Optional[str] = None,
     api_secret: Optional[str] = None,
-) -> List[BankAccount]:
+) -> Tuple[List[BankAccount], Dict[str, Any]]:
     """
-    Sincroniza las cuentas bancarias en VES basándose en los métodos de pago activos
-    configurados en la cuenta de Binance del usuario (/sapi/v1/c2c/ads/listWithPagination).
+    Sincroniza las cuentas bancarias en VES basándose en los métodos de pago configurados
+    en la información del usuario en Binance P2P.
     - El cuadre por defecto se inicializa siempre en 0,00 Bs (anchor_balance = 0.0)
       y las sincronizaciones nunca alteran el saldo de las cuentas existentes.
+    Retorna (cuentas, metadata_resumen).
     """
     if pay_methods is None:
         try:
@@ -208,8 +209,10 @@ def sync_bank_accounts_from_binance(
     inferred_banks: List[Tuple[str, str, str]] = []
     seen_names = set()
 
-    for pm in pay_methods or []:
-        inferred = infer_canonical_bank_from_pay_method(pm)
+    for item in pay_methods or []:
+        # Si viene en formato objeto dict ({'name': ..., 'identifier': ...}) o como string
+        pm_str = item.get("name") or item.get("identifier") if isinstance(item, dict) else str(item)
+        inferred = infer_canonical_bank_from_pay_method(pm_str)
         if inferred:
             b_name, b_alias, b_keywords = inferred
             if b_name.lower() not in seen_names:
@@ -218,6 +221,7 @@ def sync_bank_accounts_from_binance(
 
     existing_accounts = db.query(BankAccount).order_by(BankAccount.id.asc()).all()
     changed = False
+    newly_created: List[str] = []
 
     # Eliminar siempre cualquier cuenta espuria creada por el código genérico "BANK"
     for acc in list(existing_accounts):
@@ -231,9 +235,19 @@ def sync_bank_accounts_from_binance(
             changed = True
 
     if inferred_banks:
+        # Importar catálogo nacional para enriquecer códigos bancarios (0102, 0134, etc.)
+        from .venezuela_banks import VENEZUELA_BANKS_CATALOG
+
         # Mantener las cuentas existentes (no borrarlas si el usuario las creó o vinculó)
         # Crear los bancos que estén en la cuenta de Binance del usuario y aún no existan localmente
         for b_name, b_alias, b_keywords in inferred_banks:
+            # Buscar código bancario de SUDEBAN en catálogo si está disponible
+            matched_cat = next(
+                (b for b in VENEZUELA_BANKS_CATALOG if b["name"].lower() == b_name.lower()),
+                None,
+            )
+            b_code = matched_cat.get("code", "") if matched_cat else ""
+
             already = next(
                 (acc for acc in existing_accounts if acc.name.lower() == b_name.lower()),
                 None,
@@ -243,6 +257,7 @@ def sync_bank_accounts_from_binance(
                 new_acc = BankAccount(
                     name=b_name,
                     account_alias=b_alias,
+                    bank_code=b_code,
                     fiat_currency="VES",
                     match_keywords=b_keywords,
                     is_default=0 if has_default else 1,
@@ -257,6 +272,10 @@ def sync_bank_accounts_from_binance(
                 db.add(new_acc)
                 db.flush()
                 existing_accounts.append(new_acc)
+                newly_created.append(b_name)
+                changed = True
+            elif b_code and not already.bank_code:
+                already.bank_code = b_code
                 changed = True
 
     # Garantizar que si existen cuentas, al menos una esté marcada como principal (is_default=1)
@@ -267,7 +286,14 @@ def sync_bank_accounts_from_binance(
     if changed:
         db.commit()
 
-    return db.query(BankAccount).order_by(BankAccount.id.asc()).all()
+    all_accounts = db.query(BankAccount).order_by(BankAccount.id.asc()).all()
+    meta = {
+        "detected_count": len(inferred_banks),
+        "detected_names": [b[0] for b in inferred_banks],
+        "created_count": len(newly_created),
+        "created_names": newly_created,
+    }
+    return all_accounts, meta
 
 
 def ensure_bank_accounts_from_orders(db: Session) -> List[BankAccount]:
@@ -298,7 +324,7 @@ def ensure_bank_accounts_from_orders(db: Session) -> List[BankAccount]:
     if existing_accounts:
         return existing_accounts
 
-    synced = sync_bank_accounts_from_binance(db)
+    synced, _ = sync_bank_accounts_from_binance(db)
     if synced:
         return synced
 
@@ -476,24 +502,42 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
         if matched:
             acc_counts[matched.id] += cnt
 
-    # 2. WAC global histórico mediante agregación SQL directa
-    all_buy_res = (
-        db.query(
-            func.sum(BinanceOrder.fiat_amount),
-            func.sum(BinanceOrder.crypto_amount),
-        )
+    # 2. Identificar tasa de referencia reciente (eliminando promedios históricos antiguos):
+    # - Si no hay compras hoy, buscar la última orden de compra ejecutada (más reciente).
+    # - Si no hay compras en el historial, buscar la última orden de venta ejecutada.
+    last_buy_order = (
+        db.query(BinanceOrder.unit_price)
         .filter(
             BinanceOrder.fiat_currency == "VES",
             BinanceOrder.order_type == "COMPRA",
+            BinanceOrder.unit_price > 0,
             or_(
                 BinanceOrder.order_status == "COMPLETED",
                 BinanceOrder.order_status.is_(None),
             ),
         )
+        .order_by(BinanceOrder.order_date.desc(), BinanceOrder.id.desc())
         .first()
     )
-    all_buy_fiat = float(all_buy_res[0] or 0.0) if all_buy_res else 0.0
-    all_buy_usdt = float(all_buy_res[1] or 0.0) if all_buy_res else 0.0
+    last_buy_rate = float(last_buy_order[0] or 0.0) if last_buy_order else 0.0
+
+    last_sell_order = None
+    if last_buy_rate <= 0:
+        last_sell_order = (
+            db.query(BinanceOrder.unit_price)
+            .filter(
+                BinanceOrder.fiat_currency == "VES",
+                BinanceOrder.order_type == "VENTA",
+                BinanceOrder.unit_price > 0,
+                or_(
+                    BinanceOrder.order_status == "COMPLETED",
+                    BinanceOrder.order_status.is_(None),
+                ),
+            )
+            .order_by(BinanceOrder.order_date.desc(), BinanceOrder.id.desc())
+            .first()
+        )
+    last_sell_rate = float(last_sell_order[0] or 0.0) if last_sell_order else 0.0
 
     # 3. Estructuras acumuladoras por cuenta
     acc_stats: Dict[int, Dict[str, Any]] = {}
@@ -502,6 +546,11 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
             "id": acc.id,
             "name": acc.name,
             "account_alias": acc.account_alias or "",
+            "bank_code": acc.bank_code or "",
+            "account_number": acc.account_number or "",
+            "holder_name": acc.holder_name or "",
+            "holder_id": acc.holder_id or "",
+            "phone_number": acc.phone_number or "",
             "fiat_currency": acc.fiat_currency or "VES",
             "match_keywords": acc.match_keywords or "",
             "is_default": bool(acc.is_default),
@@ -531,48 +580,37 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
             "recent_movements": [],
         }
 
-    # 4. Identificar los IDs de los 25 movimientos más recientes de CADA cuenta bancaria
-    recent_movement_ids = set()
-    for acc in accounts:
-        kws = [k.strip() for k in (acc.match_keywords or "").split(",") if k.strip()]
-        conds = [BinanceOrder.bank_account_id == acc.id]
-        for kw in kws:
-            conds.append(BinanceOrder.pay_method.ilike(f"%{kw}%"))
-        if acc.is_default:
-            conds.append(BinanceOrder.pay_method.ilike("%pago%"))
-            conds.append(BinanceOrder.pay_method.ilike("%bank%"))
-
-        acc_recent_ids = [
-            r[0]
-            for r in (
-                db.query(BinanceOrder.id)
-                .filter(
-                    BinanceOrder.fiat_currency == "VES",
-                    or_(
-                        BinanceOrder.order_status == "COMPLETED",
-                        BinanceOrder.order_status.is_(None),
-                    ),
-                    or_(*conds),
-                )
-                .order_by(BinanceOrder.order_date.desc(), BinanceOrder.id.desc())
-                .limit(25)
-                .all()
-            )
-        ]
-        recent_movement_ids.update(acc_recent_ids)
-
-    # 5. Traer solo órdenes relevantes a evaluar:
+    # 4. Traer órdenes relevantes de forma eficiente:
     # - Posteriores al menor anchor_timestamp de las cuentas activas
     # - Órdenes de HOY
-    # - O las órdenes que forman parte de los movimientos recientes de cada banco
+    # - Órdenes recientes para poblar el historial de movimientos de las cuentas
     min_anchor_ts = min((int(a.anchor_timestamp or 0) for a in accounts), default=0)
+
+    # Identificar IDs recientes en una sola consulta consolidada (últimas 25 * len(accounts) órdenes)
+    recent_sample_limit = max(100, len(accounts) * 25)
+    recent_order_ids = [
+        r[0]
+        for r in (
+            db.query(BinanceOrder.id)
+            .filter(
+                BinanceOrder.fiat_currency == "VES",
+                or_(
+                    BinanceOrder.order_status == "COMPLETED",
+                    BinanceOrder.order_status.is_(None),
+                ),
+            )
+            .order_by(BinanceOrder.order_date.desc(), BinanceOrder.id.desc())
+            .limit(recent_sample_limit)
+            .all()
+        )
+    ]
 
     filter_conditions = [
         BinanceOrder.create_timestamp >= min_anchor_ts,
         BinanceOrder.order_date >= f"{today_str} 00:00:00",
     ]
-    if recent_movement_ids:
-        filter_conditions.append(BinanceOrder.id.in_(recent_movement_ids))
+    if recent_order_ids:
+        filter_conditions.append(BinanceOrder.id.in_(recent_order_ids))
 
     orders_query = db.query(BinanceOrder).filter(
         BinanceOrder.fiat_currency == "VES",
@@ -710,11 +748,23 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
 
         accounts_list.append(st)
 
-    ref_wac = (
-        (today_buy_fiat / today_buy_usdt)
-        if today_buy_usdt > 0
-        else ((all_buy_fiat / all_buy_usdt) if all_buy_usdt > 0 else 0.0)
-    )
+    # Determinación escalonada de la tasa de referencia (sin promedios históricos antiguos):
+    # 1) WAC de compras de hoy
+    # 2) Último precio de compra ejecutado (más reciente)
+    # 3) Último precio de venta ejecutado (si no hay compras)
+    if today_buy_usdt > 0:
+        ref_wac = today_buy_fiat / today_buy_usdt
+        ref_rate_source = "WAC_HOY"
+    elif last_buy_rate > 0:
+        ref_wac = last_buy_rate
+        ref_rate_source = "LAST_BUY"
+    elif last_sell_rate > 0:
+        ref_wac = last_sell_rate
+        ref_rate_source = "LAST_SELL"
+    else:
+        ref_wac = 0.0
+        ref_rate_source = "NONE"
+
     equivalent_usdt = (
         (total_calculated_balance_bs / ref_wac) if ref_wac > 0 else 0.0
     )
@@ -747,6 +797,7 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
             ),
             "today_orders_count": total_today_orders,
             "ref_wac_rate": round(ref_wac, 4),
+            "ref_rate_source": ref_rate_source,
             "equivalent_usdt": round(equivalent_usdt, 2),
             "accounts_count": len(accounts_list),
         },

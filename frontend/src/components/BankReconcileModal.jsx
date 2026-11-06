@@ -233,60 +233,60 @@ export default function BankReconcileModal({
             </div>
           )}
 
-          {/* 2. Tipo de Operación: Saldo Real vs Movimiento */}
-          <div className="flex rounded-xl border border-slate-800/80 bg-slate-950/60 p-1 text-xs">
+          {/* 2. Tipo de Operación: Saldo Real vs Movimiento (Segmented Control concéntrico) */}
+          <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs">
             <button
               type="button"
               onClick={() => handleModeChange('CUADRE_CONSOLIDADO')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              className={`flex-1 h-6 flex items-center justify-center rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 mode === 'CUADRE_CONSOLIDADO'
-                  ? 'bg-slate-800 text-white shadow-xs'
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 font-medium'
               }`}
             >
-              Saldo Real
+              Saldo Real Auditado
             </button>
             <button
               type="button"
               onClick={() => handleModeChange('MOVIMIENTO_MANUAL')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              className={`flex-1 h-6 flex items-center justify-center rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 mode === 'MOVIMIENTO_MANUAL'
-                  ? 'bg-slate-800 text-white shadow-xs'
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 font-medium'
               }`}
             >
-              Movimiento
+              Movimiento Manual (±)
             </button>
           </div>
 
-          {/* 3. Bloque Principal de Ajuste (Directo sin tarjeta envolvente) */}
-          <div className="space-y-2">
+          {/* 3. Bloque Principal de Ajuste */}
+          <div className="space-y-2.5">
             {/* Selector de Signo en caso de Movimiento Manual */}
             {mode === 'MOVIMIENTO_MANUAL' && (
-              <div className="flex rounded-xl border border-slate-800/80 bg-slate-950/60 p-1 text-xs">
+              <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs">
                 <button
                   type="button"
                   onClick={() => setManualSign('MINUS')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 font-semibold transition-colors cursor-pointer ${
+                  className={`flex-1 h-6 flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                     manualSign === 'MINUS'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      : 'border border-transparent text-slate-400 hover:text-white'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-xs'
+                      : 'border border-transparent text-slate-400 hover:text-white font-medium'
                   }`}
                 >
                   <MinusCircle className="h-3.5 w-3.5" />
-                  <span>Restar Salida</span>
+                  <span>Restar Salida (-Bs)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setManualSign('PLUS')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 font-semibold transition-colors cursor-pointer ${
+                  className={`flex-1 h-6 flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                     manualSign === 'PLUS'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'border border-transparent text-slate-400 hover:text-white'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-xs'
+                      : 'border border-transparent text-slate-400 hover:text-white font-medium'
                   }`}
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
-                  <span>Sumar Entrada</span>
+                  <span>Sumar Entrada (+Bs)</span>
                 </button>
               </div>
             )}

@@ -28,6 +28,7 @@ Uso: ./run.sh [OPCIONES]
 Opciones:
   dev, --dev          Inicia Backend con autoreload y Frontend Vite dev server (HMR)
   app, --app, --prod  Inicia en modo Standalone (compila frontend si no existe y sirve vía FastAPI)
+  test, --test        Ejecuta la suite de pruebas del backend y frontend
   -h, --help          Muestra esta ayuda
 
 Variables de entorno opcionales:
@@ -173,6 +174,21 @@ case "$MODE" in
         echo ""
 
         wait
+        ;;
+
+    test|--test)
+        echo -e "${BLUE}==================================================${NC}"
+        echo -e "${BLUE}   Ejecutando suite de pruebas                    ${NC}"
+        echo -e "${BLUE}==================================================${NC}"
+        check_prerequisites
+
+        echo -e "\n${YELLOW}🧪 Corriendo pruebas de Backend (Python unittest)...${NC}"
+        (cd "$PROJECT_ROOT" && PYTHONPATH=. "$VENV_PATH/bin/python" -m unittest discover backend/tests)
+
+        echo -e "\n${YELLOW}🧪 Corriendo pruebas de Frontend (Vitest)...${NC}"
+        (cd "$FRONTEND_DIR" && npm test -- --run)
+
+        echo -e "\n${GREEN}✅ Todas las pruebas pasaron satisfactoriamente.${NC}"
         ;;
 
     -h|--help|help)

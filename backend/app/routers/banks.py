@@ -166,8 +166,16 @@ def get_bank_inventory(db: Session = Depends(get_db)):
 
 @router.post("/bank-inventory/sync-binance-methods")
 def sync_binance_payment_methods_endpoint(db: Session = Depends(get_db)):
-    sync_bank_accounts_from_binance(db)
-    return compute_bank_inventory_summary(db)
+    try:
+        _, meta = sync_bank_accounts_from_binance(db)
+        summary = compute_bank_inventory_summary(db)
+        summary["sync_meta"] = meta
+        return summary
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al sincronizar métodos de pago de Binance: {str(e)}"
+        )
 
 
 @router.post("/bank-inventory/accounts")
@@ -197,6 +205,11 @@ def create_bank_account(payload: BankAccountPayload, db: Session = Depends(get_d
     new_acc = BankAccount(
         name=clean_name,
         account_alias=(payload.account_alias or "").strip() or f"Cuenta {clean_name}",
+        bank_code=(payload.bank_code or "").strip(),
+        account_number=(payload.account_number or "").strip(),
+        holder_name=(payload.holder_name or "").strip(),
+        holder_id=(payload.holder_id or "").strip(),
+        phone_number=(payload.phone_number or "").strip(),
         fiat_currency="VES",
         match_keywords=keywords,
         is_default=1 if payload.is_default else 0,
@@ -246,6 +259,16 @@ def update_bank_account(
 
     acc.name = clean_name
     acc.account_alias = (payload.account_alias or "").strip()
+    if payload.bank_code is not None:
+        acc.bank_code = payload.bank_code.strip()
+    if payload.account_number is not None:
+        acc.account_number = payload.account_number.strip()
+    if payload.holder_name is not None:
+        acc.holder_name = payload.holder_name.strip()
+    if payload.holder_id is not None:
+        acc.holder_id = payload.holder_id.strip()
+    if payload.phone_number is not None:
+        acc.phone_number = payload.phone_number.strip()
     acc.match_keywords = (payload.match_keywords or "").strip() or clean_name.lower()
     acc.is_default = 1 if payload.is_default else 0
     acc.apply_buy_fee = 1 if payload.apply_buy_fee else 0

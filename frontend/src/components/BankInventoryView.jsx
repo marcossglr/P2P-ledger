@@ -18,9 +18,10 @@ import BankAccountFormModal from './BankAccountFormModal';
 import { bankInventoryApi } from '../services/api';
 import { Button, Badge } from './ui';
 
-export default function BankInventoryView({ refreshTrigger, onInventoryChange }) {
+export default function BankInventoryView({ isActive = true, refreshTrigger, onInventoryChange }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isDirtyRef = React.useRef(false);
 
   // Cuenta seleccionada en la vista Master-Detail
   const [selectedAccountId, setSelectedAccountId] = useState(null);
@@ -54,6 +55,7 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
   const [accInitialBalance, setAccInitialBalance] = useState(0);
   const [savingAccount, setSavingAccount] = useState(false);
   const [syncingBanks, setSyncingBanks] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState(null);
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -69,22 +71,52 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
 
   const handleSyncBinanceBanks = async () => {
     setSyncingBanks(true);
+    setSyncFeedback(null);
     try {
       const updated = await bankInventoryApi.syncBinanceMethods();
       setData(updated);
       if (onInventoryChange) {
         onInventoryChange(updated);
       }
+      const meta = updated.sync_meta;
+      if (meta) {
+        if (meta.created_count > 0) {
+          setSyncFeedback({
+            type: 'success',
+            msg: `Se agregaron ${meta.created_count} cuenta(s): ${meta.created_names.join(', ')}`,
+          });
+        } else if (meta.detected_count > 0) {
+          setSyncFeedback({
+            type: 'info',
+            msg: `Se detectaron ${meta.detected_count} método(s) de tu perfil (${meta.detected_names.join(', ')}). Ya estaban registradas.`,
+          });
+        } else {
+          setSyncFeedback({
+            type: 'neutral',
+            msg: 'No se detectaron métodos de pago de VES en tu perfil de Binance.',
+          });
+        }
+      }
     } catch (err) {
       console.error('Error sincronizando métodos de pago de Binance:', err);
+      setSyncFeedback({
+        type: 'danger',
+        msg: err.message || 'Error al conectar con la API de Binance',
+      });
     } finally {
       setSyncingBanks(false);
+      setTimeout(() => setSyncFeedback(null), 6000);
     }
   };
 
   useEffect(() => {
+    if (!isActive) {
+      isDirtyRef.current = true;
+      return;
+    }
     fetchInventory();
-  }, [fetchInventory, refreshTrigger]);
+    isDirtyRef.current = false;
+  }, [fetchInventory, refreshTrigger, isActive]);
 
   const openCreateAccountModal = () => {
     setAccName('');
@@ -208,43 +240,77 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
 
   return (
     <div className="space-y-4">
-      {/* Cabecera y Barra de Acciones Generales */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-amber-400" />
-            <h2 className="text-base font-bold text-white">
-              Cuentas Bancarias en Bolívares
-            </h2>
-            <Badge variant="default" size="xs">
-              {accounts.length}
+      {/* Barra Consolidada Unificada de Alta Densidad */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2.5 shadow-sm">
+        {/* Lado Izquierdo: Métrica de Saldo Consolidado + Cripto Eq. + Conteo de Cuentas */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800/90 border border-slate-700/60 text-amber-400 shrink-0">
+            <Scale className="h-4.5 w-4.5" />
+          </div>
+
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Saldo Consolidado:
+              </span>
+              <span className="text-lg sm:text-xl font-bold font-mono tabular-nums text-white">
+                {fmtBs(consolidated.total_calculated_balance_bs)} <span className="text-xs font-sans font-medium text-slate-400">Bs</span>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <span className="text-slate-600">|</span>
+              <span>≈</span>
+              <span className="font-semibold font-mono tabular-nums text-slate-200">
+                {fmtUsdt(consolidated.equivalent_usdt)} USDT
+              </span>
+              {Boolean(consolidated.ref_wac_rate) && (
+                <span
+                  className="text-[11px] text-slate-400 font-mono"
+                  title={
+                    consolidated.ref_rate_source === 'WAC_HOY'
+                      ? 'Costo promedio ponderado de compras de hoy'
+                      : consolidated.ref_rate_source === 'LAST_BUY'
+                      ? 'Tasa de la última compra ejecutada'
+                      : consolidated.ref_rate_source === 'LAST_SELL'
+                      ? 'Tasa de la última venta ejecutada'
+                      : 'Tasa de referencia'
+                  }
+                >
+                  ({consolidated.ref_rate_source === 'LAST_BUY'
+                    ? 'Últ. Compra '
+                    : consolidated.ref_rate_source === 'LAST_SELL'
+                    ? 'Últ. Venta '
+                    : 'WAC '}
+                  {consolidated.ref_wac_rate})
+                </span>
+              )}
+            </div>
+
+            <Badge variant="neutral" size="xs" className="shrink-0">
+              {accounts.length} {accounts.length === 1 ? 'cuenta' : 'cuentas'}
             </Badge>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Administración de cuentas, comisiones de salida, conciliación automática con Binance P2P y auditoría de saldos.
-          </p>
         </div>
 
-        {/* Acciones Generales Relevantes */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Detectar Métodos de Binance P2P */}
+        {/* Lado Derecho: Acciones Globales */}
+        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
           <Button
             type="button"
             variant="secondary"
-            size="sm"
+            size="xs"
             icon={RefreshCw}
             loading={syncingBanks}
             onClick={handleSyncBinanceBanks}
-            title="Lee los métodos de pago de tus anuncios de Binance P2P y los auto-registra aquí"
+            title="Consulta directamente los métodos de pago registrados en tu cuenta de Binance P2P"
           >
             <span>{syncingBanks ? 'Detectando...' : 'Detectar de Binance'}</span>
           </Button>
 
-          {/* Bitácora / Historial de Cuadres */}
           <Button
             type="button"
             variant="secondary"
-            size="sm"
+            size="xs"
             icon={History}
             onClick={() => setHistoryModalOpen(true)}
             title="Ver la bitácora de cortes, cuadres de auditoría y movimientos manuales"
@@ -254,43 +320,29 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
         </div>
       </div>
 
-      {/* Banner de Posición Consolidada Total en Bs (Compacto y sobrio) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 border border-slate-700/60 text-amber-400 shrink-0">
-            <Scale className="h-4.5 w-4.5" />
-          </div>
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Saldo Total en Cuentas Bancarias
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl sm:text-2xl font-bold tabular-nums text-white">
-                {fmtBs(consolidated.total_calculated_balance_bs)} Bs
-              </span>
-              <span className="text-xs text-slate-400">
-                ≈ <strong className="text-slate-200 font-semibold">{fmtUsdt(consolidated.equivalent_usdt)} USDT</strong> (Tasa WAC {consolidated.ref_wac_rate || 0})
-              </span>
-            </div>
-          </div>
+      {/* Banner de Feedback si se ejecutó detección */}
+      {syncFeedback && (
+        <div
+          className={`flex items-center justify-between rounded-xl px-3.5 py-2 text-xs border transition-all ${
+            syncFeedback.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+              : syncFeedback.type === 'danger'
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              : syncFeedback.type === 'info'
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+              : 'bg-slate-800/60 border-slate-700 text-slate-300'
+          }`}
+        >
+          <span>{syncFeedback.msg}</span>
+          <button
+            type="button"
+            onClick={() => setSyncFeedback(null)}
+            className="text-slate-400 hover:text-white ml-2 text-xs cursor-pointer font-bold"
+          >
+            ✕
+          </button>
         </div>
-
-        <div className="flex items-center gap-4 text-xs border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0">
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">Ventas (+Bs)</div>
-            <div className="font-semibold text-emerald-400 tabular-nums">
-              +{fmtBs(consolidated.total_inflow_sell_bs)} Bs
-            </div>
-          </div>
-          <div className="h-6 w-px bg-slate-800" />
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">Compras (-Bs)</div>
-            <div className="font-semibold text-rose-300 tabular-nums">
-              -{fmtBs(consolidated.total_outflow_buy_bs)} Bs
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Master-Detail: Columna Izquierda (Lista de Cuentas) / Columna Derecha (Ficha & Configuración) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-start">
@@ -535,11 +587,11 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                     type="button"
                     onClick={() => handleToggleAccountFee(currentAccount)}
                     title="Haz clic para activar o desactivar el descuento automático de comisión bancaria en salidas"
-                    className="flex items-center gap-1.5 text-left text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
+                    className="flex items-center gap-2 text-left text-slate-400 hover:text-slate-200 cursor-pointer transition-colors group"
                   >
                     <span
-                      className={`inline-block h-2 w-2 rounded-full ${
-                        currentAccount.apply_buy_fee ? 'bg-amber-400' : 'bg-slate-600'
+                      className={`inline-block h-2 w-2 rounded-full transition-transform group-hover:scale-125 ${
+                        currentAccount.apply_buy_fee ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'bg-slate-600'
                       }`}
                     />
                     <span>
@@ -550,7 +602,7 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                       ):
                     </span>
                   </button>
-                  <span className="text-slate-300 tabular-nums">
+                  <span className="text-slate-300 font-mono tabular-nums">
                     {Number(currentAccount.outflow_buy_fees_bs || 0) > 0.01 ? '-' : ''}{fmtBs(currentAccount.outflow_buy_fees_bs)} Bs
                   </span>
                 </div>
@@ -579,6 +631,36 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Reglas de Conciliación Automática
                 </div>
+
+                {/* Ficha de Datos Bancarios si están registrados */}
+                {(currentAccount.account_number || currentAccount.phone_number || currentAccount.holder_id) && (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    {currentAccount.account_number && (
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-bold block">Cuenta Bancaria:</span>
+                        <span className="text-slate-200 font-mono font-medium">{currentAccount.account_number}</span>
+                      </div>
+                    )}
+                    {currentAccount.phone_number && (
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-bold block">Pago Móvil:</span>
+                        <span className="text-slate-200 font-mono font-medium">{currentAccount.phone_number}</span>
+                      </div>
+                    )}
+                    {currentAccount.holder_id && (
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-bold block">Cédula / RIF:</span>
+                        <span className="text-slate-200 font-mono font-medium">{currentAccount.holder_id}</span>
+                      </div>
+                    )}
+                    {currentAccount.holder_name && (
+                      <div>
+                        <span className="text-slate-500 text-[10px] uppercase font-bold block">Titular:</span>
+                        <span className="text-slate-200 font-medium">{currentAccount.holder_name}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <div className="text-xs text-slate-400">
@@ -628,43 +710,51 @@ export default function BankInventoryView({ refreshTrigger, onInventoryChange })
       </div>
 
       {/* Modal de Movimientos de Órdenes P2P */}
-      <BankMovementsModal
-        isOpen={movementsModal.open}
-        onClose={() => setMovementsModal({ open: false, accountId: null })}
-        initialAccountId={movementsModal.accountId}
-        accounts={accounts}
-        onReassignOrderBank={handleReassignOrderBank}
-      />
+      {movementsModal.open && (
+        <BankMovementsModal
+          isOpen={movementsModal.open}
+          onClose={() => setMovementsModal({ open: false, accountId: null })}
+          initialAccountId={movementsModal.accountId}
+          accounts={accounts}
+          onReassignOrderBank={handleReassignOrderBank}
+        />
+      )}
 
       {/* Modal de Bitácora de Cuadres y Ajustes */}
-      <BankAdjustmentsModal
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
-        adjustments={adjustments}
-        accounts={accounts}
-      />
+      {historyModalOpen && (
+        <BankAdjustmentsModal
+          isOpen={historyModalOpen}
+          onClose={() => setHistoryModalOpen(false)}
+          adjustments={adjustments}
+          accounts={accounts}
+        />
+      )}
 
       {/* Modal de Cuadre Manual de Posición */}
-      <BankReconcileModal
-        isOpen={reconcileModal.open}
-        onClose={() => setReconcileModal((prev) => ({ ...prev, open: false }))}
-        accounts={accounts}
-        initialAccountId={reconcileModal.accountId}
-        hideAccountSelector={true}
-        onSuccess={(updatedData) => setData(updatedData)}
-      />
+      {reconcileModal.open && (
+        <BankReconcileModal
+          isOpen={reconcileModal.open}
+          onClose={() => setReconcileModal((prev) => ({ ...prev, open: false }))}
+          accounts={accounts}
+          initialAccountId={reconcileModal.accountId}
+          hideAccountSelector={true}
+          onSuccess={(updatedData) => setData(updatedData)}
+        />
+      )}
 
       {/* Modal para Crear / Configurar Cuenta Bancaria */}
-      <BankAccountFormModal
-        isOpen={accountFormModal.open}
-        onClose={() => setAccountFormModal({ open: false, editingAccount: null })}
-        editingAccount={accountFormModal.editingAccount}
-        existingAccounts={accounts}
-        onSuccess={(updatedData) => {
-          setData(updatedData);
-          setAccountFormModal({ open: false, editingAccount: null });
-        }}
-      />
+      {accountFormModal.open && (
+        <BankAccountFormModal
+          isOpen={accountFormModal.open}
+          onClose={() => setAccountFormModal({ open: false, editingAccount: null })}
+          editingAccount={accountFormModal.editingAccount}
+          existingAccounts={accounts}
+          onSuccess={(updatedData) => {
+            setData(updatedData);
+            setAccountFormModal({ open: false, editingAccount: null });
+          }}
+        />
+      )}
     </div>
   );
 }

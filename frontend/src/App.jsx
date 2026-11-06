@@ -484,6 +484,7 @@ export default function App() {
         {visitedViews.has('TREASURY') && (
           <div className={activeView === 'TREASURY' ? 'contents' : 'hidden'}>
             <TreasuryView
+              isActive={activeView === 'TREASURY'}
               refreshTrigger={refreshTrigger}
               onInventoryChange={() => {
                 setRefreshTrigger((prev) => prev + 1);

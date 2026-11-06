@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -72,6 +72,9 @@ if FRONTEND_DIST_DIR.exists() and (FRONTEND_DIST_DIR / "index.html").exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
+        # Rutas bajo /api nunca deben caer al fallback de SPA
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Endpoint no encontrado.")
         # Si el archivo exacto existe en dist (ej. favicon, manifest, etc.)
         target_file = FRONTEND_DIST_DIR / full_path
         if full_path and target_file.is_file():

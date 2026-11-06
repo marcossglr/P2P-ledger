@@ -100,7 +100,11 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 #### 2. Frontend:
+Si utilizas el entorno virtual integrado del proyecto (`backend/.venv`), `node` y `npm` ya vienen preconfigurados:
 ```bash
+# Activar entorno o incorporar binarios al PATH
+export PATH="$(pwd)/backend/.venv/bin:$PATH"
+
 cd frontend
 npm install
 npm run dev

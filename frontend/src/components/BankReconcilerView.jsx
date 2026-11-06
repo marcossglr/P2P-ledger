@@ -99,29 +99,29 @@ export default function BankReconcilerView() {
           />
         </div>
 
-        <div className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+        <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
           <div className="space-y-3">
-            <h3 className="text-base font-bold text-white">Cruce contra Banco</h3>
+            <h3 className="text-sm font-bold text-white">Cruce contra Banco</h3>
             <p className="text-xs text-slate-400">
               Compara las órdenes guardadas en tu historial de Binance P2P contra las líneas extraídas del PDF bancario:
             </p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li>• <strong>Nivel 1 (Exacto):</strong> Referencia o monto exacto el mismo día.</li>
-              <li>• <strong>Nivel 2 (Ventana):</strong> Monto coincidente dentro de ±2 días.</li>
-              <li>• <strong>Emparejamiento Manual:</strong> 1 clic para pagos fraccionados.</li>
+              <li>• <strong className="text-white">Nivel 1 (Exacto):</strong> Referencia o monto exacto el mismo día.</li>
+              <li>• <strong className="text-white">Nivel 2 (Ventana):</strong> Monto coincidente dentro de ±2 días.</li>
+              <li>• <strong className="text-white">Emparejamiento Manual:</strong> 1 clic para pagos fraccionados.</li>
             </ul>
           </div>
 
           <Button
             type="button"
             variant="emerald"
-            size="md"
+            size="sm"
             icon={ArrowRightLeft}
             loading={loading}
             onClick={runAutoReconcile}
-            className="mt-6 w-full py-3"
+            className="mt-5 w-full h-8"
           >
-            <span>{loading ? 'Ejecutando cruce...' : 'Ejecutar Conciliación con Banco'}</span>
+            <span>{loading ? 'Ejecutando cruce...' : 'Ejecutar Conciliación'}</span>
           </Button>
         </div>
       </div>
@@ -136,27 +136,30 @@ export default function BankReconcilerView() {
       {reconciliation && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
-            <div className="flex gap-2">
+            {/* Segmented Control con radios concéntricos (h-8 contenedor, h-6 chips) */}
+            <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs">
               <button
+                type="button"
                 onClick={() => setActiveTab('MATCHED')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold ${
+                className={`flex h-6 items-center gap-1.5 rounded-lg px-2.5 font-medium transition-all ${
                   activeTab === 'MATCHED'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-slate-950 text-slate-400'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-3.5 w-3.5" />
                 <span>Conciliadas ({reconciliation.matched_count})</span>
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab('UNMATCHED')}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold ${
+                className={`flex h-6 items-center gap-1.5 rounded-lg px-2.5 font-medium transition-all ${
                   activeTab === 'UNMATCHED'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : 'bg-slate-950 text-slate-400'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <AlertTriangle className="h-4 w-4" />
+                <AlertTriangle className="h-3.5 w-3.5" />
                 <span>
                   Excepciones: Binance ({reconciliation.unmatched_orders_count}) / Banco ({reconciliation.unmatched_bank_count})
                 </span>
@@ -171,40 +174,40 @@ export default function BankReconcilerView() {
                 icon={Link2}
                 onClick={handleManualMatch}
               >
-                <span>Emparejar Manualmente Seleccionados</span>
+                <span>Emparejar Manualmente</span>
               </Button>
             )}
           </div>
 
           {activeTab === 'MATCHED' ? (
             <div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="w-full">
+                <table className="w-full text-left text-xs table-fixed">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="py-2 pr-3">Nivel</th>
-                      <th className="py-2 px-2">Orden Binance</th>
-                      <th className="py-2 px-2">Fecha Orden</th>
-                      <th className="py-2 px-2 text-right">Monto Orden</th>
-                      <th className="py-2 px-2">Ref. Banco</th>
-                      <th className="py-2 px-2">Concepto Banco</th>
-                      <th className="py-2 pl-2 text-right">Monto Banco</th>
+                    <tr className="border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      <th className="w-24 py-2.5 pr-2">Nivel</th>
+                      <th className="w-28 py-2.5 px-2">Orden Binance</th>
+                      <th className="w-32 py-2.5 px-2">Fecha Orden</th>
+                      <th className="w-28 py-2.5 px-2 text-right">Monto Orden</th>
+                      <th className="w-28 py-2.5 px-2">Ref. Banco</th>
+                      <th className="py-2.5 px-2">Concepto Banco</th>
+                      <th className="w-28 py-2.5 pl-2 text-right">Monto Banco</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
                     {paginatedMatched.map((m, i) => (
                       <tr key={i} className="hover:bg-slate-800/30">
-                        <td className="py-2 pr-3 font-sans">
+                        <td className="py-2 pr-2 font-sans">
                           <Badge variant="success" size="xs">
                             {m.match_level}
                           </Badge>
                         </td>
-                        <td className="py-2 px-2 text-slate-300 font-mono">#{m.order_number.slice(-8)}</td>
-                        <td className="py-2 px-2 text-slate-400 tabular-nums">{fmtDateTime(m.order_date)}</td>
-                        <td className="py-2 px-2 text-right text-amber-300 tabular-nums">{m.fiat_amount}</td>
-                        <td className="py-2 px-2 text-emerald-300 font-mono">{m.reference}</td>
-                        <td className="py-2 px-2 font-sans text-slate-400 truncate max-w-[200px]">{m.description}</td>
-                        <td className="py-2 pl-2 text-right text-emerald-300 tabular-nums">{m.bank_amount}</td>
+                        <td className="py-2 px-2 text-slate-300 font-mono truncate">#{m.order_number.slice(-8)}</td>
+                        <td className="py-2 px-2 text-slate-400 tabular-nums truncate">{fmtDateTime(m.order_date)}</td>
+                        <td className="py-2 px-2 text-right text-amber-300 tabular-nums font-mono font-medium">{m.fiat_amount}</td>
+                        <td className="py-2 px-2 text-emerald-300 font-mono truncate">{m.reference}</td>
+                        <td className="py-2 px-2 font-sans text-slate-400 truncate" title={m.description}>{m.description}</td>
+                        <td className="py-2 pl-2 text-right text-emerald-300 tabular-nums font-mono font-medium">{m.bank_amount}</td>
                       </tr>
                     ))}
                     {matchedPairs.length === 0 && (

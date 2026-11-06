@@ -350,53 +350,100 @@ def fetch_c2c_user_pay_methods(
     api_key: Optional[str] = None,
     api_secret: Optional[str] = None,
     fiat_unit: str = "VES",
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     """
-    Consulta los anuncios del usuario en Binance C2C (/sapi/v1/c2c/ads/listWithPagination)
-    para extraer exactamente los métodos de pago (bancos) que el usuario tiene configurados
-    en su cuenta de Binance P2P para la moneda fiat indicada.
+    Consulta los métodos de pago registrados directamente en el perfil del usuario en Binance P2P.
+    Utiliza el endpoint de gestión de métodos de pago de usuario:
+    - GET /sapi/v1/c2c/agent/ads/getPayMethodByUserId
+    Si el endpoint de perfil no está habilitado o no devuelve registros, hace fallback a la lectura
+    de métodos en anuncios activos (/sapi/v1/c2c/ads/listWithPagination).
+
+    Retorna una lista de diccionarios con la metadata del método:
+    [{"name": "Banco de Venezuela", "identifier": "BancoDeVenezuela", "payId": ...}, ...]
     """
     creds = get_saved_credentials()
     key = (api_key or creds["api_key"]).strip()
     secret = (api_secret or creds["api_secret"]).strip()
 
     if not key or not secret:
-        return []
+        raise ValueError("Credenciales de API de Binance no configuradas.")
 
-    resp = _signed_post(
-        "/sapi/v1/c2c/ads/listWithPagination",
-        params={},
-        body={"page": 1, "rows": 50},
-        api_key=key,
-        api_secret=secret,
-    )
-    ads = resp.get("data") or []
-    methods: List[str] = []
+    methods: List[Dict[str, Any]] = []
     seen = set()
 
-    for ad in ads:
-        ad_fiat = str(ad.get("fiatUnit") or "VES").upper().strip()
-        if fiat_unit and ad_fiat != fiat_unit.upper():
-            continue
+    # 1. Enfoque Principal: Consultar métodos de pago asociados directamente a la cuenta del usuario
+    try:
+        resp = _signed_get(
+            "/sapi/v1/c2c/agent/ads/getPayMethodByUserId",
+            params={},
+            api_key=key,
+            api_secret=secret,
+        )
+        user_methods = resp if isinstance(resp, list) else (resp.get("data") or [])
+        for pm in user_methods:
+            if not isinstance(pm, dict):
+                continue
+            name = (pm.get("tradeMethodName") or pm.get("tradeMethod") or "").strip()
+            identifier = (pm.get("identifier") or pm.get("payType") or "").strip()
+            pay_id = pm.get("payId")
+            val = name or identifier
+            if val and val.lower() not in seen:
+                seen.add(val.lower())
+                methods.append({
+                    "name": name or identifier,
+                    "identifier": identifier,
+                    "pay_id": pay_id,
+                    "raw": pm,
+                })
+    except Exception as err:
+        logger.warning("Fallo al consultar /sapi/v1/c2c/agent/ads/getPayMethodByUserId: %s", err)
 
-        for tm in ad.get("tradeMethods") or []:
-            candidate = (
-                str(tm.get("tradeMethodName") or "").strip()
-                or str(tm.get("identifier") or "").strip()
-                or str(tm.get("payType") or "").strip()
-            )
-            if candidate and candidate.lower() not in seen:
-                seen.add(candidate.lower())
-                methods.append(candidate)
+    # 2. Si ya obtuvimos métodos del perfil del usuario, retornarlos
+    if methods:
+        return methods
 
-        for tm_vo in ad.get("tradeMethodCommissionRateVoList") or []:
-            candidate = (
-                str(tm_vo.get("tradeMethodName") or "").strip()
-                or str(tm_vo.get("tradeMethodIdentifier") or "").strip()
-            )
-            if candidate and candidate.lower() not in seen:
-                seen.add(candidate.lower())
-                methods.append(candidate)
+    # 3. Fallback: Consultar anuncios activos del usuario (/sapi/v1/c2c/ads/listWithPagination)
+    try:
+        resp = _signed_post(
+            "/sapi/v1/c2c/ads/listWithPagination",
+            params={},
+            body={"page": 1, "rows": 50},
+            api_key=key,
+            api_secret=secret,
+        )
+        ads = resp.get("data") or []
+        for ad in ads:
+            ad_fiat = str(ad.get("fiatUnit") or "VES").upper().strip()
+            if fiat_unit and ad_fiat != fiat_unit.upper():
+                continue
+
+            for tm in ad.get("tradeMethods") or []:
+                name = str(tm.get("tradeMethodName") or "").strip()
+                ident = str(tm.get("identifier") or tm.get("payType") or "").strip()
+                val = name or ident
+                if val and val.lower() not in seen:
+                    seen.add(val.lower())
+                    methods.append({
+                        "name": val,
+                        "identifier": ident,
+                        "pay_id": tm.get("payId"),
+                        "raw": tm,
+                    })
+
+            for tm_vo in ad.get("tradeMethodCommissionRateVoList") or []:
+                name = str(tm_vo.get("tradeMethodName") or "").strip()
+                ident = str(tm_vo.get("tradeMethodIdentifier") or "").strip()
+                val = name or ident
+                if val and val.lower() not in seen:
+                    seen.add(val.lower())
+                    methods.append({
+                        "name": val,
+                        "identifier": ident,
+                        "pay_id": tm_vo.get("payId"),
+                        "raw": tm_vo,
+                    })
+    except Exception as err:
+        logger.warning("Fallo en fallback de anuncios c2c: %s", err)
 
     return methods
 

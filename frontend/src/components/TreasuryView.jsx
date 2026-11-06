@@ -3,7 +3,7 @@ import { Building2, FileText } from 'lucide-react';
 import BankInventoryView from './BankInventoryView';
 import BankReconcilerView from './BankReconcilerView';
 
-export default function TreasuryView({ refreshTrigger, onInventoryChange }) {
+export default function TreasuryView({ isActive = true, refreshTrigger, onInventoryChange }) {
   const [activeTab, setActiveTab] = useState('ACCOUNTS'); // 'ACCOUNTS' | 'RECONCILER'
 
   return (
@@ -20,12 +20,12 @@ export default function TreasuryView({ refreshTrigger, onInventoryChange }) {
           </p>
         </div>
 
-        {/* Selector de Pestañas tipo Segmented Control */}
-        <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900/90 p-1 text-xs">
+        {/* Selector de Pestañas tipo Segmented Control con radios concéntricos */}
+        <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs">
           <button
             type="button"
             onClick={() => setActiveTab('ACCOUNTS')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-all ${
+            className={`flex h-6 items-center gap-1.5 rounded-lg px-2.5 font-medium transition-all ${
               activeTab === 'ACCOUNTS'
                 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shadow-xs'
                 : 'text-slate-400 hover:text-slate-200'
@@ -38,7 +38,7 @@ export default function TreasuryView({ refreshTrigger, onInventoryChange }) {
           <button
             type="button"
             onClick={() => setActiveTab('RECONCILER')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-all ${
+            className={`flex h-6 items-center gap-1.5 rounded-lg px-2.5 font-medium transition-all ${
               activeTab === 'RECONCILER'
                 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shadow-xs'
                 : 'text-slate-400 hover:text-slate-200'
@@ -53,6 +53,7 @@ export default function TreasuryView({ refreshTrigger, onInventoryChange }) {
       {/* Contenido de la Sub-Pestaña Activa */}
       {activeTab === 'ACCOUNTS' && (
         <BankInventoryView
+          isActive={isActive}
           refreshTrigger={refreshTrigger}
           onInventoryChange={onInventoryChange}
         />

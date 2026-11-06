@@ -23,6 +23,11 @@ export default function BankAccountFormModal({
   // Form states
   const [accName, setAccName] = useState('');
   const [accAlias, setAccAlias] = useState('');
+  const [accBankCode, setAccBankCode] = useState('');
+  const [accAccountNumber, setAccAccountNumber] = useState('');
+  const [accHolderName, setAccHolderName] = useState('');
+  const [accHolderId, setAccHolderId] = useState('');
+  const [accPhoneNumber, setAccPhoneNumber] = useState('');
   const [accKeywords, setAccKeywords] = useState('');
   const [accIsDefault, setAccIsDefault] = useState(false);
   const [accApplyFee, setAccApplyFee] = useState(true);
@@ -55,6 +60,11 @@ export default function BankAccountFormModal({
     if (editingAccount) {
       setAccName(editingAccount.name || '');
       setAccAlias(editingAccount.account_alias || '');
+      setAccBankCode(editingAccount.bank_code || '');
+      setAccAccountNumber(editingAccount.account_number || '');
+      setAccHolderName(editingAccount.holder_name || '');
+      setAccHolderId(editingAccount.holder_id || '');
+      setAccPhoneNumber(editingAccount.phone_number || '');
       setAccKeywords(editingAccount.match_keywords || '');
       setAccIsDefault(Boolean(editingAccount.is_default));
       setAccApplyFee(Boolean(editingAccount.apply_buy_fee));
@@ -65,6 +75,11 @@ export default function BankAccountFormModal({
     } else {
       setAccName('');
       setAccAlias('');
+      setAccBankCode('');
+      setAccAccountNumber('');
+      setAccHolderName('');
+      setAccHolderId('');
+      setAccPhoneNumber('');
       setAccKeywords('');
       setAccIsDefault(existingAccounts.length === 0);
       setAccApplyFee(true);
@@ -79,7 +94,8 @@ export default function BankAccountFormModal({
   const handleSelectCatalogBank = (b) => {
     setSelectedCatalogBank(b);
     setAccName(b.name);
-    setAccAlias(b.alias_template);
+    setAccAlias(b.alias_template || `Cuenta ${b.name}`);
+    setAccBankCode(b.code || '');
     setAccKeywords(b.keywords.join(', '));
     setAccPmFeePct(b.default_pago_movil_fee ?? 0.3);
     setAccTransfFeePct(b.default_transfer_fee ?? 0.0);
@@ -125,6 +141,11 @@ export default function BankAccountFormModal({
       const payload = {
         name: accName.trim(),
         account_alias: accAlias.trim(),
+        bank_code: accBankCode.trim(),
+        account_number: accAccountNumber.trim().replace(/\s+/g, ''),
+        holder_name: accHolderName.trim(),
+        holder_id: accHolderId.trim().toUpperCase(),
+        phone_number: accPhoneNumber.trim(),
         match_keywords: accKeywords.trim() || accName.trim().toLowerCase(),
         is_default: accIsDefault,
         apply_buy_fee: accApplyFee,
@@ -271,7 +292,7 @@ export default function BankAccountFormModal({
 
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Alias / Titular (Opcional)
+                  Alias Descriptivo (Opcional)
                 </label>
                 <Input
                   type="text"
@@ -279,6 +300,84 @@ export default function BankAccountFormModal({
                   onChange={(e) => setAccAlias(e.target.value)}
                   placeholder="Ej: Cuenta BDV Principal"
                 />
+              </div>
+            </div>
+
+            {/* Datos Detallados de la Cuenta (Número, Titular, CI/RIF, Teléfono) */}
+            <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-3.5 space-y-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-400/90 flex items-center justify-between">
+                <span>Datos Financieros y Pago Móvil</span>
+                <span className="text-[10px] text-slate-500 font-normal">Para conciliar extractos y arqueos</span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Código Banco
+                  </label>
+                  <Input
+                    type="text"
+                    maxLength={4}
+                    value={accBankCode}
+                    onChange={(e) => setAccBankCode(e.target.value)}
+                    placeholder="0102"
+                    className="font-mono text-center"
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Número de Cuenta (20 dígitos)
+                  </label>
+                  <Input
+                    type="text"
+                    maxLength={23}
+                    value={accAccountNumber}
+                    onChange={(e) => setAccAccountNumber(e.target.value)}
+                    placeholder="0102 0123 45 6789012345"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Cédula / RIF
+                  </label>
+                  <Input
+                    type="text"
+                    value={accHolderId}
+                    onChange={(e) => setAccHolderId(e.target.value)}
+                    placeholder="V-12345678"
+                    className="font-mono uppercase"
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Teléfono Pago Móvil
+                  </label>
+                  <Input
+                    type="text"
+                    value={accPhoneNumber}
+                    onChange={(e) => setAccPhoneNumber(e.target.value)}
+                    placeholder="04121234567"
+                    className="font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Titular de Cuenta
+                  </label>
+                  <Input
+                    type="text"
+                    value={accHolderName}
+                    onChange={(e) => setAccHolderName(e.target.value)}
+                    placeholder="Nombre y Apellido"
+                  />
+                </div>
               </div>
             </div>
 

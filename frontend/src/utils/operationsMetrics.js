@@ -33,6 +33,8 @@ export function computeOperationsMetrics({
   const refRate =
     Number(stats.wac_buy_price) > 0
       ? Number(stats.wac_buy_price)
+      : Number(bankInventory?.consolidated?.ref_wac_rate || 0) > 0
+      ? Number(bankInventory.consolidated.ref_wac_rate)
       : Number(stats.wap_sell_price) > 0
       ? Number(stats.wap_sell_price)
       : Number(bankInventory?.consolidated?.reference_rate || 1);

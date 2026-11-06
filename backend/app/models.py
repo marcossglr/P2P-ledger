@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Index
 from .database import Base
 
 
@@ -39,6 +39,13 @@ class BinanceOrder(Base):
     payment_channel = Column(String, nullable=True, index=True)   # "PAGO_MOVIL" (cobra comisión) | "TRANSFERENCIA" (mismo banco, 0%)
     payment_channel_manual = Column(Integer, default=0)           # 1 si el canal fue fijado manualmente por el usuario
 
+    __table_args__ = (
+        Index("idx_orders_fiat_status_ts", "fiat_currency", "order_status", "create_timestamp"),
+        Index("idx_orders_fiat_status_date", "fiat_currency", "order_status", "order_date"),
+        Index("idx_orders_fiat_bank_date", "fiat_currency", "bank_account_id", "order_date"),
+        Index("idx_orders_grouping_perf", "fiat_currency", "order_status", "bank_account_id", "pay_method"),
+    )
+
 
 class BankAccount(Base):
     __tablename__ = "bank_accounts"
@@ -46,6 +53,11 @@ class BankAccount(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)         # Ej: "Banesco", "Mercantil", "Banco Provincial"
     account_alias = Column(String, default="")             # Ej: "Cuenta Principal / 0134"
+    bank_code = Column(String, default="")                 # Código Sudeban de 4 dígitos: "0102", "0134", etc.
+    account_number = Column(String, default="")            # 20 dígitos de la cuenta bancaria nacional
+    holder_name = Column(String, default="")               # Titular de la cuenta
+    holder_id = Column(String, default="")                 # Cédula o RIF (V-12345678, J-...)
+    phone_number = Column(String, default="")              # Teléfono afiliado a Pago Móvil
     fiat_currency = Column(String, default="VES")
     match_keywords = Column(String, default="")            # Palabras clave separadas por coma: "banesco"
     is_default = Column(Integer, default=0)                # 1 si recibe órdenes genéricas ("Pago Móvil")

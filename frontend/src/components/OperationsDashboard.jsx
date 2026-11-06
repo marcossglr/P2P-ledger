@@ -9,7 +9,6 @@ import {
 import TablePaginator from './TablePaginator';
 import OrderDetailsModal from './OrderDetailsModal';
 import BankReconcileModal from './BankReconcileModal';
-import MarketPairModal from './MarketPairModal';
 import OperationsTable from './OperationsTable';
 import P2PMarketChartCard from './P2PMarketChartCard';
 import OperationsKpiCards from './dashboard/OperationsKpiCards';
@@ -28,8 +27,6 @@ import { Button } from './ui';
 
 // Constantes referenciales vacías para evitar re-renders por props inestables ([])
 const EMPTY_ARRAY = [];
-const DEFAULT_AVAILABLE_ASSETS = ['USDT'];
-const DEFAULT_AVAILABLE_FIATS = ['VES'];
 
 export default function OperationsDashboard({
   onOpenApiModal,
@@ -75,9 +72,6 @@ export default function OperationsDashboard({
     tab: 'SINGLE',
   });
 
-  // Modal selector de Par de Mercado (Cripto / Fiat)
-  const [isPairModalOpen, setIsPairModalOpen] = useState(false);
-
   // Paginación de la tabla de hoy
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -94,7 +88,6 @@ export default function OperationsDashboard({
     () => setReconcileModal((prev) => ({ ...prev, open: false })),
     []
   );
-  const handleClosePairModal = useCallback(() => setIsPairModalOpen(false), []);
   const handleOpenReconcileModal = useCallback(() => {
     setReconcileModal({
       open: true,
@@ -423,24 +416,6 @@ export default function OperationsDashboard({
           initialAccountId={reconcileModal.accountId}
           initialTab={reconcileModal.tab}
           onSuccess={updateBankInventory}
-        />
-      )}
-
-      {/* Modal Selector de Par de Mercado (Solo si está abierto) */}
-      {isPairModalOpen && (
-        <MarketPairModal
-          isOpen={isPairModalOpen}
-          onClose={handleClosePairModal}
-          selectedAsset={selectedAsset}
-          selectedFiat={fiatCurrency}
-          availableAssets={data?.available_assets || DEFAULT_AVAILABLE_ASSETS}
-          availableFiats={data?.available_fiats || DEFAULT_AVAILABLE_FIATS}
-          onSelectPair={(newAsset, newFiat) => {
-            localStorage.setItem('user_custom_asset_selected', 'true');
-            localStorage.setItem('user_custom_fiat_selected', 'true');
-            setSelectedAsset?.(newAsset);
-            setFiatCurrency?.(newFiat);
-          }}
         />
       )}
     </div>
