@@ -5,7 +5,7 @@ from backend.app.services.analytics import compute_operations_analytics
 
 class TestAnalyticsFinancialFormulas(unittest.TestCase):
     """
-    Verifica las fórmulas financieras especificadas en DOCUMENTACION_CALCULOS_Y_FORMULAS.md:
+    Verifica las fórmulas financieras especificadas en docs/formulas.md:
     1. WAC (Costo Promedio Ponderado de Compra) = Total Fiat Comprado / Total USDT Comprado
     2. WAP (Precio Promedio Ponderado de Venta) = Total Fiat Vendido / Total USDT Vendido
     3. Spread Absoluto = WAP - WAC

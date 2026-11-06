@@ -34,7 +34,7 @@ Plataforma integral y local para comerciantes de arbitraje P2P (Binance y Banca 
   * WebSockets y httpx para streaming y consumo de endpoints de Binance.
   * [pdfplumber](https://github.com/jsvine/pdfplumber) para extracción de datos de estados de cuenta.
 * **Documentación Matemática:**
-  * Consulta [`DOCUMENTACION_CALCULOS_Y_FORMULAS.md`](./DOCUMENTACION_CALCULOS_Y_FORMULAS.md) para conocer en profundidad las fórmulas financieras, tasas de comisiones y algoritmos de conciliación.
+  * Consulta [`docs/formulas.md`](./docs/formulas.md) para conocer en profundidad las fórmulas financieras, tasas de comisiones y algoritmos de conciliación.
 
 ---
 
@@ -57,7 +57,8 @@ Plataforma integral y local para comerciantes de arbitraje P2P (Binance y Banca 
 │   │   ├── services/           # Clientes HTTP hacia la API Backend
 │   │   └── utils/              # Funciones auxiliares y formateadores
 │   └── package.json            # Dependencias del cliente web
-├── DOCUMENTACION_CALCULOS_Y_FORMULAS.md # Especificación técnica financiera
+├── docs/
+│   └── formulas.md                      # Especificación técnica financiera
 ├── run.sh                      # Script unificado de inicio de servicios
 └── README.md
 ```
