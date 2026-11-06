@@ -28,8 +28,9 @@ jobs:
 
       - name: Run backend tests
         run: |
-          cd backend
-          python -m unittest discover tests
+          python -m unittest discover backend/tests
+        env:
+          PYTHONPATH: .
 
   frontend-build:
     name: Frontend Build & Tests
