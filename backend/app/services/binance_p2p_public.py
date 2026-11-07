@@ -13,6 +13,8 @@ Nota sobre `tradeType` (perspectiva del usuario que consulta el mercado):
 """
 
 import os
+import sys
+import ssl
 import json
 import time
 import statistics
@@ -21,6 +23,41 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+SYSTEM_CA_PATHS = [
+    "/etc/ssl/certs/ca-bundle.crt",
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/cert.pem",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+]
+
+def _get_ssl_context() -> ssl.SSLContext:
+    """Crea un contexto SSL robusto para entornos congelados con PyInstaller o sistemas Linux."""
+    # 1. Intentar certifi
+    try:
+        import certifi
+        ca = certifi.where()
+        if os.path.exists(ca):
+            return ssl.create_default_context(cafile=ca)
+    except Exception:
+        pass
+
+    # 2. Intentar archivo empaquetado en sys._MEIPASS
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        meipass_cert = os.path.join(sys._MEIPASS, "certifi", "cacert.pem")
+        if os.path.exists(meipass_cert):
+            return ssl.create_default_context(cafile=meipass_cert)
+
+    # 3. Intentar CAs del sistema operativo
+    for ca_path in SYSTEM_CA_PATHS:
+        if os.path.exists(ca_path):
+            try:
+                return ssl.create_default_context(cafile=ca_path)
+            except Exception:
+                pass
+
+    return ssl.create_default_context()
 
 P2P_PUBLIC_BASE_URL = "https://p2p.binance.com"
 P2P_ADV_SEARCH_ENDPOINT = "/bapi/c2c/v2/friendly/c2c/adv/search"
@@ -149,7 +186,8 @@ def _public_post(endpoint: str, body: Dict[str, Any], timeout: int = 15) -> Dict
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        ctx = _get_ssl_context()
+        with urllib.request.urlopen(req, context=ctx, timeout=timeout) as response:
             raw = response.read().decode("utf-8")
             data = json.loads(raw)
     except urllib.error.HTTPError as e:

@@ -1,6 +1,21 @@
+import os
 import sys
 import multiprocessing
 from pathlib import Path
+
+# Configurar bundle de certificados SSL si corre empaquetado con PyInstaller
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    cacert_path = os.path.join(sys._MEIPASS, "certifi", "cacert.pem")
+    if os.path.exists(cacert_path):
+        os.environ["SSL_CERT_FILE"] = cacert_path
+        os.environ["REQUESTS_CA_BUNDLE"] = cacert_path
+else:
+    try:
+        import certifi
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    except Exception:
+        pass
+
 import uvicorn
 from app.main import app
 from app.config import settings

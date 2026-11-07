@@ -1,4 +1,6 @@
 import os
+import sys
+import ssl
 import json
 import time
 import hmac
@@ -9,6 +11,37 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+SYSTEM_CA_PATHS = [
+    "/etc/ssl/certs/ca-bundle.crt",
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/cert.pem",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+]
+
+def _get_ssl_context() -> ssl.SSLContext:
+    try:
+        import certifi
+        ca = certifi.where()
+        if os.path.exists(ca):
+            return ssl.create_default_context(cafile=ca)
+    except Exception:
+        pass
+
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        meipass_cert = os.path.join(sys._MEIPASS, "certifi", "cacert.pem")
+        if os.path.exists(meipass_cert):
+            return ssl.create_default_context(cafile=meipass_cert)
+
+    for ca_path in SYSTEM_CA_PATHS:
+        if os.path.exists(ca_path):
+            try:
+                return ssl.create_default_context(cafile=ca_path)
+            except Exception:
+                pass
+
+    return ssl.create_default_context()
 
 from ..config import settings
 
@@ -181,7 +214,8 @@ def _signed_get(endpoint: str, params: Dict[str, Any], api_key: str, api_secret:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        ctx = _get_ssl_context()
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw)
     except urllib.error.HTTPError as e:
@@ -230,7 +264,8 @@ def _signed_post(
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        ctx = _get_ssl_context()
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw)
     except urllib.error.HTTPError as e:
