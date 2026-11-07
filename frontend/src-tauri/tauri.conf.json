@@ -43,7 +43,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkKUldSYUNkR091cE12NGdQOHp1Y01aR1FnYzhvb0RzQ0Nrc09tUk5sRGJ2TjhWNVZkQjhPZWlybWQK",
+      "pubkey": "tDW+JKoF+rtuj02oggGQJs20S6Jzc5Diq/6BCpLO0Y2wZ14tgzVD1A==",
       "endpoints": [
         "https://github.com/marcossglr/P2P-ledger/releases/latest/download/latest.json"
       ]
