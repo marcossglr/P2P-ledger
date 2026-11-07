@@ -73,7 +73,15 @@ Plataforma integral y local para comerciantes de arbitraje P2P (Binance y Banca 
 
 ---
 
-## 🛠️ Instalación y Puesta en Marcha
+## 📄 Licencia
+
+Este proyecto está distribuido bajo la licencia **GNU General Public License v3.0 (GPLv3)**. Consulta el archivo [`LICENSE`](./LICENSE) para más detalles.
+
+---
+
+## 🔒 Seguridad
+
+Para reportar vulnerabilidades o inquietudes de seguridad de manera responsable, por favor consulta nuestra política en [`SECURITY.md`](./SECURITY.md).
 
 ### Prerrequisitos
 * **Python 3.10+**
