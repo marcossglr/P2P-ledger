@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   Download,
@@ -10,6 +10,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button, Badge } from '../ui';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 // Detección segura de si la app está corriendo en entorno Tauri nativo de escritorio
 const getTauriInvoke = () => {
@@ -23,10 +25,11 @@ export default function AppUpdateSection() {
   const [currentVersion, setCurrentVersion] = useState('0.3.0');
   const [checking, setChecking] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState(null); // { downloaded, total, percent }
+  const [progress, setProgress] = useState(null); // { percent }
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateStatus, setUpdateStatus] = useState('IDLE'); // 'IDLE' | 'AVAILABLE' | 'UP_TO_DATE' | 'READY_TO_RELAUNCH' | 'ERROR'
   const [errorMessage, setErrorMessage] = useState(null);
+  const activeUpdateRef = useRef(null);
   const isTauri = Boolean(getTauriInvoke());
 
   // Al montar, consultar versión de la app si estamos en Tauri
@@ -46,6 +49,10 @@ export default function AppUpdateSection() {
     fetchAppVersion();
     return () => {
       isMounted = false;
+      // Cerrar recurso de update si quedó abierto
+      if (activeUpdateRef.current?.close) {
+        activeUpdateRef.current.close().catch(() => {});
+      }
     };
   }, []);
 
@@ -54,6 +61,12 @@ export default function AppUpdateSection() {
     setErrorMessage(null);
     setUpdateInfo(null);
     setProgress(null);
+
+    // Si había una referencia previa de actualización, liberar su recurso
+    if (activeUpdateRef.current?.close) {
+      await activeUpdateRef.current.close().catch(() => {});
+      activeUpdateRef.current = null;
+    }
 
     const invoke = getTauriInvoke();
 
@@ -90,15 +103,15 @@ export default function AppUpdateSection() {
 
     // Modo Nativo Tauri Desktop: Consultar manifest mediante plugin oficial
     try {
-      // 1. Invocar check de actualización vía IPC nativo
-      const updateData = await invoke('plugin:updater|check');
+      const update = await check();
 
-      if (updateData && (updateData.available || updateData.version)) {
+      if (update && update.available) {
+        activeUpdateRef.current = update;
         setUpdateInfo({
-          version: updateData.version,
-          body: updateData.body || 'Mejoras y correcciones en la última compilación.',
-          date: updateData.date,
-          rid: updateData.rid,
+          version: update.version,
+          body: update.body || 'Mejoras y correcciones en la última compilación.',
+          date: update.date,
+          canInstall: true,
         });
         setUpdateStatus('AVAILABLE');
       } else {
@@ -106,7 +119,7 @@ export default function AppUpdateSection() {
       }
     } catch (err) {
       console.error('Error al comprobar actualizaciones Tauri:', err);
-      // Fallback a GitHub API pública si el plugin de updater responde error de red local
+      // Fallback a GitHub API pública si el plugin de updater falla por red/configuración
       try {
         const res = await fetch(
           'https://api.github.com/repos/marcossglr/P2P-ledger/releases/latest',
@@ -121,6 +134,7 @@ export default function AppUpdateSection() {
               body: release.body || 'Nueva versión disponible en GitHub Releases.',
               date: release.published_at,
               url: release.html_url,
+              canInstall: false,
             });
             setUpdateStatus('AVAILABLE');
             return;
@@ -143,10 +157,11 @@ export default function AppUpdateSection() {
 
   const handleDownloadAndInstall = async () => {
     if (!updateInfo) return;
-    const invoke = getTauriInvoke();
 
-    if (!invoke || !updateInfo.rid) {
-      // En navegador o si se usa el release link directo
+    const activeUpdate = activeUpdateRef.current;
+
+    // Si no estamos en Tauri nativo o no tenemos la instancia oficial de Update
+    if (!activeUpdate || !updateInfo.canInstall) {
       const targetUrl = updateInfo.url || 'https://github.com/marcossglr/P2P-ledger/releases/latest';
       window.open(targetUrl, '_blank', 'noopener,noreferrer');
       return;
@@ -154,14 +169,28 @@ export default function AppUpdateSection() {
 
     setDownloading(true);
     setErrorMessage(null);
+    setProgress({ percent: 0 });
 
     try {
-      await invoke('plugin:updater|download_and_install', {
-        onEvent: (event) => {
-          if (event?.event === 'Progress' && event?.data) {
-            setProgress({ percent: event.data.percent || 50 });
+      let downloadedBytes = 0;
+      let totalBytes = 0;
+
+      await activeUpdate.downloadAndInstall((event) => {
+        if (!event) return;
+        if (event.event === 'Started') {
+          totalBytes = event.data?.contentLength || 0;
+          setProgress({ percent: 1 });
+        } else if (event.event === 'Progress') {
+          downloadedBytes += event.data?.chunkLength || 0;
+          if (totalBytes > 0) {
+            const pct = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
+            setProgress({ percent: pct });
+          } else {
+            setProgress((prev) => ({ percent: Math.min(95, (prev?.percent || 5) + 5) }));
           }
-        },
+        } else if (event.event === 'Finished') {
+          setProgress({ percent: 100 });
+        }
       });
 
       setUpdateStatus('READY_TO_RELAUNCH');
@@ -177,13 +206,19 @@ export default function AppUpdateSection() {
   };
 
   const handleRelaunch = async () => {
-    const invoke = getTauriInvoke();
-    if (invoke) {
-      try {
-        await invoke('plugin:process|restart');
-        return;
-      } catch (err) {
-        console.error('Error al reiniciar aplicación:', err);
+    try {
+      await relaunch();
+      return;
+    } catch (err) {
+      console.error('Error al reiniciar aplicación con plugin-process:', err);
+      const invoke = getTauriInvoke();
+      if (invoke) {
+        try {
+          await invoke('plugin:process|restart');
+          return;
+        } catch {
+          // Ignorado
+        }
       }
     }
     window.location.reload();
@@ -301,15 +336,15 @@ export default function AppUpdateSection() {
                 type="button"
                 variant="primary"
                 size="sm"
-                icon={isTauri && updateInfo.rid ? Download : ExternalLink}
+                icon={isTauri && updateInfo.canInstall ? Download : ExternalLink}
                 loading={downloading}
                 disabled={downloading}
                 onClick={handleDownloadAndInstall}
               >
                 <span>
                   {downloading
-                    ? 'Descargando...'
-                    : isTauri && updateInfo.rid
+                    ? 'Descargando e Instalando...'
+                    : isTauri && updateInfo.canInstall
                     ? 'Actualizar e Instalar Ahora'
                     : 'Ver Descargas en GitHub'}
                 </span>
