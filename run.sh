@@ -23,11 +23,10 @@ NC='\033[0m' # No Color
 
 show_help() {
     cat << EOF
-Uso: ./run.sh [OPCIONES]
+Uso: ./run.sh [COMANDO]
 
-Opciones:
-  dev, --dev          Inicia Backend con autoreload y Frontend Vite dev server (HMR)
-  app, --app, --prod  Inicia en modo Standalone (compila frontend si no existe y sirve vía FastAPI)
+Comandos:
+  dev (por defecto)   Inicia Backend con autoreload y Frontend Vite dev server (HMR)
   test, --test        Ejecuta la suite de pruebas del backend y frontend
   -h, --help          Muestra esta ayuda
 
@@ -101,94 +100,66 @@ check_port() {
     fi
 }
 
-MODE="${1:-app}"
+start_dev() {
+    check_prerequisites
+    check_port "$BACKEND_PORT"
+    check_port "$FRONTEND_PORT"
+
+    echo -e "${BLUE}==================================================${NC}"
+    echo -e "${BLUE}   Entorno de Desarrollo (FastAPI Reload + Vite HMR)  ${NC}"
+    echo -e "${BLUE}==================================================${NC}"
+
+    # 1. Iniciar Backend
+    echo -e "🚀 Iniciando Backend en http://$HOST:$BACKEND_PORT ..."
+    (cd "$BACKEND_DIR" && uvicorn app.main:app --host "$HOST" --port "$BACKEND_PORT" --reload) &
+    BACKEND_PID=$!
+
+    sleep 1
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        echo -e "${RED}❌ Error al iniciar el Backend.${NC}"
+        exit 1
+    fi
+
+    # 2. Iniciar Frontend
+    echo -e "🚀 Iniciando Frontend Vite en http://$HOST:$FRONTEND_PORT ..."
+    (cd "$FRONTEND_DIR" && npm run dev) &
+    FRONTEND_PID=$!
+
+    echo ""
+    echo -e "${GREEN}==================================================${NC}"
+    echo -e "${GREEN}   - Frontend (Vite):  http://localhost:$FRONTEND_PORT ${NC}"
+    echo -e "${GREEN}   - Backend Docs:     http://$HOST:$BACKEND_PORT/docs ${NC}"
+    echo -e "${GREEN}   (Presiona Ctrl + C para detener todo)          ${NC}"
+    echo -e "${GREEN}==================================================${NC}"
+    echo ""
+
+    wait
+}
+
+run_tests() {
+    echo -e "${BLUE}==================================================${NC}"
+    echo -e "${BLUE}   Ejecutando suite de pruebas                    ${NC}"
+    echo -e "${BLUE}==================================================${NC}"
+    check_prerequisites
+
+    echo -e "\n${YELLOW}🧪 Corriendo pruebas de Backend (Python unittest)...${NC}"
+    (cd "$PROJECT_ROOT" && PYTHONPATH=. "$VENV_PATH/bin/python" -m unittest discover backend/tests)
+
+    echo -e "\n${YELLOW}🧪 Corriendo pruebas de Frontend (Vitest)...${NC}"
+    (cd "$FRONTEND_DIR" && npm test -- --run)
+
+    echo -e "\n${GREEN}✅ Todas las pruebas pasaron satisfactoriamente.${NC}"
+}
+
+MODE="${1:-dev}"
 
 case "$MODE" in
     dev|--dev)
-        check_prerequisites
-        check_port "$BACKEND_PORT"
-        check_port "$FRONTEND_PORT"
-
-        echo -e "${BLUE}==================================================${NC}"
-        echo -e "${BLUE}   Modo DESARROLLO (Backend Reload + Vite HMR)    ${NC}"
-        echo -e "${BLUE}==================================================${NC}"
-
-        # 1. Iniciar Backend
-        echo -e "🚀 Iniciando Backend en http://$HOST:$BACKEND_PORT ..."
-        (cd "$BACKEND_DIR" && uvicorn app.main:app --host "$HOST" --port "$BACKEND_PORT" --reload) &
-        BACKEND_PID=$!
-
-        sleep 1
-        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-            echo -e "${RED}❌ Error al iniciar el Backend.${NC}"
-            exit 1
-        fi
-
-        # 2. Iniciar Frontend
-        echo -e "🚀 Iniciando Frontend Vite en http://$HOST:$FRONTEND_PORT ..."
-        (cd "$FRONTEND_DIR" && npm run dev) &
-        FRONTEND_PID=$!
-
-        echo ""
-        echo -e "${GREEN}==================================================${NC}"
-        echo -e "${GREEN}   - Frontend (Vite):  http://localhost:$FRONTEND_PORT ${NC}"
-        echo -e "${GREEN}   - Backend Docs:     http://$HOST:$BACKEND_PORT/docs ${NC}"
-        echo -e "${GREEN}   (Presiona Ctrl + C para detener todo)          ${NC}"
-        echo -e "${GREEN}==================================================${NC}"
-        echo ""
-
-        wait
-        ;;
-
-    app|--app|--prod|prod)
-        check_prerequisites
-        check_port "$BACKEND_PORT"
-
-        echo -e "${BLUE}==================================================${NC}"
-        echo -e "${BLUE}   Modo STANDALONE / PRODUCCIÓN LOCAL             ${NC}"
-        echo -e "${BLUE}==================================================${NC}"
-
-        # Compilar frontend si no existe dist/
-        if [ ! -d "$FRONTEND_DIR/dist" ]; then
-            echo -e "${YELLOW}📦 Compilando assets del Frontend (dist)...${NC}"
-            (cd "$FRONTEND_DIR" && npm run build)
-        fi
-
-        # Iniciar Backend que sirve estáticos
-        echo -e "🚀 Iniciando P2P Ledger en http://$HOST:$BACKEND_PORT ..."
-        (cd "$BACKEND_DIR" && uvicorn app.main:app --host "$HOST" --port "$BACKEND_PORT") &
-        BACKEND_PID=$!
-
-        sleep 1
-        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-            echo -e "${RED}❌ Error al iniciar el servidor.${NC}"
-            exit 1
-        fi
-
-        echo ""
-        echo -e "${GREEN}==================================================${NC}"
-        echo -e "${GREEN}   ✅ Aplicación activa y lista para usar        ${NC}"
-        echo -e "${GREEN}   👉 Abre en tu navegador: http://localhost:$BACKEND_PORT ${NC}"
-        echo -e "${GREEN}   (Presiona Ctrl + C para detener)              ${NC}"
-        echo -e "${GREEN}==================================================${NC}"
-        echo ""
-
-        wait
+        start_dev
         ;;
 
     test|--test)
-        echo -e "${BLUE}==================================================${NC}"
-        echo -e "${BLUE}   Ejecutando suite de pruebas                    ${NC}"
-        echo -e "${BLUE}==================================================${NC}"
-        check_prerequisites
-
-        echo -e "\n${YELLOW}🧪 Corriendo pruebas de Backend (Python unittest)...${NC}"
-        (cd "$PROJECT_ROOT" && PYTHONPATH=. "$VENV_PATH/bin/python" -m unittest discover backend/tests)
-
-        echo -e "\n${YELLOW}🧪 Corriendo pruebas de Frontend (Vitest)...${NC}"
-        (cd "$FRONTEND_DIR" && npm test -- --run)
-
-        echo -e "\n${GREEN}✅ Todas las pruebas pasaron satisfactoriamente.${NC}"
+        run_tests
         ;;
 
     -h|--help|help)

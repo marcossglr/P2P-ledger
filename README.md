@@ -112,26 +112,18 @@ cp .env.example .env
 
 ### 2. Arranque Rápido con `run.sh`
 
-El proyecto incluye el script [`run.sh`](./run.sh) para gestionar los diferentes modos de ejecución:
+El proyecto incluye el script [`run.sh`](./run.sh) para iniciar el entorno de desarrollo y pruebas:
 
-#### Modo Desarrollo (Recomendado para programar)
+#### Modo Desarrollo
 Inicia el backend en `8000` con autoreload y el frontend en `5173` con Vite HMR (recarga en caliente) simultáneamente:
 
 ```bash
 chmod +x run.sh
-./run.sh dev
+./run.sh
 ```
 * **Frontend Web:** `http://localhost:5173`
 * **Backend API:** `http://localhost:8000`
 * **Documentación Interactiva (Swagger UI):** `http://localhost:8000/docs`
-
-#### Modo Standalone (Servido por FastAPI)
-Compila el frontend estático y lo sirve directamente desde FastAPI en un único puerto:
-
-```bash
-./run.sh app
-```
-* **Acceso único:** `http://localhost:8000`
 
 ---
 
