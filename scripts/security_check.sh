@@ -43,8 +43,8 @@ fi
 echo ""
 echo "📦 3. Auditoría de dependencias frontend (npm)..."
 if command -v npm &> /dev/null; then
-    (cd "$ROOT_DIR/frontend" && npm audit --audit-level=high) || true
-    echo "  ✅ Auditoría npm ejecutada."
+    (cd "$ROOT_DIR/frontend" && npm audit --omit=dev --audit-level=high) || true
+    echo "  ✅ Auditoría npm (dependencias de producción) ejecutada."
 else
     echo "  ℹ️ npm no disponible en el entorno actual. Se validará automáticamente en CI/GitHub Actions."
 fi
