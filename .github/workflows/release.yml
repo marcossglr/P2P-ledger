@@ -12,15 +12,15 @@ permissions:
 jobs:
   build-linux:
     name: Compilar para Linux (.rpm / .AppImage / .deb)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repositorio
         uses: actions/checkout@v4
 
-      - name: Instalar dependencias del sistema (WebKitGTK, RPM tools)
+      - name: Instalar dependencias del sistema (WebKitGTK, RPM tools, GCC)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm build-essential
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
@@ -32,7 +32,7 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
           cache: 'pip'
 
       - name: Instalar Rust estable
@@ -40,10 +40,11 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
 
-      - name: Empaquetar Backend Sidecar con PyInstaller
+      - name: Empaquetar Backend Sidecar con PyInstaller (Baseline x86-64 Universal)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt pyinstaller
+          python -m pip install --upgrade pip wheel
+          pip install --no-binary=:all: pyinstaller
+          pip install -r backend/requirements.txt
           mkdir -p frontend/src-tauri/binaries
           pyinstaller --onefile \
             --name p2p-ledger-backend-x86_64-unknown-linux-gnu \

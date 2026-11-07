@@ -37,10 +37,12 @@ import {
   Sun,
   Moon,
   Monitor,
+  ArrowUpCircle,
 } from 'lucide-react';
 import DatabaseBackupsSection from './settings/DatabaseBackupsSection';
 import SystemMaintenanceSection from './settings/SystemMaintenanceSection';
 import BinancePrivateApiSection from './settings/BinancePrivateApiSection';
+import AppUpdateSection from './settings/AppUpdateSection';
 import { playNewTradeSound, playCompletedTradeSound } from '../utils/audioAlerts';
 import { fmtDateTime } from '../utils/formatters';
 import SystemDocumentationSection from './SystemDocumentationSection';
@@ -52,6 +54,7 @@ const TABS = [
   { id: 'PREFERENCES', label: 'Preferencias', icon: Palette },
   { id: 'DOCS', label: 'Información y Cálculos', icon: Info },
   { id: 'MAINTENANCE', label: 'Mantenimiento y Diagnóstico', icon: SlidersHorizontal },
+  { id: 'UPDATES', label: 'Actualizaciones', icon: ArrowUpCircle },
 ];
 
 export default function SettingsView({
@@ -83,6 +86,7 @@ export default function SettingsView({
     if (sec === 'PREFERENCES') return 'PREFERENCES';
     if (sec === 'DOCS' || sec === 'FORMULAS' || sec === 'INFO') return 'DOCS';
     if (sec === 'MAINTENANCE') return 'MAINTENANCE';
+    if (sec === 'UPDATES' || sec === 'UPDATE') return 'UPDATES';
     return 'CONNECTIONS';
   };
 
@@ -761,6 +765,11 @@ export default function SettingsView({
           setMessage={setMessage}
           setError={setError}
         />
+      )}
+
+      {/* 6. SECCIÓN ACTUALIZACIONES */}
+      {activeSection === 'UPDATES' && (
+        <AppUpdateSection />
       )}
         </div>
       </div>
