@@ -2,6 +2,7 @@
  * Capa centralizada de clientes y llamadas a la API del backend.
  * Unifica el manejo de URLs, headers, parsing de JSON y gestión de errores HTTP.
  */
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 // Detección de si la app corre en Tauri Desktop o navegador
 export const isTauriDesktop = () => {
@@ -16,6 +17,18 @@ export const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (isTauriDesktop()) return 'http://127.0.0.1:8000';
   return '';
+};
+
+// Cliente de fetch universal (usa el cliente nativo Rust en Tauri Desktop para eludir CORS/WebKit, y fetch estándar en web)
+export const universalFetch = async (url, options = {}) => {
+  if (isTauriDesktop()) {
+    try {
+      return await tauriFetch(url, options);
+    } catch (e) {
+      console.warn('tauriFetch falló, intentando fetch nativo del navegador:', e);
+    }
+  }
+  return await window.fetch(url, options);
 };
 
 const API_KEY = import.meta.env.VITE_API_KEY || '';
@@ -33,7 +46,7 @@ async function request(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(url, {
+  const response = await universalFetch(url, {
     ...options,
     headers,
   });

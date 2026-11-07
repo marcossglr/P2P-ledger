@@ -8,6 +8,15 @@
     "shell:default",
     "updater:default",
     "process:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://127.0.0.1:*" },
+        { "url": "http://localhost:*" },
+        { "url": "https://api.github.com/*" },
+        { "url": "https://p2p.binance.com/*" }
+      ]
+    }
   ]
 }
