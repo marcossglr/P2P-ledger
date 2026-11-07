@@ -5,3 +5,4 @@ export { default as Badge } from './Badge';
 export { Card, CardHeader, CardTitle, CardDescription, CardContent } from './Card';
 export { default as Modal } from './Modal';
 export { default as InfoPopover } from './InfoPopover';
+export { default as Logo, LogoMark, APP_NAME, APP_TAGLINE } from './Logo';

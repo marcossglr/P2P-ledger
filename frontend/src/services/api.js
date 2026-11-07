@@ -4,18 +4,64 @@
  */
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
+// Variable mutable para almacenar el puerto dinámico resuelto en Tauri Desktop
+let resolvedBackendPort = null;
+let portResolutionPromise = null;
+
 // Detección de si la app corre en Tauri Desktop o navegador
 export const isTauriDesktop = () => {
   if (typeof window === 'undefined') return false;
   return Boolean(window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke);
 };
 
+const getTauriInvoke = () => {
+  if (typeof window === 'undefined') return null;
+  return window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke || null;
+};
+
+/**
+ * Resuelve y almacena el puerto efímero asignado por el backend en producción.
+ * Si falla la primera vez (el backend tarda unos milisegundos en arrancar),
+ * reintenta de forma no bloqueante con backoff.
+ */
+export const resolveBackendPort = async () => {
+  if (!isTauriDesktop()) return null;
+  if (resolvedBackendPort) return resolvedBackendPort;
+  if (portResolutionPromise) return portResolutionPromise;
+
+  portResolutionPromise = (async () => {
+    const invoke = getTauriInvoke();
+    if (!invoke) return 8000;
+
+    for (let attempt = 0; attempt < 25; attempt++) {
+      try {
+        const port = await invoke('get_backend_port');
+        if (port && typeof port === 'number') {
+          resolvedBackendPort = port;
+          return port;
+        }
+      } catch {
+        // El archivo runtime todavía no está listo; esperar 150ms
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+    // Fallback a 8000 por si se ejecutó en un entorno con puerto fijo
+    resolvedBackendPort = 8000;
+    return 8000;
+  })();
+
+  return portResolutionPromise;
+};
+
 // URL base del backend FastAPI:
-// En producción Desktop nativa (Tauri), el backend corre como sidecar en 127.0.0.1:8000.
+// En producción Desktop nativa (Tauri), el backend corre en el puerto efímero descubierto (o 8000 como fallback).
 // Si se usa Vite dev server o navegador con FastAPI sirviendo la SPA, se usa la variable o ruta relativa.
 export const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  if (isTauriDesktop()) return 'http://127.0.0.1:8000';
+  if (isTauriDesktop()) {
+    const port = resolvedBackendPort || 8000;
+    return `http://127.0.0.1:${port}`;
+  }
   return '';
 };
 
@@ -34,6 +80,11 @@ export const universalFetch = async (url, options = {}) => {
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 async function request(endpoint, options = {}) {
+  // Asegurar que el puerto dinámico esté resuelto en Desktop antes del primer request si aún no lo está
+  if (isTauriDesktop() && !resolvedBackendPort) {
+    await resolveBackendPort();
+  }
+
   const base = getApiBaseUrl();
   const url = `${base}${endpoint}`;
   const headers = { ...options.headers };

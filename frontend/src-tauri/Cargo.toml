@@ -1,8 +1,10 @@
 [package]
 name = "p2p-ledger"
 version = "0.3.6"
-description = "Terminal Financiero P2P y Conciliación"
-authors = ["Antigravity"]
+description = "P2P Ledger — Terminal de Conciliación P2P"
+authors = ["marcossglr"]
+license = "GPL-3.0-only"
+repository = "https://github.com/marcossglr/P2P-ledger"
 edition = "2021"
 
 [build-dependencies]

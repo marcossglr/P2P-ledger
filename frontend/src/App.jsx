@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  BarChart3,
   KeyRound,
   RefreshCw,
   FileText,
@@ -24,7 +23,7 @@ import MarketPairModal from './components/MarketPairModal';
 import { playNewTradeSound, playCompletedTradeSound } from './utils/audioAlerts';
 import { fmtTime } from './utils/formatters';
 import { healthApi, binanceApi } from './services/api';
-import { Button, Badge } from './components/ui';
+import { Button, Badge, Logo } from './components/ui';
 
 const ROUTE_TO_VIEW = {
   '/': 'DASHBOARD',
@@ -284,15 +283,10 @@ export default function App() {
             {/* Logo y Nombre en una sola línea */}
             <div
               onClick={() => setActiveView('DASHBOARD')}
-              className="flex items-center gap-2 cursor-pointer group select-none"
+              className="cursor-pointer group select-none"
               title="Ir a Operaciones"
             >
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-bold shadow-md shadow-amber-500/20 group-hover:brightness-110 transition-all">
-                <BarChart3 className="h-3.5 w-3.5" />
-              </div>
-              <h1 className="text-sm font-bold tracking-tight text-white whitespace-nowrap leading-none group-hover:text-amber-300 transition-colors">
-                P2P Ledger
-              </h1>
+              <Logo size="sm" withText textClassName="group-hover:text-amber-300 transition-colors" />
             </div>
 
             {/* Separador vertical sutil entre Logo y Navegación */}
