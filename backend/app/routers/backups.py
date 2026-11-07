@@ -8,10 +8,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 
 from ..database import engine, DB_PATH, BASE_DIR
+from ..config import settings
 
 router = APIRouter(prefix="/api/backups", tags=["Backups"])
 
-BACKUPS_DIR = (BASE_DIR / "backups").resolve()
+BACKUPS_DIR = (settings.DATA_DIR / "backups").resolve()
 BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
 MAX_BACKUP_SIZE_BYTES = 250 * 1024 * 1024   # 250 MB
 

@@ -59,12 +59,28 @@ backend/.binance_p2p_public_config.json
 # Graphify & tool generated outputs
 graphify-out/
 
+# AI assistants, local rules & scratch notes
+AGENTS.md
+CLAUDE.md
+.cursor/
+.cursorrules
+.gemini/
+.antigravity/
+notes/
+scratch/
+*.scratch.*
+
 # Logs and temporary files
 *.log
 *.tmp
 *.temp
 .DS_Store
 Thumbs.db
+
+# Tauri & Rust build artifacts
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/
+*.bundle
 
 # IDE & Editor files
 .idea/

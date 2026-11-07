@@ -10,9 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / ".binance_credentials.json"
-FUNDING_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / ".binance_funding_cache.json"
-USER_ADS_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / ".binance_user_ads_cache.json"
+from ..config import settings
+
+DATA_DIR = settings.DATA_DIR
+CONFIG_PATH = DATA_DIR / ".binance_credentials.json"
+FUNDING_CACHE_PATH = DATA_DIR / ".binance_funding_cache.json"
+USER_ADS_CACHE_PATH = DATA_DIR / ".binance_user_ads_cache.json"
 BINANCE_BASE_URL = "https://api.binance.com"
 
 
