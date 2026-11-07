@@ -1,6 +1,6 @@
 [package]
 name = "p2p-ledger"
-version = "0.3.3"
+version = "0.3.4"
 description = "Terminal Financiero P2P y Conciliación"
 authors = ["Antigravity"]
 edition = "2021"

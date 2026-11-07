@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, FileText, CheckCircle2, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { fmtDateTime, fmtDate } from '../utils/formatters';
 import { Button, Badge } from './ui';
+import { getApiBaseUrl } from '../services/api';
 
 export default function FileDropzone({
   title,
@@ -67,7 +68,8 @@ export default function FileDropzone({
     formData.append('file', file);
 
     try {
-      const response = await fetch(endpoint, {
+      const targetUrl = endpoint.startsWith('http') ? endpoint : `${getApiBaseUrl()}${endpoint}`;
+      const response = await fetch(targetUrl, {
         method: 'POST',
         body: formData,
       });

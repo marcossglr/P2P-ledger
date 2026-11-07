@@ -3,11 +3,26 @@
  * Unifica el manejo de URLs, headers, parsing de JSON y gestión de errores HTTP.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+// Detección de si la app corre en Tauri Desktop o navegador
+export const isTauriDesktop = () => {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke);
+};
+
+// URL base del backend FastAPI:
+// En producción Desktop nativa (Tauri), el backend corre como sidecar en 127.0.0.1:8000.
+// Si se usa Vite dev server o navegador con FastAPI sirviendo la SPA, se usa la variable o ruta relativa.
+export const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (isTauriDesktop()) return 'http://127.0.0.1:8000';
+  return '';
+};
+
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
+  const base = getApiBaseUrl();
+  const url = `${base}${endpoint}`;
   const headers = { ...options.headers };
 
   if (API_KEY) {
@@ -26,9 +41,16 @@ async function request(endpoint, options = {}) {
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     try {
-      const errData = await response.json();
-      if (errData && errData.detail) {
-        errorMessage = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+      const errText = await response.text();
+      if (errText) {
+        try {
+          const errData = JSON.parse(errText);
+          if (errData && errData.detail) {
+            errorMessage = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+          }
+        } catch {
+          errorMessage = errText.slice(0, 150);
+        }
       }
     } catch {
       // Ignorar fallback a errorMessage genérico
@@ -44,7 +66,14 @@ async function request(endpoint, options = {}) {
     return response.blob();
   }
 
-  return response.json();
+  const responseText = await response.text();
+  if (!responseText) return null;
+  try {
+    return JSON.parse(responseText);
+  } catch (parseErr) {
+    console.error('Error parseando JSON de respuesta:', responseText);
+    throw new Error('La respuesta del servidor no tiene un formato JSON válido.');
+  }
 }
 
 export const healthApi = {
@@ -112,7 +141,7 @@ export const operationsApi = {
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') query.append(k, v);
     });
-    return `${API_BASE}/api/operations/export?${query.toString()}`;
+    return `${getApiBaseUrl()}/api/operations/export?${query.toString()}`;
   },
 };
 
@@ -184,5 +213,5 @@ export const backupsApi = {
       method: 'POST',
       body: formData,
     }),
-  getDownloadUrl: (filename) => `${API_BASE}/api/backups/download/${encodeURIComponent(filename)}`,
+  getDownloadUrl: (filename) => `${getApiBaseUrl()}/api/backups/download/${encodeURIComponent(filename)}`,
 };
