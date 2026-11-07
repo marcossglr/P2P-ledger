@@ -28,6 +28,19 @@ Por favor, reporta el hallazgo de manera privada siguiendo estos pasos:
 
 ---
 
+## 🛠️ Buenas Prácticas y Mantenimiento de Tecnologías
+
+Para mantener el ecosistema de este proyecto seguro y al día:
+
+1. **Actualizaciones Semanales Automatizadas (Dependabot):**
+   * Configurado en [`.github/dependabot.yml`](.github/dependabot.yml) para monitorear semanalmente parches de seguridad en `pip` (Backend), `npm` (Frontend), `cargo` (Tauri Desktop) y `GitHub Actions`.
+2. **Auditoría Continua (CI/CD):**
+   * El pipeline de integración continua ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) ejecuta automáticamente `pip-audit` y `npm audit --audit-level=high` en cada PR o commit a las ramas principales.
+3. **Script de Verificación Local:**
+   * Se incluye la utilidad [`scripts/security_check.sh`](scripts/security_check.sh) para verificar permisos de archivos locales sensibles (`chmod 600` en SQLite y `700` en respaldos) y buscar posibles credenciales expuestas antes de desplegar o commitear.
+
+---
+
 ## ⚠️ Advertencia y Descargo de Responsabilidad
 
 Este software opera en modo local en la máquina del usuario. Los operadores son responsables de:

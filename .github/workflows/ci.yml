@@ -24,7 +24,12 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install pip-audit
           pip install -r backend/requirements.txt
+
+      - name: Run backend security audit
+        run: |
+          pip-audit -r backend/requirements.txt
 
       - name: Run backend tests
         run: |
@@ -48,7 +53,12 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm install
+          npm ci
+
+      - name: Run frontend security audit
+        run: |
+          cd frontend
+          npm audit --audit-level=high
 
       - name: Run frontend tests
         run: |
