@@ -14,7 +14,7 @@
    ```
 3. **Inicia el entorno de desarrollo:**
    ```bash
-   ./run.sh dev
+   ./run.sh
    ```
    * Frontend: `http://localhost:5173`
    * Backend Docs: `http://localhost:8000/docs`
