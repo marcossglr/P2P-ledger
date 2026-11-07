@@ -42,7 +42,7 @@ DEFAULT_SQLITE_PATH = DATA_DIR / "p2p_reconciliation.db"
 class Settings(BaseSettings):
     ENVIRONMENT: str = "production" if IS_PRODUCTION else "development"
     PROJECT_NAME: str = "P2P Ledger — Terminal de Conciliación P2P"
-    VERSION: str = "0.3.0"
+    VERSION: str = "0.3.7"
     
     # Directorio activo de almacenamiento persistente
     DATA_DIR: Path = DATA_DIR
