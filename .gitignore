@@ -25,7 +25,6 @@ frontend/dist/
 build/
 .vite/
 frontend/.vite/
-package-lock.json
 
 # Databases, Backups & local persistent storage
 *.db
