@@ -32,7 +32,9 @@
       "binaries/p2p-ledger-backend"
     ],
     "icon": [
-      "icons/icon.png"
+      "icons/128x128.png",
+      "icons/icon.png",
+      "icons/icon.ico"
     ],
     "linux": {
       "rpm": {

@@ -99,12 +99,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt pyinstaller
-          mkdir frontend/src-tauri/binaries
-          pyinstaller --onefile `
-            --name p2p-ledger-backend-x86_64-pc-windows-msvc `
-            --clean `
-            backend/desktop_entry.py
-          Move-Item -Path dist/p2p-ledger-backend-x86_64-pc-windows-msvc.exe -Destination frontend/src-tauri/binaries/
+          New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries
+          pyinstaller --onefile --name p2p-ledger-backend-x86_64-pc-windows-msvc --clean backend/desktop_entry.py
+          Copy-Item -Path dist/p2p-ledger-backend-x86_64-pc-windows-msvc.exe -Destination frontend/src-tauri/binaries/p2p-ledger-backend-x86_64-pc-windows-msvc.exe
 
       - name: Instalar dependencias del Frontend
         run: |
