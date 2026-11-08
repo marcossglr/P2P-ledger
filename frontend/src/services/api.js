@@ -20,9 +20,10 @@ const getTauriInvoke = () => {
 };
 
 /**
- * Resuelve y almacena el puerto efímero asignado por el backend en producción.
- * Si falla la primera vez (el backend tarda unos milisegundos en arrancar),
- * reintenta de forma no bloqueante con backoff.
+ * Resuelve y almacena el puerto efímero asignado por el backend en producción nativa.
+ * Realiza comprobación activa contra el endpoint de salud (/api/health)
+ * para garantizar que el servidor esté listo para recibir peticiones.
+ * NUNCA asume un fallback ciego a 8000 en Tauri Desktop para no enrutar a puertos muertos.
  */
 export const resolveBackendPort = async () => {
   if (!isTauriDesktop()) return null;
@@ -31,36 +32,49 @@ export const resolveBackendPort = async () => {
 
   portResolutionPromise = (async () => {
     const invoke = getTauriInvoke();
-    if (!invoke) return 8000;
+    if (!invoke) return null;
 
-    for (let attempt = 0; attempt < 25; attempt++) {
+    // Intentar resolver y validar el puerto durante hasta ~15 segundos (60 intentos x 250ms)
+    for (let attempt = 0; attempt < 60; attempt++) {
       try {
         const port = await invoke('get_backend_port');
         if (port && typeof port === 'number') {
-          resolvedBackendPort = port;
-          return port;
+          // Comprobar activamente si el backend ya responde en ese puerto
+          try {
+            const healthUrl = `http://127.0.0.1:${port}/api/health`;
+            const checkRes = await universalFetch(healthUrl, { method: 'GET' });
+            if (checkRes && checkRes.ok) {
+              resolvedBackendPort = port;
+              return port;
+            }
+          } catch {
+            // El proceso puede estar iniciando el servidor ASGI; esperar el siguiente tick
+          }
         }
       } catch {
-        // El archivo runtime todavía no está listo; esperar 150ms
-        await new Promise((r) => setTimeout(r, 150));
+        // El descriptor de runtime aún no está disponible o el proceso anterior era stale
       }
+      await new Promise((r) => setTimeout(r, 250));
     }
-    // Fallback a 8000 por si se ejecutó en un entorno con puerto fijo
-    resolvedBackendPort = 8000;
-    return 8000;
+
+    // Si fallan todos los intentos, resetear la promesa para permitir reintentos posteriores sin bloquear la app
+    portResolutionPromise = null;
+    throw new Error('No se pudo establecer conexión con el motor local de P2P Ledger');
   })();
 
   return portResolutionPromise;
 };
 
 // URL base del backend FastAPI:
-// En producción Desktop nativa (Tauri), el backend corre en el puerto efímero descubierto (o 8000 como fallback).
+// En producción Desktop nativa (Tauri), el backend corre en el puerto efímero dinámicamente resuelto.
 // Si se usa Vite dev server o navegador con FastAPI sirviendo la SPA, se usa la variable o ruta relativa.
 export const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (isTauriDesktop()) {
-    const port = resolvedBackendPort || 8000;
-    return `http://127.0.0.1:${port}`;
+    if (!resolvedBackendPort) {
+      throw new Error('El backend local aún no ha inicializado su puerto de comunicación.');
+    }
+    return `http://127.0.0.1:${resolvedBackendPort}`;
   }
   return '';
 };

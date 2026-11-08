@@ -38,6 +38,45 @@ unsafe fn libc_getuid() -> u32 {
     getuid()
 }
 
+#[cfg(unix)]
+unsafe fn libc_kill(pid: i32, sig: i32) -> i32 {
+    extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+    kill(pid, sig)
+}
+
+/// Verifica si un proceso dado sigue con vida en el sistema operativo.
+fn is_process_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        // En Unix, kill con señal 0 no envía ninguna señal, pero comprueba si el proceso existe.
+        unsafe { libc_kill(pid as i32, 0) == 0 }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::raw::HANDLE;
+        extern "system" {
+            fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> HANDLE;
+            fn CloseHandle(hObject: HANDLE) -> i32;
+        }
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if !handle.is_null() {
+                CloseHandle(handle);
+                true
+            } else {
+                false
+            }
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        true
+    }
+}
+
 /// Comando invocado desde el Frontend para consultar el puerto dinámico del backend en producción.
 #[tauri::command]
 fn get_backend_port() -> Result<u16, String> {
@@ -47,6 +86,16 @@ fn get_backend_port() -> Result<u16, String> {
     }
     let content = fs::read_to_string(&file).map_err(|e| e.to_string())?;
     let info: RuntimeInfo = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+
+    // Si el archivo registra un PID, verificar que no sea un descriptor huérfano de una sesión anterior cerrada
+    if let Some(pid) = info.pid {
+        if !is_process_alive(pid) {
+            // Eliminar el archivo huérfano y esperar al backend recién lanzado
+            let _ = fs::remove_file(&file);
+            return Err("Runtime file is stale (process already dead)".to_string());
+        }
+    }
+
     Ok(info.port)
 }
 
