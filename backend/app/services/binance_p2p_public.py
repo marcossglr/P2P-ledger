@@ -22,7 +22,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 SYSTEM_CA_PATHS = [
     "/etc/ssl/certs/ca-bundle.crt",
