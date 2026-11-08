@@ -27,6 +27,7 @@ from ..services.binance_p2p_public import (
     reset_p2p_public_config,
     fetch_p2p_market_snapshot,
     test_p2p_public_connection,
+    fetch_binance_fiat_payment_methods,
 )
 from ..services.bank_inventory import sync_bank_accounts_from_binance
 from ..services.orders import upsert_binance_orders
@@ -149,6 +150,20 @@ def get_p2p_public_market_stats(
         snap["buy"].pop("ads", None)
         snap["sell"].pop("ads", None)
     return snap
+
+
+@router.get("/p2p-public/payment-methods")
+def get_p2p_public_payment_methods(
+    fiat: Optional[str] = Query("VES"),
+    force: bool = Query(False),
+):
+    """Retorna los métodos de pago disponibles en Binance P2P para la divisa fiat indicada."""
+    methods = fetch_binance_fiat_payment_methods(fiat=fiat or "VES", force=force)
+    return {
+        "fiat": (fiat or "VES").upper(),
+        "total": len(methods),
+        "methods": methods,
+    }
 
 
 @router.post("/sync")

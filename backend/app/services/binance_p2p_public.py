@@ -61,9 +61,14 @@ def _get_ssl_context() -> ssl.SSLContext:
 
 P2P_PUBLIC_BASE_URL = "https://p2p.binance.com"
 P2P_ADV_SEARCH_ENDPOINT = "/bapi/c2c/v2/friendly/c2c/adv/search"
+P2P_FILTER_CONDITIONS_ENDPOINT = "/bapi/c2c/v2/public/c2c/adv/filter-conditions"
 P2P_PUBLIC_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent.parent / ".binance_p2p_public_config.json"
 )
+
+# Caché en memoria para los métodos de pago globales de Binance por fiat: { fiat: (timestamp, [methods]) }
+_PAYMENT_METHODS_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+_PAYMENT_METHODS_CACHE_TTL = 3600  # 1 hora
 
 VALID_TRADE_TYPES = ("BUY", "SELL")
 MAX_ROWS_PER_PAGE = 20  # Tope de filas por página aceptado por el endpoint público
@@ -236,12 +241,63 @@ def _normalize_ad(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             for tm in (adv.get("tradeMethods") or [])
             if (tm.get("tradeMethodName") or tm.get("identifier"))
         ],
+        "pay_identifiers": [
+            str(tm.get("identifier") or tm.get("tradeMethodName") or "").strip()
+            for tm in (adv.get("tradeMethods") or [])
+            if (tm.get("identifier") or tm.get("tradeMethodName"))
+        ],
         "advertiser": str(advertiser.get("nickName") or "-"),
         "user_type": str(advertiser.get("userType") or "user"),
         "month_orders": int(advertiser.get("monthOrderCount") or 0),
         "month_finish_rate": _f(advertiser.get("monthFinishRate")),
         "positive_rate": _f(advertiser.get("positiveRate")),
     }
+
+
+def fetch_binance_fiat_payment_methods(fiat: str = "VES", force: bool = False) -> List[Dict[str, Any]]:
+    """
+    Consulta los métodos de pago globales oficiales de Binance para una moneda fiat específica
+    usando el endpoint público /bapi/c2c/v2/public/c2c/adv/filter-conditions.
+    Implementa caché en memoria con TTL de 1 hora para evitar rate limits.
+    """
+    fiat_clean = (fiat or "VES").strip().upper()
+    now = time.time()
+
+    if not force and fiat_clean in _PAYMENT_METHODS_CACHE:
+        cached_ts, cached_data = _PAYMENT_METHODS_CACHE[fiat_clean]
+        if now - cached_ts < _PAYMENT_METHODS_CACHE_TTL:
+            return cached_data
+
+    payload = {"fiat": fiat_clean}
+    try:
+        data = _public_post(P2P_FILTER_CONDITIONS_ENDPOINT, payload, timeout=10)
+        raw_methods = (data.get("data") or {}).get("tradeMethods") or []
+        normalized: List[Dict[str, Any]] = []
+
+        for m in raw_methods:
+            ident = str(m.get("identifier") or "").strip()
+            name = str(m.get("tradeMethodName") or ident).strip()
+            short_name = str(m.get("tradeMethodShortName") or "").strip() or None
+            bg_color = str(m.get("tradeMethodBgColor") or "").strip() or None
+            icon_url = str(m.get("iconUrlColor") or "").strip() or None
+
+            if ident or name:
+                normalized.append({
+                    "identifier": ident or name,
+                    "name": name or ident,
+                    "short_name": short_name,
+                    "bg_color": bg_color,
+                    "icon_url": icon_url,
+                })
+
+        _PAYMENT_METHODS_CACHE[fiat_clean] = (now, normalized)
+        return normalized
+    except Exception as e:
+        print(f"Advertencia: fallo al obtener métodos de pago para {fiat_clean} de Binance: {e}")
+        # Si falla y hay caché vieja, devolverla como fallback
+        if fiat_clean in _PAYMENT_METHODS_CACHE:
+            return _PAYMENT_METHODS_CACHE[fiat_clean][1]
+        return []
 
 
 def fetch_p2p_market_ads(

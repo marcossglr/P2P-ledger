@@ -182,6 +182,10 @@ export const binanceApi = {
     });
     return request(`/api/binance/p2p-public/market-stats?${query.toString()}`);
   },
+  getPaymentMethods: (fiat = 'VES', force = false) => {
+    const query = new URLSearchParams({ fiat, ...(force ? { force: 'true' } : {}) });
+    return request(`/api/binance/p2p-public/payment-methods?${query.toString()}`);
+  },
 };
 
 export const operationsApi = {
