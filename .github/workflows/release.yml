@@ -5,13 +5,43 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag de versión a publicar (ej: v0.3.9). Déjalo vacío para usar la versión de tauri.conf.json'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
+  resolve-tag:
+    name: Determinar versión del release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Extraer versión
+        id: version
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            APP_VERSION=$(node -p "require('./frontend/src-tauri/tauri.conf.json').version")
+            TAG="v${APP_VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Tag resuelto: ${TAG}"
+
   build-linux:
     name: Compilar para Linux (.rpm / .AppImage / .deb)
+    needs: resolve-tag
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repositorio
@@ -66,14 +96,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
-          tagName: ${{ github.ref_name }}
-          releaseName: 'P2P Ledger ${{ github.ref_name }}'
+          tagName: ${{ needs.resolve-tag.outputs.tag }}
+          releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
           releaseBody: 'Release multiplataforma para P2P Ledger con soporte de auto-actualizaciones.'
           releaseDraft: false
           prerelease: false
 
   build-windows:
     name: Compilar para Windows (.exe / .msi)
+    needs: resolve-tag
     runs-on: windows-latest
     steps:
       - name: Checkout repositorio
@@ -118,7 +149,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
-          tagName: ${{ github.ref_name }}
-          releaseName: 'P2P Ledger ${{ github.ref_name }}'
+          tagName: ${{ needs.resolve-tag.outputs.tag }}
+          releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
           releaseDraft: false
           prerelease: false
