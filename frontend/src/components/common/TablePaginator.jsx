@@ -5,7 +5,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
-import { Button, Select } from './ui';
+import { Button, Select } from '../ui';
 
 function TablePaginator({
   totalItems = 0,

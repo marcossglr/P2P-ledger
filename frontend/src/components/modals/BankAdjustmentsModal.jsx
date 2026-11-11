@@ -3,8 +3,8 @@ import {
   History,
   Building2,
 } from 'lucide-react';
-import { fmtDateTime } from '../utils/formatters';
-import { Modal, Button, Select, Badge } from './ui';
+import { fmtDateTime } from '../../utils/formatters';
+import { Modal, Button, Select, Badge } from '../ui';
 
 export default function BankAdjustmentsModal({
   isOpen,
@@ -27,7 +27,7 @@ export default function BankAdjustmentsModal({
     );
   }, [adjustments, selectedBankFilter]);
 
-  const fmtBs = (n) =>
+  const fmtAmount = (n) =>
     Number(n || 0).toLocaleString('es-ES', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -138,7 +138,7 @@ export default function BankAdjustmentsModal({
                       Sistema Antes
                     </span>
                     <span className="font-mono text-slate-300 font-medium">
-                      {fmtBs(adj.previous_balance)} Bs
+                      {fmtAmount(adj.previous_balance)}
                     </span>
                   </div>
                   <div>
@@ -146,7 +146,7 @@ export default function BankAdjustmentsModal({
                       Nuevo Saldo
                     </span>
                     <span className="font-mono font-bold text-white">
-                      {fmtBs(adj.new_balance)} Bs
+                      {fmtAmount(adj.new_balance)}
                     </span>
                   </div>
                   <div className="text-right">
@@ -163,7 +163,7 @@ export default function BankAdjustmentsModal({
                       }`}
                     >
                       {adj.delta_amount > 0.01 ? '+' : ''}
-                      {fmtBs(adj.delta_amount)} Bs
+                      {fmtAmount(adj.delta_amount)}
                     </span>
                   </div>
                 </div>

@@ -2,6 +2,7 @@ import React from 'react';
 
 const BADGE_VARIANTS = {
   default: 'border-slate-800 bg-slate-800/60 text-slate-300',
+  neutral: 'border-slate-800 bg-slate-800/60 text-slate-400',
   success: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
   warning: 'border-amber-500/30 bg-amber-500/15 text-amber-300',
   danger: 'border-rose-500/30 bg-rose-500/15 text-rose-300',

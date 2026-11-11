@@ -14,12 +14,11 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import OperationsDashboard from './components/OperationsDashboard';
-import HistoryOperationsView from './components/HistoryOperationsView';
-import TreasuryView from './components/TreasuryView';
-import SettingsView from './components/SettingsView';
-import BinanceApiModal from './components/BinanceApiModal';
-import MarketPairModal from './components/MarketPairModal';
+import OperationsDashboard from './components/views/OperationsDashboard';
+import HistoryOperationsView from './components/views/HistoryOperationsView';
+import TreasuryView from './components/views/TreasuryView';
+import SettingsView from './components/views/SettingsView';
+import BinanceApiModal from './components/modals/BinanceApiModal';
 import { playNewTradeSound, playCompletedTradeSound } from './utils/audioAlerts';
 import { fmtTime } from './utils/formatters';
 import { healthApi, binanceApi } from './services/api';
@@ -97,7 +96,6 @@ export default function App() {
     last_synced_at: null,
   });
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
-  const [isPairModalOpen, setIsPairModalOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(() => localStorage.getItem('user_selected_asset') || 'USDT');
   const [fiatCurrency, setFiatCurrency] = useState(() => localStorage.getItem('user_selected_fiat') || 'VES');
   const [availableAssets, setAvailableAssets] = useState(['USDT']);
@@ -323,25 +321,8 @@ export default function App() {
             </nav>
           </div>
 
-          {/* 2. Derecha: Selector de Par P2P, Estatus de Binance y Botón de Ajustes */}
+          {/* 2. Derecha: Estatus de Binance, Audio y Botón de Ajustes */}
           <div className="flex items-center justify-end gap-2 shrink-0">
-            {/* Selector de Par de Mercado (Cripto / Fiat) en la barra de navegación */}
-            <button
-              type="button"
-              onClick={() => setIsPairModalOpen(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/90 px-2.5 text-xs font-medium text-slate-200 hover:border-slate-700 hover:bg-slate-850 hover:text-white transition-all shadow-xs cursor-pointer group"
-              title="Cambiar Criptoactivo y Moneda Fiat de análisis"
-            >
-              <span className="font-mono font-semibold text-slate-200 group-hover:text-amber-300 transition-colors">
-                {selectedAsset}
-              </span>
-              <span className="text-slate-500">/</span>
-              <span className="font-mono font-semibold text-slate-200 group-hover:text-amber-300 transition-colors">
-                {fiatCurrency}
-              </span>
-              <ChevronDown className="h-3 w-3 text-slate-400 group-hover:text-slate-200 transition-colors ml-0.5" />
-            </button>
-
             {health.binance_api_configured ? (
               <button
                 type="button"
@@ -561,22 +542,6 @@ export default function App() {
         onSyncComplete={() => {
           setRefreshTrigger((prev) => prev + 1);
           checkHealth();
-        }}
-      />
-
-      {/* Modal Selector de Par de Mercado (Cripto / Fiat) */}
-      <MarketPairModal
-        isOpen={isPairModalOpen}
-        onClose={() => setIsPairModalOpen(false)}
-        selectedAsset={selectedAsset}
-        selectedFiat={fiatCurrency}
-        availableAssets={availableAssets}
-        availableFiats={availableFiats}
-        onSelectPair={(newAsset, newFiat) => {
-          setSelectedAsset(newAsset);
-          setFiatCurrency(newFiat);
-          localStorage.setItem('user_selected_asset', newAsset);
-          localStorage.setItem('user_selected_fiat', newFiat);
         }}
       />
     </div>

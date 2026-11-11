@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertOctagon, RefreshCw } from 'lucide-react';
+import { Button } from '../ui';
 
 /**
  * Componente de barrera de errores (Error Boundary) global para React.
@@ -46,14 +47,15 @@ export default class ErrorBoundary extends React.Component {
                 </code>
               </div>
             )}
-            <button
-              type="button"
-              onClick={this.handleReload}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400 transition-colors cursor-pointer"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Recargar Aplicación</span>
-            </button>
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="primary"
+                onClick={this.handleReload}
+                icon={RefreshCw}
+              >
+                Recargar Aplicación
+              </Button>
+            </div>
           </div>
         </div>
       );

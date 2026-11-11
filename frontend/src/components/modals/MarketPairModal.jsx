@@ -1,6 +1,6 @@
 import React from 'react';
 import { Coins, Check } from 'lucide-react';
-import { Modal, Button } from './ui';
+import { Modal, Button } from '../ui';
 
 export default function MarketPairModal({
   isOpen,

@@ -1,24 +1,19 @@
 import React, { useState } from 'react';
 import { Building2, FileText } from 'lucide-react';
-import BankInventoryView from './BankInventoryView';
-import BankReconcilerView from './BankReconcilerView';
+import BankInventoryView from '../treasury/BankInventoryView';
+import BankReconcilerView from '../treasury/BankReconcilerView';
 
 export default function TreasuryView({ isActive = true, refreshTrigger, onInventoryChange }) {
   const [activeTab, setActiveTab] = useState('ACCOUNTS'); // 'ACCOUNTS' | 'RECONCILER'
 
   return (
-    <div className="space-y-5">
-      {/* Sub-navegación de Tesorería */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-        <div>
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-amber-400" />
-            <span>Tesorería y Bancos</span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Control de inventario en bolívares, cuentas bancarias, ajustes y conciliación de extractos
-          </p>
-        </div>
+    <div className="space-y-4">
+      {/* Sub-navegación de Tesorería Minimalista (Opción 2) */}
+      <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+        <h2 className="text-sm font-bold text-white flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-amber-400" />
+          <span>Tesorería Bancaria</span>
+        </h2>
 
         {/* Selector de Pestañas tipo Segmented Control con radios concéntricos */}
         <div className="flex h-8 items-center rounded-xl border border-slate-800/80 bg-slate-950/70 p-1 text-xs">

@@ -1,6 +1,23 @@
 import React, { useMemo } from 'react';
 import { fmtRate } from '../../utils/formatters';
 
+function formatCryptoQty(qty, asset = 'USDT') {
+  const n = Number(qty || 0);
+  if (!Number.isFinite(n) || n === 0) return `0 ${asset}`;
+
+  const cleanAsset = String(asset).toUpperCase();
+  // Para BTC/ETH se necesitan decimales significativos (hasta 4-6 decimales)
+  if (cleanAsset === 'BTC' || cleanAsset === 'ETH') {
+    return `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${asset}`;
+  }
+  // Para BNB
+  if (cleanAsset === 'BNB') {
+    return `${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${asset}`;
+  }
+  // Para USDT/USDC y stablecoins
+  return `${fmtRate(n, 0)} ${asset}`;
+}
+
 export default function MarketOrderBookView({
   filterSideAds,
   myAds = [],
@@ -85,7 +102,7 @@ export default function MarketOrderBookView({
                       {fmtRate(ad.price)}
                     </span>
                     <span className="text-[9px] text-slate-400 font-mono block">
-                      {fmtRate(ad.available_qty, 0)} {asset}
+                      {formatCryptoQty(ad.available_qty, asset)}
                     </span>
                   </div>
                 </div>
@@ -152,7 +169,7 @@ export default function MarketOrderBookView({
                       {fmtRate(ad.price)}
                     </span>
                     <span className="text-[9px] text-slate-400 font-mono block">
-                      {fmtRate(ad.available_qty, 0)} {asset}
+                      {formatCryptoQty(ad.available_qty, asset)}
                     </span>
                   </div>
                 </div>

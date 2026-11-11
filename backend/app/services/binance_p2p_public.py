@@ -20,6 +20,7 @@ import time
 import statistics
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -32,36 +33,48 @@ SYSTEM_CA_PATHS = [
     "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
 ]
 
+_CACHED_SSL_CONTEXT: Optional[ssl.SSLContext] = None
+
 def _get_ssl_context() -> ssl.SSLContext:
-    """Crea un contexto SSL robusto para entornos congelados con PyInstaller o sistemas Linux."""
+    """Crea o reutiliza un contexto SSL robusto en caché para entornos congelados o Linux."""
+    global _CACHED_SSL_CONTEXT
+    if _CACHED_SSL_CONTEXT is not None:
+        return _CACHED_SSL_CONTEXT
+
     # 1. Intentar certifi
     try:
         import certifi
         ca = certifi.where()
         if os.path.exists(ca):
-            return ssl.create_default_context(cafile=ca)
+            _CACHED_SSL_CONTEXT = ssl.create_default_context(cafile=ca)
+            return _CACHED_SSL_CONTEXT
     except Exception:
         pass
 
-    # 2. Intentar archivo empaquetado en sys._MEIPASS
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        meipass_cert = os.path.join(sys._MEIPASS, "certifi", "cacert.pem")
+    # 2. Intentar archivo empaquetado en sys._MEIPASS (PyInstaller)
+    meipass_dir = getattr(sys, "_MEIPASS", None)
+    if getattr(sys, "frozen", False) and meipass_dir:
+        meipass_cert = os.path.join(str(meipass_dir), "certifi", "cacert.pem")
         if os.path.exists(meipass_cert):
-            return ssl.create_default_context(cafile=meipass_cert)
+            _CACHED_SSL_CONTEXT = ssl.create_default_context(cafile=meipass_cert)
+            return _CACHED_SSL_CONTEXT
 
     # 3. Intentar CAs del sistema operativo
     for ca_path in SYSTEM_CA_PATHS:
         if os.path.exists(ca_path):
             try:
-                return ssl.create_default_context(cafile=ca_path)
+                _CACHED_SSL_CONTEXT = ssl.create_default_context(cafile=ca_path)
+                return _CACHED_SSL_CONTEXT
             except Exception:
                 pass
 
-    return ssl.create_default_context()
+    _CACHED_SSL_CONTEXT = ssl.create_default_context()
+    return _CACHED_SSL_CONTEXT
 
 P2P_PUBLIC_BASE_URL = "https://p2p.binance.com"
 P2P_ADV_SEARCH_ENDPOINT = "/bapi/c2c/v2/friendly/c2c/adv/search"
 P2P_FILTER_CONDITIONS_ENDPOINT = "/bapi/c2c/v2/public/c2c/adv/filter-conditions"
+P2P_PORTAL_CONFIG_ENDPOINT = "/bapi/c2c/v2/friendly/c2c/portal/config"
 P2P_PUBLIC_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent.parent / ".binance_p2p_public_config.json"
 )
@@ -69,6 +82,18 @@ P2P_PUBLIC_CONFIG_PATH = (
 # Caché en memoria para los métodos de pago globales de Binance por fiat: { fiat: (timestamp, [methods]) }
 _PAYMENT_METHODS_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 _PAYMENT_METHODS_CACHE_TTL = 3600  # 1 hora
+
+# Caché en memoria para las criptomonedas soportadas por fiat: { fiat: (timestamp, [assets]) }
+_CRYPTO_ASSETS_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+_CRYPTO_ASSETS_CACHE_TTL = 3600  # 1 hora
+
+DEFAULT_FALLBACK_CRYPTO_ASSETS = [
+    {"id": "USDT", "label": "USDT", "name": "Tether"},
+    {"id": "BTC", "label": "BTC", "name": "Bitcoin"},
+    {"id": "ETH", "label": "ETH", "name": "Ethereum"},
+    {"id": "USDC", "label": "USDC", "name": "USD Coin"},
+    {"id": "BNB", "label": "BNB", "name": "BNB"},
+]
 
 VALID_TRADE_TYPES = ("BUY", "SELL")
 MAX_ROWS_PER_PAGE = 20  # Tope de filas por página aceptado por el endpoint público
@@ -210,6 +235,13 @@ def _public_post(endpoint: str, body: Dict[str, Any], timeout: int = 15) -> Dict
     return data
 
 
+def _safe_float(v: Any) -> float:
+    try:
+        return float(v or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _normalize_ad(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Convierte un anuncio crudo del mercado P2P en un registro plano."""
     adv = item.get("adv") or {}
@@ -221,21 +253,15 @@ def _normalize_ad(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if price <= 0:
         return None
 
-    def _f(v: Any) -> float:
-        try:
-            return float(v or 0.0)
-        except (TypeError, ValueError):
-            return 0.0
-
     return {
         "adv_no": str(adv.get("advNo") or ""),
         "trade_type": str(adv.get("tradeType") or "").upper(),
         "asset": str(adv.get("asset") or ""),
         "fiat": str(adv.get("fiatUnit") or ""),
         "price": price,
-        "available_qty": _f(adv.get("surplusAmount") or adv.get("tradableQuantity")),
-        "min_fiat": _f(adv.get("minSingleTransAmount")),
-        "max_fiat": _f(adv.get("dynamicMaxSingleTransAmount") or adv.get("maxSingleTransAmount")),
+        "available_qty": _safe_float(adv.get("surplusAmount") or adv.get("tradableQuantity")),
+        "min_fiat": _safe_float(adv.get("minSingleTransAmount")),
+        "max_fiat": _safe_float(adv.get("dynamicMaxSingleTransAmount") or adv.get("maxSingleTransAmount")),
         "pay_methods": [
             str(tm.get("tradeMethodName") or tm.get("identifier") or "").strip()
             for tm in (adv.get("tradeMethods") or [])
@@ -249,8 +275,8 @@ def _normalize_ad(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "advertiser": str(advertiser.get("nickName") or "-"),
         "user_type": str(advertiser.get("userType") or "user"),
         "month_orders": int(advertiser.get("monthOrderCount") or 0),
-        "month_finish_rate": _f(advertiser.get("monthFinishRate")),
-        "positive_rate": _f(advertiser.get("positiveRate")),
+        "month_finish_rate": _safe_float(advertiser.get("monthFinishRate")),
+        "positive_rate": _safe_float(advertiser.get("positiveRate")),
     }
 
 
@@ -274,7 +300,7 @@ def fetch_binance_fiat_payment_methods(fiat: str = "VES", force: bool = False) -
         raw_methods = (data.get("data") or {}).get("tradeMethods") or []
         normalized: List[Dict[str, Any]] = []
 
-        for m in raw_methods:
+        for idx, m in enumerate(raw_methods):
             ident = str(m.get("identifier") or "").strip()
             name = str(m.get("tradeMethodName") or ident).strip()
             short_name = str(m.get("tradeMethodShortName") or "").strip() or None
@@ -288,6 +314,7 @@ def fetch_binance_fiat_payment_methods(fiat: str = "VES", force: bool = False) -
                     "short_name": short_name,
                     "bg_color": bg_color,
                     "icon_url": icon_url,
+                    "is_hot": idx < 6,
                 })
 
         _PAYMENT_METHODS_CACHE[fiat_clean] = (now, normalized)
@@ -298,6 +325,67 @@ def fetch_binance_fiat_payment_methods(fiat: str = "VES", force: bool = False) -
         if fiat_clean in _PAYMENT_METHODS_CACHE:
             return _PAYMENT_METHODS_CACHE[fiat_clean][1]
         return []
+
+
+def fetch_binance_fiat_crypto_assets(fiat: str = "VES", force: bool = False) -> List[Dict[str, Any]]:
+    """
+    Consulta las criptomonedas soportadas oficialmente por Binance P2P para un fiat específico
+    usando el endpoint público /bapi/c2c/v2/friendly/c2c/portal/config.
+    Implementa caché en memoria con TTL de 1 hora para evitar rate limits.
+    """
+    fiat_clean = (fiat or "VES").strip().upper()
+    now = time.time()
+
+    if not force and fiat_clean in _CRYPTO_ASSETS_CACHE:
+        cached_ts, cached_data = _CRYPTO_ASSETS_CACHE[fiat_clean]
+        if now - cached_ts < _CRYPTO_ASSETS_CACHE_TTL:
+            return cached_data
+
+    payload = {"fiat": fiat_clean}
+    try:
+        data = _public_post(P2P_PORTAL_CONFIG_ENDPOINT, payload, timeout=10)
+        areas = (data.get("data") or {}).get("areas") or []
+        # Buscar el área P2P principal (o EXPRESS como alternativa)
+        p2p_area = next((a for a in areas if a.get("area") == "P2P"), None)
+        if not p2p_area:
+            p2p_area = next((a for a in areas if a.get("area") == "EXPRESS"), None)
+
+        normalized: List[Dict[str, Any]] = []
+        seen = set()
+
+        if p2p_area:
+            trade_sides = p2p_area.get("tradeSides") or []
+            # Tomar lado BUY preferentemente, o SELL
+            side = next((s for s in trade_sides if s.get("side") == "BUY"), None)
+            if not side and trade_sides:
+                side = trade_sides[0]
+
+            raw_assets = (side.get("assets") or []) if side else []
+            for item in raw_assets:
+                symbol = str(item.get("asset") or "").strip().upper()
+                if not symbol or symbol in seen:
+                    continue
+                seen.add(symbol)
+                desc = str(item.get("description") or "").strip()
+                icon = str(item.get("iconUrl") or "").strip() or None
+                normalized.append({
+                    "id": symbol,
+                    "label": symbol,
+                    "name": desc or symbol,
+                    "icon_url": icon,
+                })
+
+        # Si por alguna razón la lista vino vacía, usar el fallback seguro
+        if not normalized:
+            normalized = list(DEFAULT_FALLBACK_CRYPTO_ASSETS)
+
+        _CRYPTO_ASSETS_CACHE[fiat_clean] = (now, normalized)
+        return normalized
+    except Exception as e:
+        print(f"Advertencia: fallo al obtener criptomonedas para {fiat_clean} de Binance: {e}")
+        if fiat_clean in _CRYPTO_ASSETS_CACHE:
+            return _CRYPTO_ASSETS_CACHE[fiat_clean][1]
+        return list(DEFAULT_FALLBACK_CRYPTO_ASSETS)
 
 
 def fetch_p2p_market_ads(
@@ -391,22 +479,28 @@ def compute_side_stats(ads: List[Dict[str, Any]], trade_type: str, top_n: int = 
 
 def fetch_p2p_market_snapshot(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Obtiene una instantánea del mercado P2P (ambos lados) con sus estadísticas y el spread.
+    Obtiene una instantánea del mercado P2P (ambos lados en paralelo) con sus estadísticas y el spread.
     spread = mejor precio de venta (SELL) - mejor precio de compra (BUY).
     """
     cfg = _sanitize_config(config) if config is not None else get_p2p_public_config()
     started = time.perf_counter()
 
-    buy_side = fetch_p2p_market_ads("BUY", cfg)
-    sell_side = fetch_p2p_market_ads("SELL", cfg)
+    # Ejecución paralela de BUY y SELL para recortar la latencia a la mitad
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_buy = executor.submit(fetch_p2p_market_ads, "BUY", cfg)
+        future_sell = executor.submit(fetch_p2p_market_ads, "SELL", cfg)
+        buy_side = future_buy.result()
+        sell_side = future_sell.result()
 
     buy_stats = compute_side_stats(buy_side["ads"], "BUY", cfg["top_n"])
     sell_stats = compute_side_stats(sell_side["ads"], "SELL", cfg["top_n"])
 
     spread_abs = spread_pct = None
     if buy_stats["best"] and sell_stats["best"]:
-        spread_abs = round(sell_stats["best"] - buy_stats["best"], 4)
-        spread_pct = round((spread_abs / buy_stats["best"]) * 100, 3)
+        # Spread comercial P2P (orientado al comerciante / maker):
+        # El comerciante vende USDT en la pestaña BUY y compra USDT en la pestaña SELL.
+        spread_abs = round(buy_stats["best"] - sell_stats["best"], 4)
+        spread_pct = round((spread_abs / sell_stats["best"]) * 100, 3)
 
     return {
         "asset": cfg["asset"],

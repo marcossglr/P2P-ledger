@@ -5,6 +5,7 @@ export default function MarketDepthChart({
   historySeries,
   fiat = 'VES',
   fmtRate,
+  isLive = true,
 }) {
   const [hoverIdx, setHoverIdx] = useState(null);
 
@@ -12,6 +13,9 @@ export default function MarketDepthChart({
 
   const hoveredPoint =
     hoverIdx != null && historySeries[hoverIdx] ? historySeries[hoverIdx] : null;
+
+  const lastBuyPt = chartGeometry.buyPts?.[chartGeometry.buyPts.length - 1];
+  const lastSellPt = chartGeometry.sellPts?.[chartGeometry.sellPts.length - 1];
 
   return (
     <div className="relative rounded-lg border border-slate-800/80 bg-slate-950/60 p-2">
@@ -47,6 +51,36 @@ export default function MarketDepthChart({
         </div>
       )}
 
+      {/* Micro-badge de fluctuación instantánea (Tick Delta) si hay variación */}
+      {(chartGeometry.buyDelta !== 0 || chartGeometry.sellDelta !== 0) && (
+        <div className="pointer-events-none absolute bottom-9 left-3 z-10 flex items-center gap-2 text-[10px] font-mono tabular-nums">
+          {chartGeometry.buyDelta !== 0 && (
+            <span
+              className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium border ${
+                chartGeometry.buyDelta > 0
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-slate-800 bg-slate-900/80 text-slate-400'
+              }`}
+            >
+              {chartGeometry.buyDelta > 0 ? '▲ +' : '▼ '}
+              {fmtRate(chartGeometry.buyDelta, 2)}
+            </span>
+          )}
+          {chartGeometry.sellDelta !== 0 && (
+            <span
+              className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium border ${
+                chartGeometry.sellDelta > 0
+                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                  : 'border-slate-800 bg-slate-900/80 text-slate-400'
+              }`}
+            >
+              {chartGeometry.sellDelta > 0 ? '▲ +' : '▼ '}
+              {fmtRate(chartGeometry.sellDelta, 2)}
+            </span>
+          )}
+        </div>
+      )}
+
       <svg
         viewBox={`0 0 ${chartGeometry.W} ${chartGeometry.H}`}
         className="w-full h-[138px] overflow-visible"
@@ -66,6 +100,24 @@ export default function MarketDepthChart({
             <stop offset="85%" stopColor="#10b981" stopOpacity="0.02" />
             <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
           </linearGradient>
+
+          {/* Animación de halo pulsante tipo radar para el tick en vivo (sincronizada para ambas líneas) */}
+          <style>{`
+            @keyframes p2pPulse {
+              0% { r: 3.5px; opacity: 0.9; }
+              50% { r: 8px; opacity: 0.15; }
+              100% { r: 3.5px; opacity: 0.9; }
+            }
+            .p2p-radar-ring-buy {
+              animation: p2pPulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            .p2p-radar-ring-sell {
+              animation: p2pPulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            .p2p-chart-line {
+              transition: d 0.35s ease-out;
+            }
+          `}</style>
         </defs>
 
         {/* Líneas guía horizontales */}
@@ -126,10 +178,10 @@ export default function MarketDepthChart({
 
         {/* Áreas sombreadas con degradados fieles a cada línea */}
         {chartGeometry.sellAreaPath && (
-          <path d={chartGeometry.sellAreaPath} fill="url(#p2pSellGrad)" />
+          <path d={chartGeometry.sellAreaPath} fill="url(#p2pSellGrad)" className="p2p-chart-line" />
         )}
         {chartGeometry.buyAreaPath && (
-          <path d={chartGeometry.buyAreaPath} fill="url(#p2pBuyGrad)" />
+          <path d={chartGeometry.buyAreaPath} fill="url(#p2pBuyGrad)" className="p2p-chart-line" />
         )}
 
         {/* Línea Verde: Pizarra Comprar de Binance */}
@@ -140,6 +192,7 @@ export default function MarketDepthChart({
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
+          className="p2p-chart-line"
         />
 
         {/* Línea Roja: Pizarra Vender de Binance */}
@@ -150,7 +203,53 @@ export default function MarketDepthChart({
           strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
+          className="p2p-chart-line"
         />
+
+        {/* Halo / Radar dinámico en el punto actual (Ahora) - Sincronizado y condicionado a isLive */}
+        {hoverIdx == null && lastBuyPt && (
+          <g>
+            {isLive && (
+              <circle
+                cx={lastBuyPt.x}
+                cy={lastBuyPt.y}
+                r="4"
+                fill="#10b981"
+                className="p2p-radar-ring-buy"
+              />
+            )}
+            <circle
+              cx={lastBuyPt.x}
+              cy={lastBuyPt.y}
+              r="3.5"
+              fill={isLive ? '#10b981' : '#64748b'}
+              stroke="#020617"
+              strokeWidth="1.5"
+            />
+          </g>
+        )}
+
+        {hoverIdx == null && lastSellPt && (
+          <g>
+            {isLive && (
+              <circle
+                cx={lastSellPt.x}
+                cy={lastSellPt.y}
+                r="4"
+                fill="#f43f5e"
+                className="p2p-radar-ring-sell"
+              />
+            )}
+            <circle
+              cx={lastSellPt.x}
+              cy={lastSellPt.y}
+              r="3.5"
+              fill={isLive ? '#f43f5e' : '#64748b'}
+              stroke="#020617"
+              strokeWidth="1.5"
+            />
+          </g>
+        )}
 
         {/* Línea vertical y puntos activos al pasar el cursor */}
         {hoverIdx != null && chartGeometry.buyPts[hoverIdx] && (
@@ -171,12 +270,12 @@ export default function MarketDepthChart({
             (hoverIdx == null && i === chartGeometry.buyPts.length - 1);
           return (
             <g key={i}>
-              {isActive && (
+              {hoverIdx === i && (
                 <>
                   <circle
                     cx={pt.x}
                     cy={pt.y}
-                    r={hoverIdx === i ? 4 : 3}
+                    r={4}
                     fill="#10b981"
                     stroke="#0f172a"
                     strokeWidth="1.5"
@@ -185,7 +284,7 @@ export default function MarketDepthChart({
                     <circle
                       cx={chartGeometry.sellPts[i].x}
                       cy={chartGeometry.sellPts[i].y}
-                      r={hoverIdx === i ? 4 : 3}
+                      r={4}
                       fill="#f43f5e"
                       stroke="#0f172a"
                       strokeWidth="1.5"

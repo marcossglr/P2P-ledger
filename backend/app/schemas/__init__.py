@@ -22,18 +22,16 @@ class ManualMatchPayload(BaseModel):
 
 class BankAccountPayload(BaseModel):
     name: str
+    binance_pay_id: Optional[str] = ""
+    pay_method_identifier: Optional[str] = ""
+    fiat_currency: Optional[str] = "VES"
     account_alias: Optional[str] = ""
-    bank_code: Optional[str] = ""
-    account_number: Optional[str] = ""
-    holder_name: Optional[str] = ""
-    holder_id: Optional[str] = ""
-    phone_number: Optional[str] = ""
     match_keywords: Optional[str] = ""
     is_default: bool = False
+    is_active: Optional[bool] = True
     apply_buy_fee: bool = True
     pago_movil_fee_pct: float = 0.3
     transfer_fee_pct: float = 0.0
-    initial_balance: Optional[float] = None
 
 
 class BankReconcilePayload(BaseModel):

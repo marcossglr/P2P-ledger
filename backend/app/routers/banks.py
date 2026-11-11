@@ -178,70 +178,6 @@ def sync_binance_payment_methods_endpoint(db: Session = Depends(get_db)):
         )
 
 
-@router.post("/bank-inventory/accounts")
-def create_bank_account(payload: BankAccountPayload, db: Session = Depends(get_db)):
-    clean_name = payload.name.strip()
-    if not clean_name:
-        raise HTTPException(status_code=400, detail="El nombre del banco o cuenta es obligatorio.")
-
-    existing = (
-        db.query(BankAccount)
-        .filter(func.lower(BankAccount.name) == clean_name.lower())
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail=f"Ya existe una cuenta con el nombre '{clean_name}'.")
-
-    if payload.is_default:
-        db.query(BankAccount).update({BankAccount.is_default: 0})
-
-    now = datetime.now()
-    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    now_ms = int(now.timestamp() * 1000)
-    cut_ts = max(now_ms, get_latest_ves_order_timestamp_ms(db))
-    init_bal = float(payload.initial_balance or 0.0)
-    keywords = (payload.match_keywords or "").strip() or clean_name.lower()
-
-    new_acc = BankAccount(
-        name=clean_name,
-        account_alias=(payload.account_alias or "").strip() or f"Cuenta {clean_name}",
-        bank_code=(payload.bank_code or "").strip(),
-        account_number=(payload.account_number or "").strip(),
-        holder_name=(payload.holder_name or "").strip(),
-        holder_id=(payload.holder_id or "").strip(),
-        phone_number=(payload.phone_number or "").strip(),
-        fiat_currency="VES",
-        match_keywords=keywords,
-        is_default=1 if payload.is_default else 0,
-        apply_buy_fee=1 if payload.apply_buy_fee else 0,
-        pago_movil_fee_pct=float(payload.pago_movil_fee_pct or 0.0),
-        transfer_fee_pct=float(payload.transfer_fee_pct or 0.0),
-        anchor_balance=init_bal,
-        anchor_timestamp=cut_ts,
-        anchor_date_label=f"Apertura ({now.strftime('%Y-%m-%d %H:%M')})",
-        manual_delta_bs=0.0,
-    )
-    db.add(new_acc)
-    db.flush()
-
-    if init_bal != 0.0:
-        db.add(
-            BankBalanceAdjustment(
-                account_id=new_acc.id,
-                account_name=new_acc.name,
-                adjustment_type="SALDO_INICIAL_HISTORICO",
-                previous_balance=0.0,
-                new_balance=init_bal,
-                delta_amount=init_bal,
-                note="Saldo inicial al crear la cuenta bancaria",
-                created_at_str=now_str,
-            )
-        )
-
-    db.commit()
-    return compute_bank_inventory_summary(db)
-
-
 @router.put("/bank-inventory/accounts/{account_id}")
 def update_bank_account(
     account_id: int, payload: BankAccountPayload, db: Session = Depends(get_db)
@@ -259,18 +195,16 @@ def update_bank_account(
 
     acc.name = clean_name
     acc.account_alias = (payload.account_alias or "").strip()
-    if payload.bank_code is not None:
-        acc.bank_code = payload.bank_code.strip()
-    if payload.account_number is not None:
-        acc.account_number = payload.account_number.strip()
-    if payload.holder_name is not None:
-        acc.holder_name = payload.holder_name.strip()
-    if payload.holder_id is not None:
-        acc.holder_id = payload.holder_id.strip()
-    if payload.phone_number is not None:
-        acc.phone_number = payload.phone_number.strip()
+    if payload.fiat_currency:
+        acc.fiat_currency = payload.fiat_currency.strip().upper()
+    if payload.binance_pay_id is not None:
+        acc.binance_pay_id = payload.binance_pay_id.strip()
+    if payload.pay_method_identifier is not None:
+        acc.pay_method_identifier = payload.pay_method_identifier.strip()
     acc.match_keywords = (payload.match_keywords or "").strip() or clean_name.lower()
     acc.is_default = 1 if payload.is_default else 0
+    if payload.is_active is not None:
+        acc.is_active = 1 if payload.is_active else 0
     acc.apply_buy_fee = 1 if payload.apply_buy_fee else 0
     acc.pago_movil_fee_pct = float(payload.pago_movil_fee_pct or 0.0)
     acc.transfer_fee_pct = float(payload.transfer_fee_pct or 0.0)
@@ -285,11 +219,14 @@ def delete_bank_account(account_id: int, db: Session = Depends(get_db)):
     if not acc:
         raise HTTPException(status_code=404, detail="Cuenta bancaria no encontrada.")
 
-    db.query(BinanceOrder).filter(BinanceOrder.bank_account_id == account_id).update(
-        {BinanceOrder.bank_account_id: None}
-    )
-    db.query(BankBalanceAdjustment).filter(BankBalanceAdjustment.account_id == account_id).delete()
-    db.delete(acc)
+    # Soft delete: preservar integridad contable, auditorías y órdenes
+    acc.is_active = 0
+    if acc.is_default == 1:
+        acc.is_default = 0
+        fallback = db.query(BankAccount).filter(BankAccount.id != account_id, BankAccount.is_active == 1).first()
+        if fallback:
+            fallback.is_default = 1
+
     db.commit()
     return compute_bank_inventory_summary(db)
 

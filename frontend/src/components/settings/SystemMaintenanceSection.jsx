@@ -6,7 +6,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { operationsApi } from '../../services/api';
-import { Button, Badge } from '../ui';
+import { Button, Badge, Checkbox } from '../ui';
 
 export default function SystemMaintenanceSection({
   health = {},
@@ -241,17 +241,15 @@ export default function SystemMaintenanceSection({
         </p>
 
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-500/20 bg-slate-950/60 p-3.5">
-          <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={confirmDeleteAll}
-              onChange={(e) => setConfirmDeleteAll(e.target.checked)}
-              className="h-4 w-4 accent-rose-500 rounded cursor-pointer"
-            />
-            <span className="font-semibold text-rose-300">
-              Entiendo que esta acción destruirá permanentemente toda la base de datos local.
-            </span>
-          </label>
+          <Checkbox
+            checked={confirmDeleteAll}
+            onChange={setConfirmDeleteAll}
+            label={
+              <span className="font-semibold text-rose-300">
+                Entiendo que esta acción destruirá permanentemente toda la base de datos local.
+              </span>
+            }
+          />
 
           <Button
             type="button"

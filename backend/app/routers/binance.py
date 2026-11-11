@@ -28,6 +28,7 @@ from ..services.binance_p2p_public import (
     fetch_p2p_market_snapshot,
     test_p2p_public_connection,
     fetch_binance_fiat_payment_methods,
+    fetch_binance_fiat_crypto_assets,
 )
 from ..services.bank_inventory import sync_bank_accounts_from_binance
 from ..services.orders import upsert_binance_orders
@@ -121,6 +122,7 @@ def get_p2p_public_market_stats(
     fiat: Optional[str] = Query(None),
     bank: Optional[str] = Query(None),
     amount: Optional[float] = Query(None),
+    only_merchants: bool = Query(False),
     include_ads: bool = Query(True),
     force: bool = Query(False),
 ):
@@ -140,6 +142,10 @@ def get_p2p_public_market_stats(
             cfg["pay_types"] = []
     if amount is not None and isinstance(amount, (int, float)) and amount > 0:
         cfg["trans_amount"] = float(amount)
+    if only_merchants:
+        cfg["publisher_type"] = "merchant"
+    else:
+        cfg["publisher_type"] = None
 
     try:
         snap = fetch_p2p_market_snapshot(cfg)
@@ -163,6 +169,20 @@ def get_p2p_public_payment_methods(
         "fiat": (fiat or "VES").upper(),
         "total": len(methods),
         "methods": methods,
+    }
+
+
+@router.get("/p2p-public/crypto-assets")
+def get_p2p_public_crypto_assets(
+    fiat: Optional[str] = Query("VES"),
+    force: bool = Query(False),
+):
+    """Retorna las criptomonedas soportadas oficialmente en Binance P2P para la divisa fiat indicada."""
+    assets = fetch_binance_fiat_crypto_assets(fiat=fiat or "VES", force=force)
+    return {
+        "fiat": (fiat or "VES").upper(),
+        "total": len(assets),
+        "assets": assets,
     }
 
 

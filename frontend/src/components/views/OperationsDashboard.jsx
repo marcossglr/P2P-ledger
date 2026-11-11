@@ -6,24 +6,22 @@ import {
   History,
   ListFilter,
 } from 'lucide-react';
-import TablePaginator from './TablePaginator';
-import OrderDetailsModal from './OrderDetailsModal';
-import BankReconcileModal from './BankReconcileModal';
-import OperationsTable from './OperationsTable';
-import P2PMarketChartCard from './P2PMarketChartCard';
-import OperationsKpiCards from './dashboard/OperationsKpiCards';
-import MyAdsSection from './dashboard/MyAdsSection';
-import TodayOrdersToolbar from './dashboard/TodayOrdersToolbar';
-import { useP2PMarketBoard } from '../hooks/useP2PMarketBoard';
-import { useOperationsDashboard } from '../hooks/useOperationsDashboard';
+import OrderDetailsModal from '../modals/OrderDetailsModal';
+import BankReconcileModal from '../modals/BankReconcileModal';
+import OperationsTable from '../common/OperationsTable';
+import P2PMarketChartCard from '../market/P2PMarketChartCard';
+import OperationsKpiCards from '../dashboard/OperationsKpiCards';
+import MyAdsSection from '../dashboard/MyAdsSection';
+import { useP2PMarketBoard } from '../../hooks/useP2PMarketBoard';
+import { useOperationsDashboard } from '../../hooks/useOperationsDashboard';
 import {
   computeOperationsMetrics,
   buildDailySummaryText,
   fmtFiat,
   fmtUsdt,
   fmtRate,
-} from '../utils/operationsMetrics';
-import { Button } from './ui';
+} from '../../utils/operationsMetrics';
+import { Button } from '../ui';
 
 // Constantes referenciales vacías para evitar re-renders por props inestables ([])
 const EMPTY_ARRAY = [];
@@ -72,14 +70,15 @@ export default function OperationsDashboard({
     tab: 'SINGLE',
   });
 
-  // Paginación de la tabla de hoy
+  // Paginación y ordenamiento global de la tabla de hoy
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
-  // Reiniciar a la primera página cuando cambian los filtros o el buscador de tabla
+  // Reiniciar a la primera página cuando cambian los filtros, buscador o criterio de orden
   useEffect(() => {
     setCurrentPage(1);
-  }, [orderType, orderStatus, selectedAsset, fiatCurrency, tableSearch]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, tableSearch, sortConfig]);
 
   // Callbacks memorizados para estabilidad de renderizado
   const handleClearSearch = useCallback(() => setTableSearch(''), []);
@@ -140,9 +139,30 @@ export default function OperationsDashboard({
     });
   }, [orders, orderType, orderStatus, tableSearch]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  // Ordenamiento global de todas las operaciones filtradas antes de paginar
+  const sortedFilteredOrders = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return filteredOrders;
+
+    const { key, direction } = sortConfig;
+    const factor = direction === 'asc' ? 1 : -1;
+
+    return [...filteredOrders].sort((a, b) => {
+      const valA = a[key];
+      const valB = b[key];
+
+      if (key === 'order_date') {
+        return ((new Date(valA).getTime() || 0) - (new Date(valB).getTime() || 0)) * factor;
+      }
+      if (['crypto_amount', 'commission_usdt', 'unit_price', 'fiat_amount'].includes(key)) {
+        return (Number(valA || 0) - Number(valB || 0)) * factor;
+      }
+      return String(valA || '').localeCompare(String(valB || '')) * factor;
+    });
+  }, [filteredOrders, sortConfig]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredOrders.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const paginatedOrders = filteredOrders.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedOrders = sortedFilteredOrders.slice((safePage - 1) * pageSize, safePage * pageSize);
   const totalStoredOrders = data?.total_stored_orders || 0;
   const hasDemoOrders = Boolean(data?.has_demo_orders);
   const serverToday =
@@ -163,13 +183,7 @@ export default function OperationsDashboard({
   );
 
   // Hook del Mercado P2P en vivo y evaluación de competencia en pizarra
-  const {
-    marketData,
-    marketLoading,
-    marketError,
-    fetchMarketStats,
-    evaluateMyAdOnBoard,
-  } = useP2PMarketBoard({
+  const marketBoard = useP2PMarketBoard({
     selectedAsset: cryptoAsset,
     fiatCurrency: fiat,
     refreshTrigger,
@@ -258,19 +272,12 @@ export default function OperationsDashboard({
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {/* Izquierda (2x2): Gráfica del Mercado P2P (Evolución + Libro en Vivo) */}
           <P2PMarketChartCard
-            marketData={marketData}
-            marketLoading={marketLoading}
-            marketError={marketError}
-            onRefresh={fetchMarketStats}
+            marketBoard={marketBoard}
             onOpenSettings={handleNavigateConnections}
             asset={cryptoAsset}
             fiat={fiat}
-            wacBuyPrice={stats.wac_buy_price}
-            wapSellPrice={stats.wap_sell_price}
             breakevenRate={metrics.breakevenSellRate}
             myAds={data?.my_ads || EMPTY_ARRAY}
-            orders={orders}
-            myBankAccounts={data?.bank_inventory?.accounts || EMPTY_ARRAY}
           />
 
           {/* Tarjetas KPI de la Jornada (Ganancia, Spread, Volumen y Posición Consolidada) */}
@@ -300,7 +307,7 @@ export default function OperationsDashboard({
       {apiConfigured && (
         <MyAdsSection
           ads={data?.my_ads || EMPTY_ARRAY}
-          evaluateMyAdOnBoard={evaluateMyAdOnBoard}
+          evaluateMyAdOnBoard={marketBoard.evaluateMyAdOnBoard}
           breakevenSellRate={metrics.breakevenSellRate}
           fmtUsdt={fmtUsdt}
           fmtFiat={fmtFiat}
@@ -336,8 +343,12 @@ export default function OperationsDashboard({
 
         {/* Tabla en Tiempo Real de las Operaciones de Hoy */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
-          {/* Barra de Filtros y Búsqueda sobre la tabla con todo el ancho disponible */}
-          <TodayOrdersToolbar
+          <OperationsTable
+            orders={paginatedOrders}
+            selectedOrder={selectedOrder}
+            onSelectOrder={setSelectedOrder}
+            showFullDate={false}
+            loading={loading}
             orderType={orderType}
             onOrderTypeChange={setOrderType}
             orderStatus={orderStatus}
@@ -347,16 +358,18 @@ export default function OperationsDashboard({
             tableSearch={tableSearch}
             onTableSearchChange={setTableSearch}
             onClearSearch={handleClearSearch}
-          />
-
-          <OperationsTable
-            orders={paginatedOrders}
-            selectedOrder={selectedOrder}
-            onSelectOrder={setSelectedOrder}
-            showFullDate={false}
-            loading={loading}
-            tableSearch={tableSearch}
-            onClearSearch={handleClearSearch}
+            onFilterCounterparty={setTableSearch}
+            sortConfig={sortConfig}
+            onSortChange={setSortConfig}
+            pagination={{
+              totalItems: sortedFilteredOrders.length,
+              currentPage: safePage,
+              pageSize: pageSize,
+              onPageChange: setCurrentPage,
+              onPageSizeChange: setPageSize,
+              pageSizeOptions: [10, 20, 50],
+              itemLabel: 'operaciones de hoy',
+            }}
             emptyMessage={
               <div className="mx-auto max-w-md space-y-2">
                 <p className="text-sm font-medium text-slate-300">
@@ -379,16 +392,6 @@ export default function OperationsDashboard({
                 )}
               </div>
             }
-          />
-
-          <TablePaginator
-            totalItems={filteredOrders.length}
-            currentPage={safePage}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={setPageSize}
-            pageSizeOptions={[10, 20, 50]}
-            itemLabel="operaciones de hoy"
           />
         </div>
       </section>

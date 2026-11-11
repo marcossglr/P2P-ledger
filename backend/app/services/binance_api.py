@@ -8,9 +8,12 @@ import hashlib
 import urllib.parse
 import urllib.request
 import urllib.error
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_CA_PATHS = [
     "/etc/ssl/certs/ca-bundle.crt",
@@ -387,7 +390,7 @@ def fetch_c2c_user_ads(
 def fetch_c2c_user_pay_methods(
     api_key: Optional[str] = None,
     api_secret: Optional[str] = None,
-    fiat_unit: str = "VES",
+    fiat_unit: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Consulta los métodos de pago registrados directamente en el perfil del usuario en Binance P2P.
@@ -397,7 +400,7 @@ def fetch_c2c_user_pay_methods(
     de métodos en anuncios activos (/sapi/v1/c2c/ads/listWithPagination).
 
     Retorna una lista de diccionarios con la metadata del método:
-    [{"name": "Banco de Venezuela", "identifier": "BancoDeVenezuela", "payId": ...}, ...]
+    [{"name": "Banco de Venezuela", "identifier": "BancoDeVenezuela", "pay_id": ..., "fields": {...}}, ...]
     """
     creds = get_saved_credentials()
     key = (api_key or creds["api_key"]).strip()
@@ -423,14 +426,52 @@ def fetch_c2c_user_pay_methods(
                 continue
             name = (pm.get("tradeMethodName") or pm.get("tradeMethod") or "").strip()
             identifier = (pm.get("identifier") or pm.get("payType") or "").strip()
-            pay_id = pm.get("payId")
-            val = name or identifier
-            if val and val.lower() not in seen:
-                seen.add(val.lower())
+            pay_id = pm.get("payId") or pm.get("id") or ""
+            fields = pm.get("fields") or {}
+            # Extraer campos estructurados (número de cuenta, titular, teléfono, cédula)
+            acc_num = str(
+                pm.get("accountNo")
+                or fields.get("accountNo")
+                or fields.get("account")
+                or fields.get("cardNumber")
+                or fields.get("email")
+                or ""
+            ).strip()
+            holder = str(
+                fields.get("name")
+                or fields.get("realName")
+                or pm.get("realName")
+                or ""
+            ).strip()
+            phone = str(
+                fields.get("mobile")
+                or fields.get("phone")
+                or fields.get("phoneNumber")
+                or ""
+            ).strip()
+            holder_id = str(
+                fields.get("idCard")
+                or fields.get("idNumber")
+                or fields.get("id")
+                or ""
+            ).strip()
+            pm_fiat = str(pm.get("fiatUnit") or pm.get("fiat") or "").upper().strip()
+            if fiat_unit and pm_fiat and pm_fiat != fiat_unit.upper():
+                continue
+
+            # Usar pay_id o combinación nombre+cuenta para la clave única
+            unique_key = f"{pay_id}_{name}_{acc_num}" if pay_id else f"{name}_{identifier}_{acc_num}".lower()
+            if unique_key not in seen:
+                seen.add(unique_key)
                 methods.append({
                     "name": name or identifier,
                     "identifier": identifier,
-                    "pay_id": pay_id,
+                    "pay_id": str(pay_id) if pay_id else "",
+                    "account_number": acc_num,
+                    "holder_name": holder,
+                    "phone_number": phone,
+                    "holder_id": holder_id,
+                    "fiat_currency": pm_fiat,
                     "raw": pm,
                 })
     except Exception as err:
@@ -451,37 +492,45 @@ def fetch_c2c_user_pay_methods(
         )
         ads = resp.get("data") or []
         for ad in ads:
-            ad_fiat = str(ad.get("fiatUnit") or "VES").upper().strip()
-            if fiat_unit and ad_fiat != fiat_unit.upper():
+            ad_fiat = str(ad.get("fiatUnit") or "").upper().strip()
+            if fiat_unit and ad_fiat and ad_fiat != fiat_unit.upper():
                 continue
 
             for tm in ad.get("tradeMethods") or []:
                 name = str(tm.get("tradeMethodName") or "").strip()
                 ident = str(tm.get("identifier") or tm.get("payType") or "").strip()
-                val = name or ident
-                if val and val.lower() not in seen:
-                    seen.add(val.lower())
+                pay_id = tm.get("payId") or ""
+                unique_key = f"{pay_id}_{name}_{ident}".lower() if pay_id else (name or ident).lower()
+                if unique_key and unique_key not in seen:
+                    seen.add(unique_key)
                     methods.append({
-                        "name": val,
+                        "name": name or ident,
                         "identifier": ident,
-                        "pay_id": tm.get("payId"),
+                        "pay_id": str(pay_id) if pay_id else "",
+                        "account_number": "",
+                        "fiat_currency": ad_fiat,
                         "raw": tm,
                     })
 
             for tm_vo in ad.get("tradeMethodCommissionRateVoList") or []:
                 name = str(tm_vo.get("tradeMethodName") or "").strip()
                 ident = str(tm_vo.get("tradeMethodIdentifier") or "").strip()
-                val = name or ident
-                if val and val.lower() not in seen:
-                    seen.add(val.lower())
+                pay_id = tm_vo.get("payId") or ""
+                unique_key = f"{pay_id}_{name}_{ident}".lower() if pay_id else (name or ident).lower()
+                if unique_key and unique_key not in seen:
+                    seen.add(unique_key)
                     methods.append({
-                        "name": val,
+                        "name": name or ident,
                         "identifier": ident,
-                        "pay_id": tm_vo.get("payId"),
+                        "pay_id": str(pay_id) if pay_id else "",
+                        "account_number": "",
+                        "fiat_currency": ad_fiat,
                         "raw": tm_vo,
                     })
     except Exception as err:
         logger.warning("Fallo en fallback de anuncios c2c: %s", err)
+
+    return methods
 
     return methods
 

@@ -40,15 +40,15 @@ import {
   ArrowUpCircle,
   BadgeInfo,
 } from 'lucide-react';
-import DatabaseBackupsSection from './settings/DatabaseBackupsSection';
-import SystemMaintenanceSection from './settings/SystemMaintenanceSection';
-import BinancePrivateApiSection from './settings/BinancePrivateApiSection';
-import AppUpdateSection from './settings/AppUpdateSection';
-import AboutSection from './settings/AboutSection';
-import { playNewTradeSound, playCompletedTradeSound } from '../utils/audioAlerts';
-import { fmtDateTime } from '../utils/formatters';
-import SystemDocumentationSection from './SystemDocumentationSection';
-import { Button, Badge } from './ui';
+import DatabaseBackupsSection from '../settings/DatabaseBackupsSection';
+import SystemMaintenanceSection from '../settings/SystemMaintenanceSection';
+import BinancePrivateApiSection from '../settings/BinancePrivateApiSection';
+import AppUpdateSection from '../settings/AppUpdateSection';
+import AboutSection from '../settings/AboutSection';
+import { playNewTradeSound, playCompletedTradeSound } from '../../utils/audioAlerts';
+import { fmtDateTime } from '../../utils/formatters';
+import SystemDocumentationSection from '../settings/SystemDocumentationSection';
+import { Button, Badge, Switch } from '../ui';
 
 const TABS = [
   { id: 'CONNECTIONS', label: 'Conexiones', icon: Link2 },
@@ -422,15 +422,12 @@ export default function SettingsView({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white">Órdenes Nuevas en Proceso</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={soundNewOrderEnabled}
-                        onChange={(e) => onToggleSoundNewOrder && onToggleSoundNewOrder(e.target.checked)}
-                        disabled={!soundEnabled}
-                        className="h-4 w-4 accent-amber-500 rounded cursor-pointer disabled:opacity-30"
-                      />
-                    </label>
+                    <Switch
+                      size="sm"
+                      checked={soundNewOrderEnabled}
+                      onChange={(checked) => onToggleSoundNewOrder && onToggleSoundNewOrder(checked)}
+                      disabled={!soundEnabled}
+                    />
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Arpegio ascendente suave (D5 ➔ A5) que te avisa al instante cuando un comerciante abre un trade.
@@ -454,15 +451,12 @@ export default function SettingsView({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white">Órdenes Completadas / Liberadas</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={soundCompletedOrderEnabled}
-                        onChange={(e) => onToggleSoundCompletedOrder && onToggleSoundCompletedOrder(e.target.checked)}
-                        disabled={!soundEnabled}
-                        className="h-4 w-4 accent-amber-500 rounded cursor-pointer disabled:opacity-30"
-                      />
-                    </label>
+                    <Switch
+                      size="sm"
+                      checked={soundCompletedOrderEnabled}
+                      onChange={(checked) => onToggleSoundCompletedOrder && onToggleSoundCompletedOrder(checked)}
+                      disabled={!soundEnabled}
+                    />
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Doble campana armónica (A5 + E6) que confirma cuando un trade se completa y se acredita el saldo.
@@ -712,14 +706,11 @@ export default function SettingsView({
                   Incluye los segundos en las horas de órdenes, sincronizaciones y eventos temporales.
                 </p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={timeShowSeconds}
-                  onChange={(e) => onToggleTimeShowSeconds && onToggleTimeShowSeconds(e.target.checked)}
-                  className="h-4 w-4 accent-amber-500 rounded cursor-pointer"
-                />
-              </label>
+              <Switch
+                size="sm"
+                checked={timeShowSeconds}
+                onChange={(checked) => onToggleTimeShowSeconds && onToggleTimeShowSeconds(checked)}
+              />
             </div>
           </div>
 

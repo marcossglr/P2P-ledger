@@ -7,8 +7,8 @@ import {
   AlertCircle,
   Upload,
 } from 'lucide-react';
-import { binanceApi, reconciliationApi } from '../services/api';
-import { Modal, Button, Input, Badge } from './ui';
+import { binanceApi, reconciliationApi } from '../../services/api';
+import { Modal, Button, Input, Badge } from '../ui';
 
 export default function BinanceApiModal({
   isOpen,

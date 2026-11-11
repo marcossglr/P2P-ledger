@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, FileText, CheckCircle2, AlertCircle, Loader2, Trash2 } from 'lucide-react';
-import { fmtDateTime, fmtDate } from '../utils/formatters';
-import { Button, Badge } from './ui';
-import { getApiBaseUrl, universalFetch } from '../services/api';
+import { fmtDateTime, fmtDate } from '../../utils/formatters';
+import { Button, Badge } from '../ui';
+import { getApiBaseUrl, universalFetch } from '../../services/api';
 
 export default function FileDropzone({
   title,

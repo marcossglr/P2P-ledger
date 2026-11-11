@@ -6,9 +6,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
-import TablePaginator from './TablePaginator';
-import { fmtDateTime } from '../utils/formatters';
-import { Modal, Button, Select, Input, Badge } from './ui';
+import TablePaginator from '../common/TablePaginator';
+import { fmtDateTime } from '../../utils/formatters';
+import { Modal, Button, Select, Input, Badge } from '../ui';
 
 export default function BankMovementsModal({
   isOpen,
@@ -48,6 +48,7 @@ export default function BankMovementsModal({
           ...m,
           account_id: acc.id,
           account_name: acc.name,
+          account_fiat: acc.fiat_currency || 'VES',
         });
       });
     });
@@ -78,7 +79,7 @@ export default function BankMovementsModal({
   const startIndex = (safePage - 1) * pageSize;
   const paginatedMovements = movementsList.slice(startIndex, startIndex + pageSize);
 
-  const fmtBs = (n) =>
+  const fmtAmount = (n) =>
     Number(n || 0).toLocaleString('es-ES', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -202,6 +203,7 @@ export default function BankMovementsModal({
               {paginatedMovements.map((m) => {
                 const isSell = m.order_type === 'VENTA';
                 const isUpdating = reassigningId === m.order_id;
+                const accFiat = m.account_fiat || activeAccount?.fiat_currency || 'VES';
                 return (
                   <tr
                     key={`${m.order_id}-${m.order_number}`}
@@ -244,14 +246,14 @@ export default function BankMovementsModal({
                             : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
                         }`}
                       >
-                        {isSell ? 'VENTA (+Bs)' : 'COMPRA (-Bs)'}
+                        {isSell ? 'VENTA (+)' : 'COMPRA (-)'}
                       </span>
                     </td>
                     <td className="py-2.5 px-2 text-right text-slate-300 tabular-nums font-mono">
-                      <div>{fmtBs(m.fiat_amount)} Bs</div>
+                      <div>{fmtAmount(m.fiat_amount)} {accFiat}</div>
                       {m.bank_fee_bs > 0 && (
                         <div className="text-[10px] text-rose-400 tabular-nums">
-                          Com. {m.bank_fee_pct}%: -{fmtBs(m.bank_fee_bs)} Bs
+                          Com. {m.bank_fee_pct}%: -{fmtAmount(m.bank_fee_bs)} {accFiat}
                         </div>
                       )}
                     </td>
@@ -266,7 +268,7 @@ export default function BankMovementsModal({
                         }
                       >
                         {Number(m.net_bs_impact || 0) > 0.01 ? '+' : ''}
-                        {fmtBs(m.net_bs_impact)} Bs
+                        {fmtAmount(m.net_bs_impact)} {accFiat}
                       </span>
                       {!m.included_after_anchor && (
                         <span

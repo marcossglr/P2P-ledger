@@ -12,14 +12,33 @@ export function useOperationsDashboard({
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   const [bankFeePct, setBankFeePct] = useState(0.3);
+
   const hasDataRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const onPairsDetectedRef = useRef(onPairsDetected);
+  onPairsDetectedRef.current = onPairsDetected;
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const fetchTodayDashboard = useCallback(
-    async (isInitial = false) => {
-      if (isInitial || !hasDataRef.current) {
-        setLoading(true);
+    async (options = {}) => {
+      // Protegerse si se pasa directamente a un onClick y recibe el SyntheticEvent
+      const isInitial = typeof options === 'boolean' ? options : Boolean(options?.isInitial);
+
+      if (!hasDataRef.current || isInitial) {
+        if (isMountedRef.current) setLoading(true);
+      } else {
+        if (isMountedRef.current) setRefreshing(true);
       }
+
       try {
         const queryParams = {
           only_today: true,
@@ -29,52 +48,73 @@ export function useOperationsDashboard({
         if (fiatCurrency !== 'ALL') queryParams.fiat_currency = fiatCurrency;
 
         const json = await operationsApi.getOperations(queryParams);
-        setData(json);
-        hasDataRef.current = true;
 
-        if (json?.available_assets && onPairsDetected) {
-          onPairsDetected(json.available_assets, json.available_fiats || ['VES']);
+        if (isMountedRef.current) {
+          setData(json);
+          setError(null);
+          hasDataRef.current = true;
+        }
+
+        if (json?.available_assets && onPairsDetectedRef.current) {
+          onPairsDetectedRef.current(json.available_assets, json.available_fiats || ['VES']);
         }
       } catch (err) {
         console.error('Error cargando operaciones de hoy:', err);
+        if (isMountedRef.current) {
+          setError(err?.message || 'Error cargando operaciones');
+        }
       } finally {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
-    [selectedAsset, fiatCurrency, bankFeePct, onPairsDetected]
+    [selectedAsset, fiatCurrency, bankFeePct]
   );
 
   useEffect(() => {
     fetchTodayDashboard();
-  }, [selectedAsset, fiatCurrency, bankFeePct, refreshTrigger]);
+  }, [fetchTodayDashboard, refreshTrigger]);
 
-  // Sincronizar automáticamente la tasa de comisión configurada en los ajustes de bancos
+  // Sincronizar automáticamente la tasa de comisión configurada en los ajustes de bancos sin disparar bucles
   useEffect(() => {
     const acc =
       data?.bank_inventory?.accounts?.find((a) => a.is_default) ||
       data?.bank_inventory?.accounts?.[0];
-    if (acc?.pago_movil_fee_pct != null && Number(acc.pago_movil_fee_pct) !== bankFeePct) {
-      setBankFeePct(Number(acc.pago_movil_fee_pct));
+    if (acc?.pago_movil_fee_pct != null) {
+      const parsedFee = Number(acc.pago_movil_fee_pct);
+      setBankFeePct((prev) => (prev !== parsedFee ? parsedFee : prev));
     }
-  }, [data, bankFeePct]);
+  }, [data?.bank_inventory?.accounts]);
 
-  const handleSeedDemo = async () => {
-    await operationsApi.seedDemo();
-    fetchTodayDashboard();
-  };
+  const handleSeedDemo = useCallback(async () => {
+    try {
+      await operationsApi.seedDemo();
+      await fetchTodayDashboard(true);
+    } catch (err) {
+      console.error('Error al poblar demo:', err);
+    }
+  }, [fetchTodayDashboard]);
 
-  const handleClearDemo = async () => {
-    await operationsApi.clearOperations(true);
-    fetchTodayDashboard();
-  };
+  const handleClearDemo = useCallback(async () => {
+    try {
+      await operationsApi.clearOperations(true);
+      await fetchTodayDashboard(true);
+    } catch (err) {
+      console.error('Error al limpiar demo:', err);
+    }
+  }, [fetchTodayDashboard]);
 
-  const updateBankInventory = (updatedInv) => {
+  const updateBankInventory = useCallback((updatedInv) => {
     setData((prev) => (prev ? { ...prev, bank_inventory: updatedInv } : prev));
-  };
+  }, []);
 
   return {
     data,
     loading,
+    refreshing,
+    error,
     bankFeePct,
     setBankFeePct,
     fetchTodayDashboard,

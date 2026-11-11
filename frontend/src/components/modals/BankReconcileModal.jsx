@@ -5,11 +5,9 @@ import {
   AlertTriangle,
   PlusCircle,
   MinusCircle,
-  Plus,
 } from 'lucide-react';
-import BankAccountFormModal from './BankAccountFormModal';
-import { bankInventoryApi } from '../services/api';
-import { Modal, Button, Input } from './ui';
+import { bankInventoryApi } from '../../services/api';
+import { Modal, Button, Input } from '../ui';
 
 export default function BankReconcileModal({
   isOpen,
@@ -26,7 +24,6 @@ export default function BankReconcileModal({
   const [noteInput, setNoteInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [isAddBankOpen, setIsAddBankOpen] = useState(false);
   const prevIsOpenRef = useRef(false);
 
   // Inicializar estado únicamente al abrir el modal (evitar reseteos por auto-sync de fondo)
@@ -57,6 +54,8 @@ export default function BankReconcileModal({
     accounts.find((a) => Number(a.id) === Number(selectedAccountId)) ||
     accounts[0];
 
+  const fiatUnit = selectedAccount?.fiat_currency || 'VES';
+
   const handleAccountSelect = (accId) => {
     const acc = accounts.find((a) => Number(a.id) === Number(accId));
     setSelectedAccountId(Number(accId));
@@ -78,7 +77,7 @@ export default function BankReconcileModal({
     }
   };
 
-  const fmtBs = (n) =>
+  const fmtAmount = (n) =>
     Number(n || 0).toLocaleString('es-ES', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -100,14 +99,6 @@ export default function BankReconcileModal({
     previewDelta = signed;
   }
 
-  // Total consolidado resultante de todos los bancos combinados
-  const totalAllBanksBs = accounts.reduce((sum, a) => {
-    if (Number(a.id) === Number(selectedAccount?.id)) {
-      return sum + previewNewBalance;
-    }
-    return sum + Number(a.calculated_balance || 0);
-  }, 0);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedAccount) return;
@@ -116,7 +107,7 @@ export default function BankReconcileModal({
     let finalAmount = parsedAmount;
     if (mode === 'MOVIMIENTO_MANUAL') {
       if (Math.abs(parsedAmount) <= 0) {
-        setErrorMsg('Ingresa un monto mayor a 0,00 Bs para el movimiento manual.');
+        setErrorMsg(`Ingresa un monto mayor a 0,00 ${fiatUnit} para el movimiento manual.`);
         return;
       }
       finalAmount = manualSign === 'PLUS' ? Math.abs(parsedAmount) : -Math.abs(parsedAmount);
@@ -140,42 +131,34 @@ export default function BankReconcileModal({
   };
 
   const reconcileFooter = (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1.5 text-xs text-slate-400">
-        <span>Total bancos:</span>
-        <strong className="text-white font-mono font-bold">{fmtBs(totalAllBanksBs)} Bs</strong>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onClose}
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="submit"
-          form="bank-reconcile-form"
-          variant="primary"
-          loading={submitting}
-        >
-          Confirmar
-        </Button>
-      </div>
+    <div className="flex items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={onClose}
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        form="bank-reconcile-form"
+        variant="primary"
+        loading={submitting}
+      >
+        Confirmar
+      </Button>
     </div>
   );
 
   return (
-    <>
-      <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        title={hideAccountSelector && selectedAccount ? `Cuadre · ${selectedAccount.name}` : "Cuadre de Cuentas Bancarias"}
-        icon={Scale}
-        footer={reconcileFooter}
-        maxWidth="max-w-lg"
-      >
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={hideAccountSelector && selectedAccount ? `Cuadre · ${selectedAccount.name}` : "Cuadre de Cuentas Bancarias"}
+      icon={Scale}
+      footer={reconcileFooter}
+      maxWidth="max-w-lg"
+    >
         <div className="space-y-4">
           {/* Mensaje de Error */}
           {errorMsg && (
@@ -218,17 +201,6 @@ export default function BankReconcileModal({
                     </button>
                   );
                 })}
-
-                {/* Botón rápido para registrar un banco nacional del catálogo */}
-                <button
-                  type="button"
-                  onClick={() => setIsAddBankOpen(true)}
-                  className="flex items-center gap-1.5 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-800/50 transition-all cursor-pointer shadow-xs"
-                  title="Añadir una nueva cuenta bancaria nacional (BDV, Banesco, Mercantil, etc.)"
-                >
-                  <Plus className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Añadir Banco</span>
-                </button>
               </div>
             </div>
           )}
@@ -274,7 +246,7 @@ export default function BankReconcileModal({
                   }`}
                 >
                   <MinusCircle className="h-3.5 w-3.5" />
-                  <span>Restar Salida (-Bs)</span>
+                  <span>Restar Egreso (-{fiatUnit})</span>
                 </button>
                 <button
                   type="button"
@@ -286,7 +258,7 @@ export default function BankReconcileModal({
                   }`}
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
-                  <span>Sumar Entrada (+Bs)</span>
+                  <span>Sumar Ingreso (+{fiatUnit})</span>
                 </button>
               </div>
             )}
@@ -303,7 +275,7 @@ export default function BankReconcileModal({
               className="font-mono text-base font-bold tabular-nums"
               rightElement={
                 <span className="text-xs font-semibold text-slate-400 font-mono select-none">
-                  VES
+                  {fiatUnit}
                 </span>
               }
             />
@@ -314,7 +286,7 @@ export default function BankReconcileModal({
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span>Saldo en sistema:</span>
                   <span className="tabular-nums font-mono font-medium text-slate-300">
-                    {fmtBs(selectedAccount?.calculated_balance ?? 0)} Bs
+                    {fmtAmount(selectedAccount?.calculated_balance ?? 0)} {fiatUnit}
                   </span>
                 </div>
               )}
@@ -341,10 +313,10 @@ export default function BankReconcileModal({
                   }`}
                 >
                   {mode === 'MOVIMIENTO_MANUAL'
-                    ? `${fmtBs(previewNewBalance)} Bs`
+                    ? `${fmtAmount(previewNewBalance)} ${fiatUnit}`
                     : Math.abs(previewDelta) < 0.005
-                    ? '0,00 Bs'
-                    : `${previewDelta > 0.005 ? '+' : ''}${fmtBs(previewDelta)} Bs`}
+                    ? `0,00 ${fiatUnit}`
+                    : `${previewDelta > 0.005 ? '+' : ''}${fmtAmount(previewDelta)} ${fiatUnit}`}
                 </span>
               </div>
             </div>
@@ -365,25 +337,5 @@ export default function BankReconcileModal({
         </form>
       </div>
     </Modal>
-
-    {/* Modal de añadir nueva cuenta bancaria desde el catálogo */}
-    <BankAccountFormModal
-      isOpen={isAddBankOpen}
-      onClose={() => setIsAddBankOpen(false)}
-      existingAccounts={accounts}
-      onSuccess={(updatedInventory) => {
-        if (onSuccess) {
-          onSuccess(updatedInventory);
-        }
-        // Si la cuenta recién creada está disponible, seleccionarla
-        const newAccounts = updatedInventory?.accounts || [];
-        const lastCreated = newAccounts[newAccounts.length - 1];
-        if (lastCreated) {
-          setSelectedAccountId(lastCreated.id);
-          setAmountInput(String(lastCreated.calculated_balance ?? '0'));
-        }
-      }}
-    />
-  </>
   );
 }

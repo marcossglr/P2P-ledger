@@ -200,6 +200,10 @@ export const binanceApi = {
     const query = new URLSearchParams({ fiat, ...(force ? { force: 'true' } : {}) });
     return request(`/api/binance/p2p-public/payment-methods?${query.toString()}`);
   },
+  getCryptoAssets: (fiat = 'VES', force = false) => {
+    const query = new URLSearchParams({ fiat, ...(force ? { force: 'true' } : {}) });
+    return request(`/api/binance/p2p-public/crypto-assets?${query.toString()}`);
+  },
 };
 
 export const operationsApi = {

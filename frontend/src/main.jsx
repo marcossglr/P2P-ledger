@@ -10,7 +10,7 @@ import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/600.css'
 import '@fontsource/jetbrains-mono/700.css'
 import App from './App.jsx'
-import ErrorBoundary from './components/ErrorBoundary.jsx'
+import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 import { resolveBackendPort } from './services/api.js'
 import './index.css'
 

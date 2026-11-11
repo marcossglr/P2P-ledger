@@ -18,8 +18,8 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { fmtDateTime } from '../utils/formatters';
-import { Modal, Button, Badge } from './ui';
+import { fmtDateTime } from '../../utils/formatters';
+import { Modal, Button, Badge } from '../ui';
 
 export default function OrderDetailsModal({
   order,

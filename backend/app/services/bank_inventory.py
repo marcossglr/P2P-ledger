@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy import text, func, or_
@@ -6,21 +7,27 @@ from sqlalchemy.orm import Session
 
 from ..models import BankAccount, BankBalanceAdjustment, BinanceOrder
 from .binance_api import fetch_c2c_user_pay_methods
-from .venezuela_banks import VENEZUELA_BANKS_CATALOG, find_bank_in_catalog
+from .payment_methods_registry import (
+    VES_PROVIDERS,
+    USD_PROVIDERS,
+    COP_PROVIDERS,
+    resolve_payment_method_metadata,
+    get_providers_for_fiat,
+)
 
 
 KNOWN_BANKS_CATALOG = [
     {
         "code": b["code"],
         "name": b["name"],
-        "alias": b["alias_template"],
-        "keywords": ",".join(b["keywords"]),
+        "alias": b.get("alias_template", f"Cuenta {b['name']}"),
+        "keywords": ",".join(b.get("keywords", [])),
         "is_default": 1 if b["name"] == "Banesco" else 0,
-        "pago_movil_fee_pct": b.get("default_pago_movil_fee", 0.3),
+        "pago_movil_fee_pct": b.get("default_pago_movil_fee", 0.0),
         "transfer_fee_pct": b.get("default_transfer_fee", 0.0),
         "is_popular": b.get("is_popular", False),
     }
-    for b in VENEZUELA_BANKS_CATALOG
+    for b in (VES_PROVIDERS + USD_PROVIDERS + COP_PROVIDERS)
 ]
 
 GENERIC_PAYMENT_METHODS = {
@@ -190,38 +197,31 @@ def sync_bank_accounts_from_binance(
     pay_methods: Optional[List[Any]] = None,
     api_key: Optional[str] = None,
     api_secret: Optional[str] = None,
+    fiat_unit: Optional[str] = None,
 ) -> Tuple[List[BankAccount], Dict[str, Any]]:
     """
-    Sincroniza las cuentas bancarias en VES basándose en los métodos de pago configurados
+    Sincroniza las cuentas bancarias basándose en los métodos de pago configurados
     en la información del usuario en Binance P2P.
-    - El cuadre por defecto se inicializa siempre en 0,00 Bs (anchor_balance = 0.0)
+    - Soporta múltiples cuentas del mismo banco diferenciadas por binance_pay_id o cuenta.
+    - Respeta la divisa fiat de cada método.
+    - El cuadre por defecto se inicializa siempre en 0,00 (anchor_balance = 0.0)
       y las sincronizaciones nunca alteran el saldo de las cuentas existentes.
     Retorna (cuentas, metadata_resumen).
     """
     if pay_methods is None:
         try:
-            pay_methods = fetch_c2c_user_pay_methods(api_key=api_key, api_secret=api_secret, fiat_unit="VES")
+            pay_methods = fetch_c2c_user_pay_methods(api_key=api_key, api_secret=api_secret, fiat_unit=fiat_unit)
         except Exception:
             pay_methods = []
 
     now_ms = int(datetime.now().timestamp() * 1000)
     cut_ts = max(now_ms, get_latest_ves_order_timestamp_ms(db))
-    inferred_banks: List[Tuple[str, str, str]] = []
-    seen_names = set()
-
-    for item in pay_methods or []:
-        # Si viene en formato objeto dict ({'name': ..., 'identifier': ...}) o como string
-        pm_str = item.get("name") or item.get("identifier") if isinstance(item, dict) else str(item)
-        inferred = infer_canonical_bank_from_pay_method(pm_str)
-        if inferred:
-            b_name, b_alias, b_keywords = inferred
-            if b_name.lower() not in seen_names:
-                seen_names.add(b_name.lower())
-                inferred_banks.append((b_name, b_alias, b_keywords))
 
     existing_accounts = db.query(BankAccount).order_by(BankAccount.id.asc()).all()
     changed = False
     newly_created: List[str] = []
+    detected_count = 0
+    detected_names: List[str] = []
 
     # Eliminar siempre cualquier cuenta espuria creada por el código genérico "BANK"
     for acc in list(existing_accounts):
@@ -234,48 +234,81 @@ def sync_bank_accounts_from_binance(
             existing_accounts.remove(acc)
             changed = True
 
-    if inferred_banks:
-        # Importar catálogo nacional para enriquecer códigos bancarios (0102, 0134, etc.)
-        from .venezuela_banks import VENEZUELA_BANKS_CATALOG
+    from .venezuela_banks import VENEZUELA_BANKS_CATALOG
 
-        # Mantener las cuentas existentes (no borrarlas si el usuario las creó o vinculó)
-        # Crear los bancos que estén en la cuenta de Binance del usuario y aún no existan localmente
-        for b_name, b_alias, b_keywords in inferred_banks:
-            # Buscar código bancario de SUDEBAN en catálogo si está disponible
-            matched_cat = next(
-                (b for b in VENEZUELA_BANKS_CATALOG if b["name"].lower() == b_name.lower()),
-                None,
-            )
-            b_code = matched_cat.get("code", "") if matched_cat else ""
+    for item in pay_methods or []:
+        detected_count += 1
+        pm_name = ""
+        pm_ident = ""
+        pm_pay_id = ""
+        pm_fiat = "VES"
 
-            already = next(
-                (acc for acc in existing_accounts if acc.name.lower() == b_name.lower()),
-                None,
+        if isinstance(item, dict):
+            pm_name = str(item.get("name") or "").strip()
+            pm_ident = str(item.get("identifier") or "").strip()
+            pm_pay_id = str(item.get("pay_id") or "").strip()
+            pm_fiat = str(item.get("fiat_currency") or "VES").upper().strip() or "VES"
+        else:
+            pm_name = str(item).strip()
+
+        # Determinar nombre comercial simétrico con Binance
+        meta_provider = resolve_payment_method_metadata(pm_name or pm_ident, fiat_currency=pm_fiat)
+        if meta_provider:
+            b_name = meta_provider["name"]
+            b_keywords = ",".join(meta_provider.get("keywords", []))
+            def_pm_fee = float(meta_provider.get("default_pago_movil_fee", 0.0))
+            def_trans_fee = float(meta_provider.get("default_transfer_fee", 0.0))
+        else:
+            b_name = pm_name or pm_ident or "Método de Pago"
+            b_keywords = b_name.lower()
+            def_pm_fee = 0.3 if pm_fiat == "VES" else 0.0
+            def_trans_fee = 0.0
+
+        detected_names.append(b_name)
+
+        # Buscar si esta cuenta ya existe en base al payId de Binance o nombre
+        already = None
+        if pm_pay_id:
+            already = next((acc for acc in existing_accounts if acc.binance_pay_id == pm_pay_id), None)
+        if not already:
+            matching_by_name = [acc for acc in existing_accounts if acc.name.lower() == b_name.lower()]
+            if len(matching_by_name) == 1 and not matching_by_name[0].binance_pay_id:
+                already = matching_by_name[0]
+
+        if not already:
+            has_default = any(acc.is_default == 1 for acc in existing_accounts)
+            new_acc = BankAccount(
+                name=b_name,
+                binance_pay_id=pm_pay_id,
+                pay_method_identifier=pm_ident,
+                account_alias=b_name,
+                fiat_currency=pm_fiat,
+                match_keywords=b_keywords,
+                is_default=0 if has_default else 1,
+                is_active=1,
+                apply_buy_fee=1 if pm_fiat == "VES" else 0,
+                pago_movil_fee_pct=def_pm_fee,
+                transfer_fee_pct=def_trans_fee,
+                anchor_balance=0.0,
+                anchor_timestamp=cut_ts,
+                anchor_date_label=f"Cuadre por Defecto (0,00 {pm_fiat})",
+                manual_delta_bs=0.0,
             )
-            if not already:
-                has_default = any(acc.is_default == 1 for acc in existing_accounts)
-                new_acc = BankAccount(
-                    name=b_name,
-                    account_alias=b_alias,
-                    bank_code=b_code,
-                    fiat_currency="VES",
-                    match_keywords=b_keywords,
-                    is_default=0 if has_default else 1,
-                    apply_buy_fee=1,
-                    pago_movil_fee_pct=0.3,
-                    transfer_fee_pct=0.0,
-                    anchor_balance=0.0,
-                    anchor_timestamp=cut_ts,
-                    anchor_date_label="Cuadre por Defecto (0,00 Bs)",
-                    manual_delta_bs=0.0,
-                )
-                db.add(new_acc)
-                db.flush()
-                existing_accounts.append(new_acc)
-                newly_created.append(b_name)
+            db.add(new_acc)
+            db.flush()
+            existing_accounts.append(new_acc)
+            newly_created.append(f"{b_name} ({pm_fiat})")
+            changed = True
+        else:
+            # Enriquecer metadata oficial si faltaba
+            if pm_pay_id and not already.binance_pay_id:
+                already.binance_pay_id = pm_pay_id
                 changed = True
-            elif b_code and not already.bank_code:
-                already.bank_code = b_code
+            if pm_ident and not already.pay_method_identifier:
+                already.pay_method_identifier = pm_ident
+                changed = True
+            if getattr(already, "is_active", 1) == 0:
+                already.is_active = 1
                 changed = True
 
     # Garantizar que si existen cuentas, al menos una esté marcada como principal (is_default=1)
@@ -288,8 +321,8 @@ def sync_bank_accounts_from_binance(
 
     all_accounts = db.query(BankAccount).order_by(BankAccount.id.asc()).all()
     meta = {
-        "detected_count": len(inferred_banks),
-        "detected_names": [b[0] for b in inferred_banks],
+        "detected_count": detected_count,
+        "detected_names": list(dict.fromkeys(detected_names)),
         "created_count": len(newly_created),
         "created_names": newly_created,
     }
@@ -481,7 +514,6 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
             func.count(BinanceOrder.id),
         )
         .filter(
-            BinanceOrder.fiat_currency == "VES",
             or_(
                 BinanceOrder.order_status == "COMPLETED",
                 BinanceOrder.order_status.is_(None),
@@ -545,15 +577,13 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
         acc_stats[acc.id] = {
             "id": acc.id,
             "name": acc.name,
+            "binance_pay_id": acc.binance_pay_id or "",
+            "pay_method_identifier": acc.pay_method_identifier or "",
             "account_alias": acc.account_alias or "",
-            "bank_code": acc.bank_code or "",
-            "account_number": acc.account_number or "",
-            "holder_name": acc.holder_name or "",
-            "holder_id": acc.holder_id or "",
-            "phone_number": acc.phone_number or "",
             "fiat_currency": acc.fiat_currency or "VES",
             "match_keywords": acc.match_keywords or "",
             "is_default": bool(acc.is_default),
+            "is_active": bool(getattr(acc, "is_active", 1) if getattr(acc, "is_active", 1) is not None else 1),
             "apply_buy_fee": bool(acc.apply_buy_fee),
             "pago_movil_fee_pct": round(float(acc.pago_movil_fee_pct or 0.0), 3),
             "transfer_fee_pct": round(float(acc.transfer_fee_pct or 0.0), 3),
@@ -593,7 +623,6 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
         for r in (
             db.query(BinanceOrder.id)
             .filter(
-                BinanceOrder.fiat_currency == "VES",
                 or_(
                     BinanceOrder.order_status == "COMPLETED",
                     BinanceOrder.order_status.is_(None),
@@ -613,7 +642,6 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
         filter_conditions.append(BinanceOrder.id.in_(recent_order_ids))
 
     orders_query = db.query(BinanceOrder).filter(
-        BinanceOrder.fiat_currency == "VES",
         or_(
             BinanceOrder.order_status == "COMPLETED",
             BinanceOrder.order_status.is_(None),

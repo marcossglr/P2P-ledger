@@ -51,23 +51,26 @@ class BankAccount(Base):
     __tablename__ = "bank_accounts"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)         # Ej: "Banesco", "Mercantil", "Banco Provincial"
-    account_alias = Column(String, default="")             # Ej: "Cuenta Principal / 0134"
-    bank_code = Column(String, default="")                 # Código Sudeban de 4 dígitos: "0102", "0134", etc.
-    account_number = Column(String, default="")            # 20 dígitos de la cuenta bancaria nacional
-    holder_name = Column(String, default="")               # Titular de la cuenta
-    holder_id = Column(String, default="")                 # Cédula o RIF (V-12345678, J-...)
-    phone_number = Column(String, default="")              # Teléfono afiliado a Pago Móvil
-    fiat_currency = Column(String, default="VES")
-    match_keywords = Column(String, default="")            # Palabras clave separadas por coma: "banesco"
-    is_default = Column(Integer, default=0)                # 1 si recibe órdenes genéricas ("Pago Móvil")
-    apply_buy_fee = Column(Integer, default=1)             # 1 si descuenta comisión bancaria en COMPRAS (salidas Bs)
-    pago_movil_fee_pct = Column(Float, default=0.3)        # % comisión cuando pay_method incluye Pago Móvil
-    transfer_fee_pct = Column(Float, default=0.0)          # % comisión en transferencias regulares
-    anchor_balance = Column(Float, default=0.0)            # Saldo base fijado en el último cuadre o saldo inicial
-    anchor_timestamp = Column(BigInteger, default=0)       # Epoch ms desde el cual las órdenes suman/restan
-    anchor_date_label = Column(String, default="Inicio")   # Etiqueta de fecha/hora del último cuadre
-    manual_delta_bs = Column(Float, default=0.0)           # Movimientos manuales netos desde el último cuadre
+    # --- Atributos Nativos Binance P2P (Simetría 100%) ---
+    binance_pay_id = Column(String, index=True, default="")         # payId (Ej: "77364173")
+    pay_method_identifier = Column(String, index=True, default="")  # identifier (Ej: "BancoDeVenezuela", "Bancamiga", "Zelle")
+    name = Column(String, index=True)                              # tradeMethodName (Ej: "Banco de Venezuela", "Bancamiga")
+    fiat_currency = Column(String, default="VES", index=True)       # Divisa asociada (VES, USD, COP, etc.)
+    is_active = Column(Integer, default=1)                         # 1 si sigue activo en Binance, 0 si fue desvinculado
+
+    # --- Atributos de Auditoría y Conciliación Contable Ledger ---
+    account_alias = Column(String, default="")                     # Alias operativo (opcional para el operador)
+    match_keywords = Column(String, default="")                    # Palabras clave de vinculación P2P
+    is_default = Column(Integer, default=0)                        # 1 si es cuenta principal de recepción
+    apply_buy_fee = Column(Integer, default=1)                     # 1 si descuenta comisión bancaria en COMPRAS
+    pago_movil_fee_pct = Column(Float, default=0.3)                # % comisión en salidas interbancarias / Pago Móvil
+    transfer_fee_pct = Column(Float, default=0.0)                  # % comisión en transferencias regulares
+
+    # --- Puntos de Anclaje de Saldo (Arqueo / Cuadre) ---
+    anchor_balance = Column(Float, default=0.0)                    # Saldo base fijado en el último cuadre
+    anchor_timestamp = Column(BigInteger, default=0)               # Timestamp ms desde el cual las órdenes suman/restan
+    anchor_date_label = Column(String, default="Inicio")           # Etiqueta de fecha/hora del último cuadre
+    manual_delta_bs = Column(Float, default=0.0)                   # Movimientos manuales netos desde el último cuadre
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 

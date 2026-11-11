@@ -18,15 +18,14 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import TablePaginator from './TablePaginator';
-import OrderDetailsModal from './OrderDetailsModal';
-import OperationsTable from './OperationsTable';
-import OrdersToolbar from './OrdersToolbar';
-import OperationsFilterBar from './history/OperationsFilterBar';
-import HistoryKpiCards from './history/HistoryKpiCards';
-import { fmtDate } from '../utils/formatters';
-import { operationsApi } from '../services/api';
-import { Button, Input, Badge } from './ui';
+import TablePaginator from '../common/TablePaginator';
+import OrderDetailsModal from '../modals/OrderDetailsModal';
+import OperationsTable from '../common/OperationsTable';
+import OperationsFilterBar from '../history/OperationsFilterBar';
+import HistoryKpiCards from '../history/HistoryKpiCards';
+import { fmtDate } from '../../utils/formatters';
+import { operationsApi } from '../../services/api';
+import { Button, Input, Badge } from '../ui';
 
 export default function HistoryOperationsView({
   refreshTrigger,
@@ -64,11 +63,12 @@ export default function HistoryOperationsView({
   const [copiedOrderId, setCopiedOrderId] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  // Paginación para la tabla de Rendimiento Diario y el Libro Histórico
+  // Paginación y ordenamiento para la tabla de Rendimiento Diario y el Libro Histórico
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyPageSize, setDailyPageSize] = useState(7);
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersPageSize, setOrdersPageSize] = useState(15);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   // Control para colapsar/expandir el desglose multi-día
   const [showDailyBreakdown, setShowDailyBreakdown] = useState(true);
@@ -116,11 +116,11 @@ export default function HistoryOperationsView({
     }
   }, [data, bankFeePct]);
 
-  // Reiniciar páginas al cambiar filtros o búsqueda de tabla
+  // Reiniciar páginas al cambiar filtros, búsqueda de tabla o criterio de orden
   useEffect(() => {
     setDailyPage(1);
     setOrdersPage(1);
-  }, [orderType, orderStatus, fiatCurrency, startDate, endDate, tableSearch]);
+  }, [orderType, orderStatus, fiatCurrency, startDate, endDate, tableSearch, sortConfig]);
 
   const applyDatePreset = (preset) => {
     setActivePreset(preset);
@@ -218,6 +218,27 @@ export default function HistoryOperationsView({
     });
   }, [orders, tableSearch]);
 
+  // Ordenamiento global de todas las operaciones históricas filtradas antes de paginar
+  const sortedFilteredOrders = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return filteredOrders;
+
+    const { key, direction } = sortConfig;
+    const factor = direction === 'asc' ? 1 : -1;
+
+    return [...filteredOrders].sort((a, b) => {
+      const valA = a[key];
+      const valB = b[key];
+
+      if (key === 'order_date') {
+        return ((new Date(valA).getTime() || 0) - (new Date(valB).getTime() || 0)) * factor;
+      }
+      if (['crypto_amount', 'commission_usdt', 'unit_price', 'fiat_amount'].includes(key)) {
+        return (Number(valA || 0) - Number(valB || 0)) * factor;
+      }
+      return String(valA || '').localeCompare(String(valB || '')) * factor;
+    });
+  }, [filteredOrders, sortConfig]);
+
   const totalDailyPages = Math.max(1, Math.ceil(dailyDesc.length / dailyPageSize));
   const safeDailyPage = Math.min(dailyPage, totalDailyPages);
   const paginatedDaily = dailyDesc.slice(
@@ -225,9 +246,9 @@ export default function HistoryOperationsView({
     safeDailyPage * dailyPageSize
   );
 
-  const totalOrdersPages = Math.max(1, Math.ceil(filteredOrders.length / ordersPageSize));
+  const totalOrdersPages = Math.max(1, Math.ceil(sortedFilteredOrders.length / ordersPageSize));
   const safeOrdersPage = Math.min(ordersPage, totalOrdersPages);
-  const paginatedOrders = filteredOrders.slice(
+  const paginatedOrders = sortedFilteredOrders.slice(
     (safeOrdersPage - 1) * ordersPageSize,
     safeOrdersPage * ordersPageSize
   );
@@ -459,8 +480,12 @@ export default function HistoryOperationsView({
 
       {/* Libro Histórico de Operaciones P2P */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
-        {/* Barra de Filtros y Búsqueda sobre la tabla con todo el ancho disponible */}
-        <OrdersToolbar
+        <OperationsTable
+          orders={paginatedOrders}
+          selectedOrder={selectedOrder}
+          onSelectOrder={setSelectedOrder}
+          showFullDate={true}
+          loading={loading}
           orderType={orderType}
           onOrderTypeChange={setOrderType}
           orderStatus={orderStatus}
@@ -470,16 +495,18 @@ export default function HistoryOperationsView({
           tableSearch={tableSearch}
           onTableSearchChange={setTableSearch}
           onClearSearch={() => setTableSearch('')}
-        />
-
-        <OperationsTable
-          orders={paginatedOrders}
-          selectedOrder={selectedOrder}
-          onSelectOrder={setSelectedOrder}
-          showFullDate={true}
-          loading={loading}
-          tableSearch={tableSearch}
-          onClearSearch={() => setTableSearch('')}
+          onFilterCounterparty={(cp) => setTableSearch(cp)}
+          sortConfig={sortConfig}
+          onSortChange={setSortConfig}
+          pagination={{
+            totalItems: sortedFilteredOrders.length,
+            currentPage: safeOrdersPage,
+            pageSize: ordersPageSize,
+            onPageChange: setOrdersPage,
+            onPageSizeChange: setOrdersPageSize,
+            pageSizeOptions: [10, 15, 25, 50, 100],
+            itemLabel: 'operaciones históricas',
+          }}
           emptyMessage={
             <div className="mx-auto max-w-md space-y-2 py-4">
               <p className="text-sm font-medium text-slate-300">
@@ -490,16 +517,6 @@ export default function HistoryOperationsView({
               </p>
             </div>
           }
-        />
-
-        <TablePaginator
-          totalItems={filteredOrders.length}
-          currentPage={safeOrdersPage}
-          pageSize={ordersPageSize}
-          onPageChange={setOrdersPage}
-          onPageSizeChange={setOrdersPageSize}
-          pageSizeOptions={[10, 15, 25, 50, 100]}
-          itemLabel="operaciones históricas"
         />
       </div>
 

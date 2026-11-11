@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, Link2, AlertCircle } from 'lucide-react';
-import FileDropzone from './FileDropzone';
-import TablePaginator from './TablePaginator';
-import { fmtDateTime, fmtDate } from '../utils/formatters';
-import { reconciliationApi } from '../services/api';
-import { Button, Badge } from './ui';
+import FileDropzone from '../common/FileDropzone';
+import TablePaginator from '../common/TablePaginator';
+import { fmtDateTime, fmtDate } from '../../utils/formatters';
+import { reconciliationApi } from '../../services/api';
+import { Button, Badge } from '../ui';
 
 export default function BankReconcilerView() {
   const [bankBatch, setBankBatch] = useState(null);
