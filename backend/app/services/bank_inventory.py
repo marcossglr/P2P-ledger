@@ -234,7 +234,7 @@ def sync_bank_accounts_from_binance(
             existing_accounts.remove(acc)
             changed = True
 
-    from .venezuela_banks import VENEZUELA_BANKS_CATALOG
+    from .payment_methods_registry import VES_PROVIDERS as VENEZUELA_BANKS_CATALOG
 
     for item in pay_methods or []:
         detected_count += 1

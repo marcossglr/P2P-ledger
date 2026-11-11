@@ -11,7 +11,7 @@ from ..schemas import (
     BulkBankReconcilePayload,
     AssignOrderBankPayload,
 )
-from ..services.venezuela_banks import VENEZUELA_BANKS_CATALOG
+from ..services.payment_methods_registry import VES_PROVIDERS as VENEZUELA_BANKS_CATALOG
 from ..services.bank_inventory import (
     compute_bank_inventory_summary,
     sync_bank_accounts_from_binance,
