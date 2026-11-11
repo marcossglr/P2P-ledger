@@ -25,6 +25,7 @@ frontend/dist/
 build/
 .vite/
 frontend/.vite/
+backend/openapi.json
 
 # Databases, Backups & local persistent storage
 *.db

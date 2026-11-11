@@ -23,6 +23,7 @@ else:
 import uvicorn
 from app.main import app
 from app.config import settings
+from app.migrator import run_auto_migrations
 
 def get_runtime_filepath() -> Path:
     """
@@ -100,6 +101,12 @@ def start_server():
     actual_port = sock.getsockname()[1]
     
     print(f"Iniciando P2P Ledger Backend en {host}:{actual_port} (PID {os.getpid()})")
+    
+    # Ejecutar migraciones automáticas de base de datos antes de exponer el servicio
+    try:
+        run_auto_migrations()
+    except Exception as mig_err:
+        print(f"[P2P Ledger Backend] Advertencia en migraciones: {mig_err}")
     
     # Escribir descriptor de runtime para que Tauri / Frontend conozcan el puerto activo
     try:
