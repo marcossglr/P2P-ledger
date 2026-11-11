@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
   "productName": "P2P Ledger",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "identifier": "io.github.marcossglr.p2pledger",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -37,7 +37,13 @@
     "license": "GPL-3.0-only",
     "shortDescription": "Terminal de conciliación para Binance P2P y bancos",
     "longDescription": "P2P Ledger es un terminal financiero de escritorio para conciliar operaciones de Binance P2P con movimientos bancarios, controlar inventario por banco, calcular costo promedio ponderado y analizar el mercado P2P en tiempo real.",
-    "targets": ["rpm", "deb", "appimage", "nsis", "msi"],
+    "targets": [
+      "rpm",
+      "deb",
+      "appimage",
+      "nsis",
+      "msi"
+    ],
     "externalBin": [
       "binaries/p2p-ledger-backend"
     ],
