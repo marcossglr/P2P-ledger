@@ -83,5 +83,6 @@ frontend/src-tauri/binaries/
 # IDE & Editor files
 .idea/
 .vscode/
+.zed/
 *.swp
 *.swo
