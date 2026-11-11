@@ -43,7 +43,6 @@ import {
 import DatabaseBackupsSection from '../settings/DatabaseBackupsSection';
 import SystemMaintenanceSection from '../settings/SystemMaintenanceSection';
 import BinancePrivateApiSection from '../settings/BinancePrivateApiSection';
-import AppUpdateSection from '../settings/AppUpdateSection';
 import AboutSection from '../settings/AboutSection';
 import { playNewTradeSound, playCompletedTradeSound } from '../../utils/audioAlerts';
 import { fmtDateTime } from '../../utils/formatters';
@@ -56,7 +55,6 @@ const TABS = [
   { id: 'PREFERENCES', label: 'Preferencias', icon: Palette },
   { id: 'DOCS', label: 'Información y Cálculos', icon: Info },
   { id: 'MAINTENANCE', label: 'Mantenimiento y Diagnóstico', icon: SlidersHorizontal },
-  { id: 'UPDATES', label: 'Actualizaciones', icon: ArrowUpCircle },
   { id: 'ABOUT', label: 'Acerca de', icon: BadgeInfo },
 ];
 
@@ -89,8 +87,7 @@ export default function SettingsView({
     if (sec === 'PREFERENCES') return 'PREFERENCES';
     if (sec === 'DOCS' || sec === 'FORMULAS' || sec === 'INFO') return 'DOCS';
     if (sec === 'MAINTENANCE') return 'MAINTENANCE';
-    if (sec === 'UPDATES' || sec === 'UPDATE') return 'UPDATES';
-    if (sec === 'ABOUT') return 'ABOUT';
+    if (sec === 'UPDATES' || sec === 'UPDATE' || sec === 'ABOUT') return 'ABOUT';
     return 'CONNECTIONS';
   };
 
@@ -762,12 +759,7 @@ export default function SettingsView({
         />
       )}
 
-      {/* 6. SECCIÓN ACTUALIZACIONES */}
-      {activeSection === 'UPDATES' && (
-        <AppUpdateSection />
-      )}
-
-      {/* 7. SECCIÓN ACERCA DE */}
+      {/* 6. SECCIÓN ACERCA DE Y ACTUALIZACIONES */}
       {activeSection === 'ABOUT' && (
         <AboutSection />
       )}
