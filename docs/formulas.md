@@ -94,9 +94,13 @@ El sistema no oculta ni infla números; audita y descuenta el 100% de los costos
 1. **Comisiones de Binance P2P (Maker y Taker)**:
    * Binance te descuenta comisiones en USDT directamente en tu billetera de Fondos al ejecutarse tus órdenes.
    * El sistema suma todas las comisiones en USDT cobradas por Binance (tanto en compras como en ventas) y calcula su costo exacto de reposición en Bolívares usando tu tasa de compra.
-2. **Comisiones Bancarias (Pago Móvil)**:
+2. **Comisiones Bancarias (Pago Móvil y Transferencias Interbancarias)**:
    * En Venezuela, las transferencias entre cuentas del mismo banco tienen 0% de comisión. 
-   * Las compras que realizas vía Pago Móvil sí generan una comisión bancaria (generalmente 0.3%). El sistema aplica este porcentaje únicamente sobre las compras realizadas por Pago Móvil.
+   * Las compras que realizas vía **Pago Móvil** o **Transferencia Interbancaria** generan una comisión bancaria del **0.3% del monto con un piso mínimo legal fijado por SUDEBAN/banca de 14,00 VES**. El sistema aplica la fórmula exacta:
+     
+     $$\text{Comisión Bancaria (VES)} = \max(14.00, \text{round}(\text{Monto Compra} \times 0.003, 2))$$
+
+   * El sistema permite al operador reasignar la cuenta o modificar el canal con 1 clic ante cualquier desviación en el chat de la orden.
 
 ---
 

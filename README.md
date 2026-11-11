@@ -1,29 +1,32 @@
-# P2P Ledger: Terminal Financiero, Conciliación y Arbitraje P2P
+# P2P Ledger: Terminal Financiero, Arqueo de Saldos y Arbitraje P2P
 
-Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje P2P (Binance y Banca Venezolana/Multidivisa). Diseñada bajo filosofía **Desktop-First (Terminal Financiero)** para auditar en tiempo real ganancias netas en USDT, monitorear la profundidad de mercado P2P, calcular spreads comerciales efectivos, controlar inventarios bancarios y conciliar extractos bancarios contra órdenes de Binance con privacidad absoluta.
+Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje P2P (Binance y Banca Venezolana/Multidivisa). Diseñada bajo filosofía **Desktop-First (Terminal Financiero)** para auditar en tiempo real ganancias netas en USDT, monitorear la profundidad de mercado P2P, calcular spreads comerciales efectivos, controlar inventarios bancarios mediante puntos de anclaje de saldo y sincronizar órdenes de Binance con privacidad absoluta.
 
 ---
 
 ## ✨ Características Principales
 
 * **Auditoría Financiera y Spreads:**
-  * Cálculo de spreads brutos y netos descontando comisiones operativas (Binance P2P y comisiones bancarias como Pago Móvil o débitos IGTF).
-  * Desglose detallado de ganancias reales en USDT, costo promedio ponderado y balances en VES/fiat.
-* **Conciliación Automatizada:**
-  * Procesamiento inteligente de estados de cuenta bancarios en formato **PDF** (ej. Banesco, Mercantil, Venezuela, etc. vía `pdfplumber`) y archivos **CSV/Excel** exportados de órdenes de Binance.
-  * Cruce automático de transacciones por monto, fecha y referencia.
+  * Cálculo de spreads brutos y netos descontando comisiones operativas (Binance P2P y comisiones bancarias interbancarias / Pago Móvil del 0.3% con piso mínimo de 14 VES).
+  * Desglose detallado de ganancias reales en USDT, costo promedio ponderado (WAC/WAP) y balances en VES/fiat.
+* **Control de Inventario y Arqueos Bancarios:**
+  * Arqueos de saldos en tiempo real mediante **Puntos de Anclaje** (corte base) y marcas de tiempo neutras Epoch UTC.
+  * Conciliación automática de flujo de caja: las compras y ventas posteriores al arqueo actualizan el saldo calculado al centavo.
+  * Detección inteligente de canal bancario (Mismo Banco = 0% vs Pago Móvil / Interbancario = 0.3% min 14 VES) con soporte para corregir incidencias operativas.
+* **Integración Sólida con Binance:**
+  * Conexión privada con auto-sintonización horaria dinámica contra el reloj atómico de Binance (mitigación de error `-1021`).
+  * Reintentos inteligentes con respeto de rate limits (`HTTP 429 Retry-After`) y alertas de IP Ban (`HTTP 418`).
+  * WebSocket User Data Stream en segundo plano con debounce de 3 segundos para sincronización automática de balances.
+  * Importación manual de órdenes vía CSV oficial de Binance P2P.
 * **Monitor de Mercado P2P en Vivo:**
   * Libro de órdenes y gráfico interactivo de profundidad de mercado para pares fiat/cripto (USDT/VES).
-  * Conexión WebSocket y APIs públicas/privadas de Binance con alertas sonoras configurables.
-* **Inventario Bancario y Flujo de Caja:**
-  * Gestión centralizada de cuentas bancarias activas, balances disponibles, arqueos y ajustes de saldo.
-  * Módulo de tesorería y analíticas operativas.
+  * Consultas públicas protegidas con emulación de cabeceras de navegador modernas contra bloqueos Cloudflare WAF.
 * **Aplicación Nativa de Escritorio (Multiplataforma):**
   * Empaquetado nativo con **Tauri v2** para Linux (`.rpm`, `.deb`, `.AppImage`) y Windows (`.exe`, `.msi`).
   * Soporte de **auto-actualizaciones firmadas** integradas directamente desde la aplicación.
   * Backend Python embebido como proceso *sidecar* con **puerto efímero dinámico** y **watchdog centinela**, garantizando cero colisiones de puertos y liberación limpia de recursos.
-* **Copias de Seguridad y Privacidad Local:**
-  * Exportación y restauración de backups de la base de datos SQLite directamente desde el panel de configuración.
+* **Copias de Seguridad e Integridad Local:**
+  * Respaldo y restauración transaccional de SQLite utilizando la API oficial de backup online (`source_conn.backup()`) y vaciado de checkpoints WAL (`PRAGMA wal_checkpoint(TRUNCATE)`).
   * Operación 100% local sin telemetría ni servidores intermedios de terceros.
 
 ---
@@ -39,11 +42,11 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
   * [Vitest](https://vitest.dev/) para pruebas unitarias.
 * **Backend:**
   * [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+) con [Uvicorn](https://www.uvicorn.org/) para API REST asíncrona de alto rendimiento.
-  * [SQLAlchemy](https://www.sqlalchemy.org/) + [SQLite](https://sqlite.org/) con WAL mode para persistencia local robusta.
-  * [pdfplumber](https://github.com/jsvine/pdfplumber) y pandas para parseo bancario.
+  * [SQLAlchemy](https://www.sqlalchemy.org/) + [SQLite](https://sqlite.org/) con WAL mode y `busy_timeout` para persistencia local robusta y concurrente.
+  * Pandas y OpenPyXL para importación de órdenes Binance y reportes ejecutivos en Excel.
   * Empaquetado universal x86-64 con PyInstaller para distribución standalone.
 * **Documentación Matemática:**
-  * Consulta [`docs/formulas.md`](./docs/formulas.md) para conocer en profundidad las fórmulas financieras, tasas de comisiones y algoritmos de conciliación.
+  * Consulta [`docs/formulas.md`](./docs/formulas.md) para conocer en profundidad las fórmulas financieras, comisiones interbancarias y algoritmos de inventario.
 
 ---
 
@@ -54,12 +57,12 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
 ├── backend/
 │   ├── app/
 │   │   ├── config.py           # Configuración centralizada y rutas de datos del usuario
-│   │   ├── database.py         # Configuración y sesión SQLite/SQLAlchemy
+│   │   ├── database.py         # Configuración y sesión SQLite/SQLAlchemy (WAL mode)
 │   │   ├── auth.py             # Middleware y utilidades de autenticación
 │   │   ├── models.py           # Modelos de base de datos relacional
-│   │   ├── routers/            # Endpoints API (banks, binance, reconciliation, operations, etc.)
+│   │   ├── routers/            # Endpoints API (banks, binance, operations, backups, health)
 │   │   ├── schemas/            # Esquemas de validación Pydantic
-│   │   └── services/           # Lógica contable (parsers, reconciler, analytics, venezuela_banks)
+│   │   └── services/           # Lógica contable y externa (binance_api, binance_ws, bank_inventory, analytics)
 │   ├── desktop_entry.py        # Punto de entrada para backend sidecar (puerto dinámico + watchdog)
 │   ├── tests/                  # Pruebas unitarias backend
 │   └── requirements.txt        # Dependencias de Python
