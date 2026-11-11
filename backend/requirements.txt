@@ -10,4 +10,4 @@ python-dotenv>=1.0.1
 alembic>=1.13.0
 websockets>=17.4
 httpx>=0.28.1
-certifi>=2024.8.30
+certifi>=2026.10.23
