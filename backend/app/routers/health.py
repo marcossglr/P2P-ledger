@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import UploadBatch, BinanceOrder, BankTransaction
+from ..models import UploadBatch, BinanceOrder, BankAccount
 from ..services.binance_api import get_saved_credentials
 
 router = APIRouter(prefix="/api", tags=["Health"])
@@ -25,7 +25,7 @@ def health_check(db: Session = Depends(get_db)):
         .filter(BinanceOrder.order_status == "CANCELLED")
         .count()
     )
-    bank_count = db.query(BankTransaction).count()
+    bank_accounts_count = db.query(BankAccount).count()
     last_api_batch = (
         db.query(UploadBatch)
         .filter(UploadBatch.source_type == "BINANCE_API")
@@ -42,6 +42,6 @@ def health_check(db: Session = Depends(get_db)):
         "stored_demo_orders": demo_orders_count,
         "stored_completed_orders": completed_count,
         "stored_cancelled_orders": cancelled_count,
-        "stored_bank_transactions": bank_count,
+        "stored_bank_accounts": bank_accounts_count,
         "last_synced_at": last_api_batch.created_at.strftime("%H:%M:%S") if (last_api_batch and last_api_batch.created_at) else None,
     }

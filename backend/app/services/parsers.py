@@ -1,7 +1,6 @@
 import io
 import re
 import pandas as pd
-import pdfplumber
 from typing import Dict, Any, List
 
 
@@ -144,85 +143,6 @@ def parse_binance_csv(file_bytes: bytes, filename: str) -> Dict[str, Any]:
         "total_rows_raw": len(df),
         "valid_rows": len(records),
         "columns_detected": list(df.columns),
-        "preview": records[:8],
-        "records": records,
-    }
-
-
-def parse_bank_pdf(file_bytes: bytes, filename: str) -> Dict[str, Any]:
-    """
-    Extrae movimientos bancarios desde PDF usando pdfplumber (tablas + líneas de texto con montos).
-    """
-    records: List[Dict[str, Any]] = []
-    total_pages = 0
-
-    date_pattern = re.compile(r"\b(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b")
-
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        total_pages = len(pdf.pages)
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            if tables:
-                for table in tables:
-                    for row in table:
-                        if not row:
-                            continue
-                        cleaned_row = [str(cell).strip().replace("\n", " ") if cell else "" for cell in row]
-                        line_str = " ".join(cleaned_row)
-                        date_match = date_pattern.search(line_str)
-                        if not date_match:
-                            continue
-
-                        # Heurística inicial para vista previa tabular
-                        non_empty = [c for c in cleaned_row if c]
-                        if len(non_empty) >= 3:
-                            tx_date = non_empty[0]
-                            reference = non_empty[1] if len(non_empty) > 3 else "S/R"
-                            description = non_empty[2] if len(non_empty) > 3 else non_empty[1]
-                            nums = [normalize_number(c) for c in non_empty[2:] if re.search(r"\d+[.,]\d{2}", c)]
-                            debit = 0.0
-                            credit = 0.0
-                            balance = nums[-1] if len(nums) >= 2 else 0.0
-                            if nums:
-                                main_amt = nums[0]
-                                if main_amt < 0:
-                                    debit = abs(main_amt)
-                                else:
-                                    credit = main_amt
-
-                            records.append({
-                                "tx_date": tx_date,
-                                "reference": reference,
-                                "description": description[:80],
-                                "debit": debit,
-                                "credit": credit,
-                                "balance": balance,
-                            })
-            else:
-                # Fallback: extracción por líneas de texto cuando el PDF no tiene bordes de tabla
-                text = page.extract_text() or ""
-                for line in text.splitlines():
-                    date_match = date_pattern.search(line)
-                    amounts = re.findall(r"-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2}", line)
-                    if date_match and amounts:
-                        tx_date = date_match.group(1)
-                        ref_match = re.search(r"\b(\d{6,15})\b", line)
-                        reference = ref_match.group(1) if ref_match else "S/R"
-                        first_amt = normalize_number(amounts[0])
-                        bal_amt = normalize_number(amounts[-1]) if len(amounts) > 1 else 0.0
-                        records.append({
-                            "tx_date": tx_date,
-                            "reference": reference,
-                            "description": line.strip()[:80],
-                            "debit": abs(first_amt) if first_amt < 0 else 0.0,
-                            "credit": first_amt if first_amt >= 0 else 0.0,
-                            "balance": bal_amt,
-                        })
-
-    return {
-        "filename": filename,
-        "total_pages": total_pages,
-        "valid_rows": len(records),
         "preview": records[:8],
         "records": records,
     }

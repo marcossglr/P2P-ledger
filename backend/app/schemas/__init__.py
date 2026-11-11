@@ -15,11 +15,6 @@ class SyncPayload(BaseModel):
     api_secret: Optional[str] = None
 
 
-class ManualMatchPayload(BaseModel):
-    order_id: int
-    bank_id: int
-
-
 class BankAccountPayload(BaseModel):
     name: str
     binance_pay_id: Optional[str] = ""
@@ -59,7 +54,14 @@ class AssignOrderBankPayload(BaseModel):
 
 class UpdatePaymentChannelPayload(BaseModel):
     order_id: int
-    payment_channel: str  # "PAGO_MOVIL" | "TRANSFERENCIA"
+    payment_channel: str  # "PAGO_MOVIL" | "TRANSFERENCIA" | "TRANSFERENCIA_INTERBANCARIA"
+
+
+class UpdateOrderPaymentDetailsPayload(BaseModel):
+    order_id: int
+    bank_account_id: Optional[int] = None
+    payment_channel: Optional[str] = None  # "PAGO_MOVIL" | "TRANSFERENCIA" | "TRANSFERENCIA_INTERBANCARIA"
+    pay_method: Optional[str] = None
 
 
 class FundingManualPayload(BaseModel):

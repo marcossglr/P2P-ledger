@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -32,35 +32,20 @@ def _apply_account_reconciliation(
     note: str,
 ) -> None:
     """Aplica el cuadre o ajuste sobre una cuenta bancaria y guarda auditoría."""
-    now = datetime.now()
-    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    now_ms = int(now.timestamp() * 1000)
-
-    all_accounts = db.query(BankAccount).order_by(BankAccount.id.asc()).all()
-    ves_orders = (
-        db.query(BinanceOrder)
-        .filter(
-            BinanceOrder.fiat_currency == "VES",
-            (BinanceOrder.order_status == "COMPLETED") | (BinanceOrder.order_status.is_(None)),
-        )
-        .all()
-    )
-    acc_orders_ts = [
-        parse_order_timestamp_ms(o)
-        for o in ves_orders
-        if (resolve_order_bank_account(o, all_accounts) and resolve_order_bank_account(o, all_accounts).id == acc.id)
-    ]
-    latest_order_ts = max(acc_orders_ts) if acc_orders_ts else 0
+    now_utc = datetime.now(timezone.utc)
+    now_ms = int(now_utc.timestamp() * 1000)
+    now_iso = now_utc.isoformat()
 
     if mode == "CUADRE_CONSOLIDADO":
         new_real_balance = float(amount)
         delta = new_real_balance - current_calc_balance
+        latest_order_ts = get_latest_ves_order_timestamp_ms(db)
         cut_ts = max(now_ms, latest_order_ts)
 
         acc.anchor_balance = new_real_balance
         acc.anchor_timestamp = cut_ts
         acc.manual_delta_bs = 0.0
-        acc.anchor_date_label = f"Cuadre Manual ({now.strftime('%Y-%m-%d %H:%M')})"
+        acc.anchor_date_label = f"Cuadre Manual ({now_utc.strftime('%Y-%m-%d %H:%M UTC')})"
 
         db.add(
             BankBalanceAdjustment(
@@ -71,19 +56,19 @@ def _apply_account_reconciliation(
                 new_balance=new_real_balance,
                 delta_amount=delta,
                 note=note or "Cuadre manual con posición consolidada del banco",
-                created_at_str=now_str,
+                created_at_str=now_iso,
             )
         )
 
     elif mode == "SALDO_INICIAL_DIA":
-        start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_today = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
         start_today_ms = int(start_of_today.timestamp() * 1000) - 1
         base_balance = float(amount)
 
         acc.anchor_balance = base_balance
         acc.anchor_timestamp = start_today_ms
         acc.manual_delta_bs = 0.0
-        acc.anchor_date_label = f"Apertura Hoy ({now.strftime('%Y-%m-%d')} 00:00)"
+        acc.anchor_date_label = f"Apertura Hoy ({now_utc.strftime('%Y-%m-%d')} 00:00 UTC)"
 
         db.flush()
         updated_summary = compute_bank_inventory_summary(db)
@@ -100,7 +85,7 @@ def _apply_account_reconciliation(
                 new_balance=new_calc,
                 delta_amount=new_calc - current_calc_balance,
                 note=note or f"Saldo inicial del día fijado en {base_balance:,.2f} Bs",
-                created_at_str=now_str,
+                created_at_str=now_iso,
             )
         )
 
@@ -126,7 +111,7 @@ def _apply_account_reconciliation(
                 new_balance=new_calc,
                 delta_amount=new_calc - current_calc_balance,
                 note=note or f"Saldo base histórico fijado en {base_balance:,.2f} Bs",
-                created_at_str=now_str,
+                created_at_str=now_iso,
             )
         )
 
@@ -144,7 +129,7 @@ def _apply_account_reconciliation(
                 new_balance=new_calc,
                 delta_amount=delta,
                 note=note or ("Ingreso manual en Bs" if delta >= 0 else "Egreso / Gasto manual en Bs"),
-                created_at_str=now_str,
+                created_at_str=now_iso,
             )
         )
     else:
@@ -266,21 +251,30 @@ def reconcile_bulk_bank_accounts(
         a["id"]: float(a["calculated_balance"]) for a in summary_before["accounts"]
     }
 
-    for item in payload.items:
-        acc = db.query(BankAccount).filter(BankAccount.id == item.account_id).first()
-        if not acc:
-            continue
-        cur_bal = calc_map.get(acc.id, 0.0)
-        _apply_account_reconciliation(
-            db=db,
-            acc=acc,
-            current_calc_balance=cur_bal,
-            mode=payload.mode or "CUADRE_CONSOLIDADO",
-            amount=item.real_balance,
-            note=(payload.note or "").strip() or "Cuadre consolidado múltiple",
+    try:
+        for item in payload.items:
+            acc = db.query(BankAccount).filter(BankAccount.id == item.account_id).first()
+            if not acc:
+                continue
+            cur_bal = calc_map.get(acc.id, 0.0)
+            _apply_account_reconciliation(
+                db=db,
+                acc=acc,
+                current_calc_balance=cur_bal,
+                mode=payload.mode or "CUADRE_CONSOLIDADO",
+                amount=item.real_balance,
+                note=(payload.note or "").strip() or "Cuadre consolidado múltiple",
+            )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500, detail=f"Error durante el cuadre masivo de cuentas: {str(exc)}"
         )
 
-    db.commit()
     return compute_bank_inventory_summary(db)
 
 

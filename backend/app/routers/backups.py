@@ -137,11 +137,33 @@ def restore_database_backup(payload: RestoreBackupPayload):
     try:
         emergency_name = f"backup_pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
         emergency_path = BACKUPS_DIR / emergency_name
-        if DB_PATH.exists():
-            shutil.copy2(str(DB_PATH), str(emergency_path))
 
+        # 1. Crear respaldo de emergencia usando SQLite Online Backup API para incluir páginas WAL
+        if DB_PATH.exists():
+            try:
+                src_conn = sqlite3.connect(str(DB_PATH))
+                # Forzar checkpoint para vaciar transacciones WAL al archivo principal
+                src_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                em_conn = sqlite3.connect(str(emergency_path))
+                with em_conn:
+                    src_conn.backup(em_conn)
+                em_conn.close()
+                src_conn.close()
+            except Exception as backup_err:
+                # Fallback de copia directa si la conexión falla
+                shutil.copy2(str(DB_PATH), str(emergency_path))
+
+        # 2. Cerrar todas las conexiones activas en el pool de SQLAlchemy
         engine.dispose()
-        shutil.copy2(str(backup_file_path), str(DB_PATH))
+
+        # 3. Restaurar usando SQLite backup API para garantizar integridad
+        restore_src = sqlite3.connect(str(backup_file_path))
+        restore_dst = sqlite3.connect(str(DB_PATH))
+        with restore_dst:
+            restore_src.backup(restore_dst)
+        restore_dst.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        restore_dst.close()
+        restore_src.close()
 
         wal_file = Path(f"{DB_PATH}-wal")
         shm_file = Path(f"{DB_PATH}-shm")

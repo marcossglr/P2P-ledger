@@ -130,16 +130,20 @@ def resolve_order_payment_channel(
     order: BinanceOrder, matched_account: Optional[BankAccount] = None
 ) -> str:
     """
-    Identifica si una orden fue ejecutada por 'PAGO_MOVIL' (cobra comisión bancaria en compras, ej. 0.3%)
-    o por 'TRANSFERENCIA' al mismo banco (0% comisión):
-    1. Si la orden tiene payment_channel explícito ('PAGO_MOVIL' o 'TRANSFERENCIA'), lo respeta.
+    Identifica si una orden fue ejecutada por un canal que cobra comisión bancaria:
+    - 'PAGO_MOVIL' (cobra comisión interbancaria: 0.3% min 14 VES)
+    - 'TRANSFERENCIA_INTERBANCARIA' (cuenta distinta / banco distinto: 0.3% min 14 VES)
+    - 'TRANSFERENCIA' (mismo banco / transferencia interna directa: 0.0% comisión)
+
+    Prioridades:
+    1. Si la orden tiene payment_channel explícito, lo respeta estrictamente.
     2. Si el pay_method menciona Pago Móvil, retorna 'PAGO_MOVIL'.
-    3. En órdenes de COMPRA: si el método de pago de la orden menciona un banco específico distinto
-       a la cuenta bancaria desde la que salen los Bs, se asume 'PAGO_MOVIL' (pago interbancario).
-    4. Si es del mismo banco o transferencia directa, retorna 'TRANSFERENCIA' (0% comisión).
+    3. En órdenes de COMPRA: si el método de pago menciona un banco específico distinto
+       a la cuenta bancaria desde la que salen los Bs, se asume 'TRANSFERENCIA_INTERBANCARIA' o 'PAGO_MOVIL'.
+    4. Si es del mismo banco o transferencia regular, retorna 'TRANSFERENCIA' (0% comisión).
     """
     explicit = (getattr(order, "payment_channel", None) or "").strip().upper()
-    if explicit in ("PAGO_MOVIL", "TRANSFERENCIA"):
+    if explicit in ("PAGO_MOVIL", "TRANSFERENCIA", "TRANSFERENCIA_INTERBANCARIA"):
         return explicit
 
     if is_pago_movil_method(order.pay_method):
@@ -151,7 +155,7 @@ def resolve_order_payment_channel(
             order_bank_name = inferred[0].strip().lower()
             acc_bank_name = (matched_account.name or "").strip().lower()
             if order_bank_name and acc_bank_name and order_bank_name != acc_bank_name:
-                return "PAGO_MOVIL"
+                return "TRANSFERENCIA_INTERBANCARIA"
 
     return "TRANSFERENCIA"
 
@@ -455,11 +459,14 @@ def resolve_order_bank_account(
     return default_acc or accounts[0]
 
 
+MIN_PAGO_MOVIL_FEE_VES = 14.0  # Comisión mínima fija en VES (normativa bancaria SUDEBAN/BCV)
+
+
 def compute_order_bank_fee_bs(order: BinanceOrder, account: BankAccount) -> Tuple[float, float]:
     """
     Calcula la comisión bancaria en Bs para órdenes de COMPRA (salidas de Bs del banco).
     - Si el canal es TRANSFERENCIA (mismo banco), aplica transfer_fee_pct (0.0% por defecto -> sin comisión).
-    - Si el canal es PAGO_MOVIL, aplica pago_movil_fee_pct (0.3% por defecto).
+    - Si el canal es PAGO_MOVIL, aplica pago_movil_fee_pct (0.3% por defecto) con un piso mínimo de 14.00 VES.
     En órdenes de VENTA (entradas de Bs al banco) la comisión bancaria es 0.0.
     Retorna (fee_bs, applied_fee_pct).
     """
@@ -468,15 +475,25 @@ def compute_order_bank_fee_bs(order: BinanceOrder, account: BankAccount) -> Tupl
     if not account or not account.apply_buy_fee:
         return 0.0, 0.0
 
-    fiat_amt = float(order.fiat_amount or 0.0)
+    fiat_amt = round(float(order.fiat_amount or 0.0), 2)
+    if fiat_amt <= 0:
+        return 0.0, 0.0
+
     channel = resolve_order_payment_channel(order, account)
-    if channel == "PAGO_MOVIL":
-        pct = float(account.pago_movil_fee_pct or 0.0)
+    if channel in ("PAGO_MOVIL", "TRANSFERENCIA_INTERBANCARIA"):
+        pct = float(account.pago_movil_fee_pct if account.pago_movil_fee_pct is not None else 0.3)
+        calc_fee = round(fiat_amt * (pct / 100.0), 2) if pct > 0 else 0.0
+        # Solo aplicar comisión mínima en divisa VES (normativa SUDEBAN para interbancario)
+        fiat_curr = (getattr(order, "fiat_currency", None) or getattr(account, "fiat_currency", "VES") or "VES").upper()
+        if fiat_curr == "VES" and pct > 0:
+            fee_bs = max(MIN_PAGO_MOVIL_FEE_VES, calc_fee)
+        else:
+            fee_bs = calc_fee
     else:
         pct = float(account.transfer_fee_pct or 0.0)
+        fee_bs = round(fiat_amt * (pct / 100.0), 2) if pct > 0 else 0.0
 
-    fee_bs = fiat_amt * (pct / 100.0) if pct > 0 else 0.0
-    return fee_bs, pct
+    return round(fee_bs, 2), round(pct, 3)
 
 
 def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
@@ -655,7 +672,7 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
     today_buy_usdt = 0.0
 
     for o in orders:
-        fiat_amt = float(o.fiat_amount or 0.0)
+        fiat_amt = round(float(o.fiat_amount or 0.0), 2)
         crypto_amt = float(o.crypto_amount or 0.0)
         order_ts = parse_order_timestamp_ms(o)
         is_today = (o.order_date or "").startswith(today_str)
@@ -675,28 +692,28 @@ def compute_bank_inventory_summary(db: Session) -> Dict[str, Any]:
         is_after_anchor = (order_ts > anchor_ts)
 
         if o.order_type == "VENTA":
-            signed_bs = +fiat_amt
+            signed_bs = fiat_amt
         else:
             signed_bs = -(fiat_amt + fee_bs)
 
         if is_after_anchor:
             st["orders_since_anchor_count"] += 1
             if o.order_type == "VENTA":
-                st["inflow_sell_bs"] += fiat_amt
+                st["inflow_sell_bs"] = round(st["inflow_sell_bs"] + fiat_amt, 2)
                 st["sell_since_anchor_count"] += 1
             else:
-                st["outflow_buy_bs"] += fiat_amt
-                st["outflow_buy_fees_bs"] += fee_bs
+                st["outflow_buy_bs"] = round(st["outflow_buy_bs"] + fiat_amt, 2)
+                st["outflow_buy_fees_bs"] = round(st["outflow_buy_fees_bs"] + fee_bs, 2)
                 st["buy_since_anchor_count"] += 1
 
         if is_today:
             st["today_orders_count"] += 1
             if o.order_type == "VENTA":
-                st["today_inflow_sell_bs"] += fiat_amt
+                st["today_inflow_sell_bs"] = round(st["today_inflow_sell_bs"] + fiat_amt, 2)
                 st["today_sell_count"] += 1
             else:
-                st["today_outflow_buy_bs"] += fiat_amt
-                st["today_outflow_fees_bs"] += fee_bs
+                st["today_outflow_buy_bs"] = round(st["today_outflow_buy_bs"] + fiat_amt, 2)
+                st["today_outflow_fees_bs"] = round(st["today_outflow_fees_bs"] + fee_bs, 2)
                 st["today_buy_count"] += 1
 
         st["recent_movements"].append(

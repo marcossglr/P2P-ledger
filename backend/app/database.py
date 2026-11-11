@@ -23,7 +23,8 @@ if is_sqlite:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=-64000")  # ~64MB cache en RAM
+        cursor.execute("PRAGMA busy_timeout=10000")  # Esperar hasta 10s si otra transacción está escribiendo
+        cursor.execute("PRAGMA cache_size=-64000")   # ~64MB cache en RAM
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -34,7 +34,6 @@ class BinanceOrder(Base):
     order_date = Column(String, index=True)       # YYYY-MM-DD HH:MM:SS
     order_status = Column(String, default="COMPLETED", index=True)  # "COMPLETED", "CANCELLED", "IN_PROGRESS"
     source = Column(String, default="API")        # "API", "CSV", "DEMO"
-    status = Column(String, default="UNMATCHED")  # Estado de conciliación bancaria
     bank_account_id = Column(Integer, nullable=True, index=True)  # Asignación explícita opcional a cuenta bancaria
     payment_channel = Column(String, nullable=True, index=True)   # "PAGO_MOVIL" (cobra comisión) | "TRANSFERENCIA" (mismo banco, 0%)
     payment_channel_manual = Column(Integer, default=0)           # 1 si el canal fue fijado manualmente por el usuario
@@ -87,19 +86,4 @@ class BankBalanceAdjustment(Base):
     note = Column(String, default="")
     created_at_str = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.now)
-
-
-class BankTransaction(Base):
-    __tablename__ = "bank_transactions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    batch_id = Column(Integer, ForeignKey("upload_batches.id"), nullable=True)
-    tx_date = Column(String, index=True)
-    reference = Column(String, index=True)
-    description = Column(String)
-    debit = Column(Float, default=0.0)   # Salidas
-    credit = Column(Float, default=0.0)  # Entradas
-    balance = Column(Float, default=0.0)
-    matched_order_number = Column(String, nullable=True)
-    status = Column(String, default="UNMATCHED")
 

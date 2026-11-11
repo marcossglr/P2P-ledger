@@ -21,12 +21,14 @@ logger = logging.getLogger("p2p_ws_stream")
 WS_API_URL = "wss://ws-api.binance.com:443/ws-api/v3"
 
 class BinanceUserDataStreamClient:
-    def __init__(self, on_balance_change: Optional[Callable[[], None]] = None):
+    def __init__(self, on_balance_change: Optional[Callable[[], None]] = None, debounce_seconds: float = 3.0):
         self.on_balance_change = on_balance_change
+        self.debounce_seconds = debounce_seconds
         self.is_running = False
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self.last_event_time: Optional[float] = None
+        self._last_trigger_time: float = 0.0
         self.connection_status = "DISCONNECTED"
 
     def start(self):
@@ -107,12 +109,18 @@ class BinanceUserDataStreamClient:
                         # outboundAccountPosition: cambio en balance libre o bloqueado en Spot
                         # balanceUpdate: depósitos/retiros o transferencias internas entre billeteras
                         if event_type in ["outboundAccountPosition", "balanceUpdate"]:
-                            self.last_event_time = time.time()
+                            now = time.time()
+                            self.last_event_time = now
                             if self.on_balance_change:
-                                try:
-                                    self.on_balance_change()
-                                except Exception as cb_err:
-                                    logger.error(f"Error al ejecutar trigger de balance: {cb_err}")
+                                if now - self._last_trigger_time >= self.debounce_seconds:
+                                    self._last_trigger_time = now
+                                    try:
+                                        logger.info("Evento de balance recibido en WS (%s). Disparando sincronización...", event_type)
+                                        self.on_balance_change()
+                                    except Exception as cb_err:
+                                        logger.error(f"Error al ejecutar trigger de balance: {cb_err}")
+                                else:
+                                    logger.debug("Evento de balance %s ignorado por debounce activo.", event_type)
 
             except (websockets.ConnectionClosed, asyncio.TimeoutError, OSError) as net_err:
                 self.connection_status = "RECONNECTING"

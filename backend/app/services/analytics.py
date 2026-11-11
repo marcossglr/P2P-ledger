@@ -1,7 +1,13 @@
+import io
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
+import pandas as pd
 from ..models import BinanceOrder, BankAccount
-from .bank_inventory import resolve_order_payment_channel, resolve_order_bank_account
+from .bank_inventory import (
+    resolve_order_payment_channel,
+    resolve_order_bank_account,
+    compute_order_bank_fee_bs,
+)
 
 
 def compute_operations_analytics(
@@ -26,6 +32,7 @@ def compute_operations_analytics(
     buy_count = 0
     buy_pago_movil_fiat = 0.0
     buy_pago_movil_count = 0
+    total_bank_fees_fiat = 0.0
     buy_transfer_fiat = 0.0
     buy_transfer_count = 0
 
@@ -119,10 +126,18 @@ def compute_operations_analytics(
             d_entry["buy_fiat"] += f_amt
             d_entry["buy_usdt"] += c_gross
             d_entry["comm_usdt"] += c_comm
-            if resolve_order_payment_channel(o, resolve_order_bank_account(o, accounts or [])) == "PAGO_MOVIL":
+            matched_acc = resolve_order_bank_account(o, accounts or [])
+            channel = resolve_order_payment_channel(o, matched_acc)
+            if channel == "PAGO_MOVIL":
                 buy_pago_movil_fiat += f_amt
                 buy_pago_movil_count += 1
                 d_entry["buy_pago_movil_fiat"] += f_amt
+                # Cálculo de comisión bancaria exacta por orden (con mínimo de 14 VES)
+                if matched_acc:
+                    fee_bs, _ = compute_order_bank_fee_bs(o, matched_acc)
+                else:
+                    fee_bs = max(14.0, round(f_amt * (bank_fee_rate_pct / 100.0), 2)) if bank_fee_rate_pct > 0 else 0.0
+                total_bank_fees_fiat += fee_bs
             else:
                 buy_transfer_fiat += f_amt
                 buy_transfer_count += 1
@@ -157,12 +172,8 @@ def compute_operations_analytics(
     ref_rate = wac_buy if wac_buy > 0 else wap_sell
     comm_fiat_cost = total_comm_usdt * ref_rate
 
-    # Comisión bancaria en Bs: aplica únicamente a compras por Pago Móvil (Transferencias mismo banco = 0%)
-    estimated_bank_fees_fiat = (
-        buy_pago_movil_fiat * (bank_fee_rate_pct / 100.0)
-        if bank_fee_rate_pct > 0
-        else 0.0
-    )
+    # Comisión bancaria en Bs: aplica a compras por Pago Móvil (0.3% con piso mínimo de 14 VES por orden)
+    estimated_bank_fees_fiat = round(total_bank_fees_fiat, 2)
 
     # 5. Ganancia Neta Realizada (P&L Limpio)
     # P&L Neto (Fiat) = Ganancia Bruta - Costo Comisiones Binance (Fiat) - Comisiones Bancarias (Fiat)
@@ -260,3 +271,57 @@ def compute_operations_analytics(
         "payment_methods": sorted(pay_methods_map.values(), key=lambda x: x["fiat_volume"], reverse=True)[:6],
         "top_counterparties": sorted(counterparties_map.values(), key=lambda x: x["fiat_volume"], reverse=True)[:6],
     }
+
+
+def export_operations_excel(orders: List[BinanceOrder], analytics: Dict[str, Any]) -> bytes:
+    """Genera un archivo Excel (.xlsx) con Resumen Financiero P&L y Libro de Operaciones P2P."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        # Hoja 1: Resumen Ejecutivo P&L
+        summary_rows = [
+            {"Métrica": "Moneda Fiat Principal", "Valor": analytics.get("primary_fiat", "VES")},
+            {"Métrica": "Total Operaciones Completadas", "Valor": analytics.get("total_orders", 0)},
+            {"Métrica": "Total Órdenes Canceladas", "Valor": analytics.get("cancelled_orders", 0)},
+            {"Métrica": "Tasa de Finalización (%)", "Valor": f"{analytics.get('completion_rate_pct', 100.0)}%"},
+            {"Métrica": "Órdenes Completadas Compra / Venta", "Valor": f"{analytics.get('buy_count', 0)} / {analytics.get('sell_count', 0)}"},
+            {"Métrica": "Volumen Total Compras (Fiat)", "Valor": analytics.get("buy_fiat_total", 0.0)},
+            {"Métrica": "Volumen Total Ventas (Fiat)", "Valor": analytics.get("sell_fiat_total", 0.0)},
+            {"Métrica": "Total USDT Comprados", "Valor": analytics.get("buy_usdt_total", 0.0)},
+            {"Métrica": "Total USDT Vendidos", "Valor": analytics.get("sell_usdt_total", 0.0)},
+            {"Métrica": "Costo Promedio Ponderado Compra (WAC)", "Valor": analytics.get("wac_buy_price", 0.0)},
+            {"Métrica": "Precio Promedio Ponderado Venta (WAP)", "Valor": analytics.get("wap_sell_price", 0.0)},
+            {"Métrica": "Spread Promedio Obtenido (%)", "Valor": f"{analytics.get('spread_pct', 0.0)}%"},
+            {"Métrica": "Comisiones Binance P2P (USDT)", "Valor": analytics.get("total_commission_usdt", 0.0)},
+            {"Métrica": "Ganancia Bruta Realizada (Fiat)", "Valor": analytics.get("gross_profit_fiat", 0.0)},
+            {"Métrica": "Ganancia Neta Estimada (Fiat)", "Valor": analytics.get("net_profit_fiat", 0.0)},
+            {"Métrica": "Ganancia Neta Estimada (USDT)", "Valor": analytics.get("net_profit_usdt", 0.0)},
+        ]
+        pd.DataFrame(summary_rows).to_excel(writer, index=False, sheet_name="Resumen_PnL")
+
+        # Hoja 2: Libro Mayor de Operaciones P2P
+        ops_rows = [
+            {
+                "Fecha": o.order_date,
+                "ID Orden": o.order_number,
+                "Estado Orden": (getattr(o, "order_status", None) or "COMPLETED"),
+                "Tipo": o.order_type,
+                "Activo": o.asset,
+                "Moneda Fiat": o.fiat_currency,
+                "Monto Fiat": o.fiat_amount,
+                "Precio Unitario (Tasa)": o.unit_price,
+                "Cantidad USDT": o.crypto_amount,
+                "Comisión USDT": o.commission_usdt,
+                "Método de Pago": o.pay_method,
+                "Contraparte": o.counterparty,
+                "Origen": o.source,
+            }
+            for o in orders
+        ]
+        pd.DataFrame(ops_rows).to_excel(writer, index=False, sheet_name="Operaciones_P2P")
+
+        # Hoja 3: Desglose Diario
+        if analytics.get("daily_series"):
+            pd.DataFrame(analytics["daily_series"]).to_excel(writer, index=False, sheet_name="Rendimiento_Diario")
+
+    return output.getvalue()
+

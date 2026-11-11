@@ -199,18 +199,26 @@ def reset_p2p_public_config() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _public_post(endpoint: str, body: Dict[str, Any], timeout: int = 15) -> Dict[str, Any]:
-    """Realiza una petición POST pública (sin firma) hacia la web API P2P de Binance."""
+    """Realiza una petición POST pública (sin firma) hacia la web API P2P de Binance con headers de navegador modernos."""
     url = f"{P2P_PUBLIC_BASE_URL}{endpoint}"
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Accept-Language": "es-ES,es;q=0.9",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
             "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
             "Origin": P2P_PUBLIC_BASE_URL,
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) P2PLedgerLocal/1.0",
+            "Referer": f"{P2P_PUBLIC_BASE_URL}/es/trade/all-payments/USDT?fiat=VES",
+            "Sec-Ch-Ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Linux"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         },
         method="POST",
     )

@@ -111,7 +111,7 @@ class TestAnalyticsFinancialFormulas(unittest.TestCase):
             order_date="2026-10-30 11:00:00",
         )
 
-        # bank_fee_rate_pct = 0.3% aplicado al Pago Móvil (0.3% de 4000 = 12 VES)
+        # bank_fee_rate_pct = 0.3% aplicado al Pago Móvil (0.3% de 4000 = 12 VES, pero con piso mínimo SUDEBAN = 14 VES)
         result = compute_operations_analytics(
             [order_buy, order_sell],
             bank_fee_rate_pct=0.3,
@@ -122,12 +122,12 @@ class TestAnalyticsFinancialFormulas(unittest.TestCase):
         self.assertAlmostEqual(result["gross_profit_fiat"], 200.0, places=2)
         # Total comisión Binance = 0.2 USDT. A tasa WAC (40) = 8 VES
         self.assertAlmostEqual(result["commission_fiat_cost"], 8.0, places=2)
-        # Comisión bancaria (0.3% sobre 4000 VES Pago Móvil) = 12 VES
-        self.assertAlmostEqual(result["estimated_bank_fees_fiat"], 12.0, places=2)
-        # Ganancia neta Fiat = 200 - 8 - 12 = 180 VES
-        self.assertAlmostEqual(result["net_profit_fiat"], 180.0, places=2)
-        # Ganancia neta USDT = 180 / 40 = 4.5 USDT
-        self.assertAlmostEqual(result["net_profit_usdt"], 4.5, places=2)
+        # Comisión bancaria (0.3% sobre 4000 VES Pago Móvil = 12, piso mínimo = 14 VES)
+        self.assertAlmostEqual(result["estimated_bank_fees_fiat"], 14.0, places=2)
+        # Ganancia neta Fiat = 200 - 8 - 14 = 178 VES
+        self.assertAlmostEqual(result["net_profit_fiat"], 178.0, places=2)
+        # Ganancia neta USDT = 178 / 40 = 4.45 USDT
+        self.assertAlmostEqual(result["net_profit_usdt"], 4.45, places=2)
 
 
 if __name__ == "__main__":

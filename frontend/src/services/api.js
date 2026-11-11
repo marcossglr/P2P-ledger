@@ -266,21 +266,9 @@ export const bankInventoryApi = {
 
 export const reconciliationApi = {
   uploadBinanceCsv: (formData) =>
-    request('/api/upload/binance-csv', {
+    request('/api/operations/upload/binance-csv', {
       method: 'POST',
       body: formData,
-    }),
-  uploadBankPdf: (formData) =>
-    request('/api/upload/bank-pdf', {
-      method: 'POST',
-      body: formData,
-    }),
-  reconcileWithBank: (toleranceDays = 2) =>
-    request(`/api/reconcile?tolerance_days=${toleranceDays}`, { method: 'POST' }),
-  manualMatch: (orderId, bankId) =>
-    request('/api/reconcile/manual', {
-      method: 'POST',
-      body: JSON.stringify({ order_id: orderId, bank_id: bankId }),
     }),
 };
 

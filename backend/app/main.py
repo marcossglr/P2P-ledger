@@ -13,7 +13,6 @@ from .routers import (
     binance,
     operations,
     banks,
-    reconciliation,
     backups,
 )
 
@@ -59,7 +58,6 @@ app.include_router(health.router)
 app.include_router(binance.router, dependencies=auth_dependency)
 app.include_router(operations.router, dependencies=auth_dependency)
 app.include_router(banks.router, dependencies=auth_dependency)
-app.include_router(reconciliation.router, dependencies=auth_dependency)
 app.include_router(backups.router, dependencies=auth_dependency)
 
 # Soporte para servir frontend compilado (Single-Port Local App)

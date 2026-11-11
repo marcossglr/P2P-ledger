@@ -192,46 +192,158 @@ def clear_credentials() -> None:
         pass
 
 
-def _signed_get(endpoint: str, params: Dict[str, Any], api_key: str, api_secret: str) -> Dict[str, Any]:
-    """Realiza una petición GET firmada con HMAC-SHA256 hacia la API de Binance."""
-    params = dict(params)
-    params["timestamp"] = int(time.time() * 1000)
-    params["recvWindow"] = 10000
+# Variable global en memoria para compensar cualquier desfase de reloj con Binance
+_SERVER_TIME_OFFSET_MS: int = 0
 
-    query_string = urllib.parse.urlencode(params)
-    signature = hmac.new(
-        api_secret.encode("utf-8"),
-        query_string.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
 
-    url = f"{BINANCE_BASE_URL}{endpoint}?{query_string}&signature={signature}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "X-MBX-APIKEY": api_key,
-            "User-Agent": "P2PLedgerLocal/1.0",
-            "Content-Type": "application/json",
-        },
-        method="GET",
-    )
-
+def sync_binance_server_time() -> int:
+    """
+    Consulta el reloj oficial de Binance (/api/v3/time) y calcula el desfase contra el reloj local.
+    Permite que todas las peticiones firmadas estén 100% en sintonía con Binance.
+    """
+    global _SERVER_TIME_OFFSET_MS
     try:
         ctx = _get_ssl_context()
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw)
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace")
+        url = f"{BINANCE_BASE_URL}/api/v3/time"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "P2PLedgerLocal/1.0"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            server_time = int(data.get("serverTime") or 0)
+            if server_time > 0:
+                local_time = int(time.time() * 1000)
+                _SERVER_TIME_OFFSET_MS = server_time - local_time
+                logger.info(
+                    "Sintonización de reloj con Binance exitosa. Desfase detectado: %+d ms",
+                    _SERVER_TIME_OFFSET_MS,
+                )
+    except Exception as exc:
+        logger.warning("No se pudo sintonizar hora con Binance (/api/v3/time): %s", exc)
+    return _SERVER_TIME_OFFSET_MS
+
+
+def get_synced_timestamp() -> int:
+    """Retorna el timestamp actual en milisegundos compensado por el desfase del servidor de Binance."""
+    return int(time.time() * 1000) + _SERVER_TIME_OFFSET_MS
+
+
+def _execute_request_with_retry(
+    create_req_fn,
+    max_retries: int = 3,
+) -> Dict[str, Any]:
+    """
+    Ejecuta una petición HTTP hacia Binance con reintentos inteligentes ante:
+    - HTTP 429 (Too Many Requests / Rate Limit Warning): respeta Retry-After o backoff incremental.
+    - HTTP 418 (IP Ban preventiva): genera advertencia explícita para evitar saturación.
+    - Error -1021 (Desfase de reloj / Time Drift): auto-sincroniza hora con Binance y reintenta.
+    - Errores de red transitorios (HTTP 502, 503, 504 o URLError/timeout).
+    """
+    ctx = _get_ssl_context()
+    for attempt in range(max_retries + 1):
+        req = create_req_fn()
         try:
-            err_json = json.loads(err_body)
-            msg = err_json.get("msg") or err_json.get("message") or err_body
-            code = err_json.get("code", e.code)
-            raise RuntimeError(f"Binance API Error ({code}): {msg}")
-        except json.JSONDecodeError:
-            raise RuntimeError(f"HTTP {e.code}: {err_body}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Error de red al conectar con Binance: {e.reason}")
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+                raw = response.read().decode("utf-8")
+                return json.loads(raw)
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+
+            # Caso 418: Restricción IP de Binance
+            if e.code == 418:
+                logger.error("Binance HTTP 418 (IP Restringida temporalmente por exceso de llamadas).")
+                raise RuntimeError(
+                    "Binance ha restringido temporalmente la IP local por exceso de peticiones (HTTP 418). "
+                    "Por favor espere unos minutos antes de volver a sincronizar."
+                )
+
+            # Caso 429: Rate Limit
+            if e.code == 429:
+                if attempt < max_retries:
+                    retry_after_header = e.headers.get("Retry-After")
+                    try:
+                        wait_seconds = int(retry_after_header) if retry_after_header else (2 * (attempt + 1))
+                    except ValueError:
+                        wait_seconds = 2 * (attempt + 1)
+                    wait_seconds = max(1, min(wait_seconds, 15))
+                    logger.warning(
+                        "Binance Rate Limit (429) alcanzado (intento %d/%d). Pausando %d segundos...",
+                        attempt + 1,
+                        max_retries,
+                        wait_seconds,
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+
+            # Errores de servidor transitorios (502, 503, 504)
+            if e.code in (502, 503, 504) and attempt < max_retries:
+                wait_seconds = 1.5 * (attempt + 1)
+                logger.warning(
+                    "Error de servidor Binance HTTP %d. Reintentando en %.1f segundos...",
+                    e.code,
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
+                continue
+
+            try:
+                err_json = json.loads(err_body)
+                msg = err_json.get("msg") or err_json.get("message") or err_body
+                code = err_json.get("code", e.code)
+
+                # Detección de Desfase de Reloj: Código -1021 o texto "ahead of server time"
+                if (code == -1021 or "ahead of" in str(msg).lower() or "recvwindow" in str(msg).lower()) and attempt < max_retries:
+                    logger.warning("Desfase de reloj detectado con Binance (-1021). Sintonizando hora en vivo...")
+                    sync_binance_server_time()
+                    time.sleep(0.2)
+                    continue
+
+                raise RuntimeError(f"Binance API Error ({code}): {msg}")
+            except json.JSONDecodeError:
+                raise RuntimeError(f"HTTP {e.code}: {err_body}")
+
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < max_retries:
+                wait_seconds = 1.5 * (attempt + 1)
+                logger.warning(
+                    "Fallo transitorio de conexión con Binance (%s). Reintentando en %.1f segundos...",
+                    str(e),
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
+                continue
+            reason = getattr(e, "reason", str(e))
+            raise RuntimeError(f"Error de red al conectar con Binance: {reason}")
+
+
+def _signed_get(endpoint: str, params: Dict[str, Any], api_key: str, api_secret: str) -> Dict[str, Any]:
+    """Realiza una petición GET firmada con HMAC-SHA256 hacia la API de Binance con reintentos."""
+    def _build_req():
+        p = dict(params)
+        p["timestamp"] = get_synced_timestamp()
+        p["recvWindow"] = 10000
+
+        query_string = urllib.parse.urlencode(p)
+        signature = hmac.new(
+            api_secret.encode("utf-8"),
+            query_string.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        url = f"{BINANCE_BASE_URL}{endpoint}?{query_string}&signature={signature}"
+        return urllib.request.Request(
+            url,
+            headers={
+                "X-MBX-APIKEY": api_key,
+                "User-Agent": "P2PLedgerLocal/1.0",
+                "Content-Type": "application/json",
+            },
+            method="GET",
+        )
+
+    return _execute_request_with_retry(_build_req)
 
 
 def _signed_post(
@@ -241,47 +353,33 @@ def _signed_post(
     api_key: str,
     api_secret: str,
 ) -> Dict[str, Any]:
-    """Realiza una petición POST firmada con HMAC-SHA256 hacia la API de Binance."""
-    params = dict(params)
-    params["timestamp"] = int(time.time() * 1000)
-    params["recvWindow"] = 10000
+    """Realiza una petición POST firmada con HMAC-SHA256 hacia la API de Binance con reintentos."""
+    def _build_req():
+        p = dict(params)
+        p["timestamp"] = get_synced_timestamp()
+        p["recvWindow"] = 10000
 
-    query_string = urllib.parse.urlencode(params)
-    signature = hmac.new(
-        api_secret.encode("utf-8"),
-        query_string.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+        query_string = urllib.parse.urlencode(p)
+        signature = hmac.new(
+            api_secret.encode("utf-8"),
+            query_string.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
 
-    url = f"{BINANCE_BASE_URL}{endpoint}?{query_string}&signature={signature}"
-    data_bytes = json.dumps(body or {}).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data_bytes,
-        headers={
-            "X-MBX-APIKEY": api_key,
-            "User-Agent": "P2PLedgerLocal/1.0",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+        url = f"{BINANCE_BASE_URL}{endpoint}?{query_string}&signature={signature}"
+        data_bytes = json.dumps(body or {}).encode("utf-8")
+        return urllib.request.Request(
+            url,
+            data=data_bytes,
+            headers={
+                "X-MBX-APIKEY": api_key,
+                "User-Agent": "P2PLedgerLocal/1.0",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
 
-    try:
-        ctx = _get_ssl_context()
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw)
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace")
-        try:
-            err_json = json.loads(err_body)
-            msg = err_json.get("msg") or err_json.get("message") or err_body
-            code = err_json.get("code", e.code)
-            raise RuntimeError(f"Binance API Error ({code}): {msg}")
-        except json.JSONDecodeError:
-            raise RuntimeError(f"HTTP {e.code}: {err_body}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Error de red al conectar con Binance: {e.reason}")
+    return _execute_request_with_retry(_build_req)
 
 
 def get_cached_user_ads() -> List[Dict[str, Any]]:
@@ -644,6 +742,9 @@ def fetch_c2c_orders_range(
 
                     items = resp.get("data") or []
                     total_reported = int(resp.get("total") or 0)
+
+                    # Pausa preventiva mínima (120ms) para respetar límites de IP Weight
+                    time.sleep(0.12)
 
                     if not items:
                         if page > 1 and total_reported > subwindow_raw_count and oldest_ts_in_subwindow and oldest_ts_in_subwindow > cur_start:
