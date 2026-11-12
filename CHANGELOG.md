@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/marcossglr/P2P-ledger/compare/v0.6.0...v0.6.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **db:** agregar migracion alembic para columnas de binance pay en bank_accounts ([4f02c06](https://github.com/marcossglr/P2P-ledger/commit/4f02c0640e70f79f12cabe0b9b8fa096f50a3913))
+
 ## [0.6.0](https://github.com/marcossglr/P2P-ledger/compare/v0.5.0...v0.6.0) (2026-11-12)
 
 
