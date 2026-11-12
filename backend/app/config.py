@@ -12,19 +12,42 @@ def get_user_data_dir() -> Path:
     - Linux: ~/.local/share/p2p-ledger
     - Windows: %APPDATA%/p2p-ledger
     - macOS: ~/Library/Application Support/p2p-ledger
+    
+    Incluye fallback robusto a ~/.p2p-ledger o directorio temporal en caso de
+    sistemas de archivos con permisos restringidos o entornos aislados.
     """
+    candidates: list[Path] = []
+    
     if sys.platform == "win32":
         app_data = os.environ.get("APPDATA")
         base = Path(app_data) if app_data else Path.home() / "AppData" / "Roaming"
+        candidates.append(base / "p2p-ledger")
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
+        candidates.append(base / "p2p-ledger")
     else:
         xdg_data_home = os.environ.get("XDG_DATA_HOME")
         base = Path(xdg_data_home) if xdg_data_home else Path.home() / ".local" / "share"
+        candidates.append(base / "p2p-ledger")
+        candidates.append(Path.home() / ".p2p-ledger")
 
-    data_dir = base / "p2p-ledger"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
+    # Fallback universal en caso de fallo de permisos
+    import tempfile
+    candidates.append(Path(tempfile.gettempdir()) / "p2p-ledger")
+
+    for path in candidates:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            # Verificar capacidad de escritura real
+            test_file = path / ".write_test"
+            test_file.touch(exist_ok=True)
+            test_file.unlink(missing_ok=True)
+            return path
+        except Exception:
+            continue
+
+    # Si todo falla, usar el directorio de ejecución actual
+    return BASE_DIR
 
 
 # Si ENVIRONMENT es "production" o si se ejecuta como binario standalone congelado (PyInstaller)
