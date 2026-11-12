@@ -4,7 +4,6 @@ import { Megaphone, ChevronDown, Check, Copy } from 'lucide-react';
 function MyAdsSection({
   ads = [],
   evaluateMyAdOnBoard,
-  breakevenSellRate = 0,
   fmtUsdt,
   fmtFiat,
   fmtRate,
@@ -249,18 +248,10 @@ function MyAdsSection({
                             {boardInfo.rank > 1 && boardInfo.suggestedRank1Price != null && (
                               <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
                                 <span
-                                  className={`text-[10px] ${
-                                    boardInfo.isBelowBreakeven ? 'text-rose-400' : 'text-slate-400'
-                                  }`}
-                                  title={
-                                    boardInfo.isBelowBreakeven
-                                      ? `Atención: tomar #1 (${fmtRate ? fmtRate(boardInfo.suggestedRank1Price) : boardInfo.suggestedRank1Price}) está por debajo de tu Breakeven (${fmtRate ? fmtRate(breakevenSellRate) : breakevenSellRate})`
-                                      : 'Precio sugerido para tomar #1'
-                                  }
+                                  className="text-[10px] text-slate-400"
+                                  title="Precio sugerido para tomar #1"
                                 >
-                                  {boardInfo.isBelowBreakeven
-                                    ? `Bajo piso (${fmtRate ? fmtRate(breakevenSellRate) : breakevenSellRate})`
-                                    : 'Precio para #1:'}
+                                  Precio para #1:
                                 </span>
                                 <button
                                   type="button"

@@ -5,9 +5,21 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import BinanceOrder, UploadBatch, BankBalanceAdjustment, BankAccount
-from ..schemas import UpdatePaymentChannelPayload, UpdateOrderPaymentDetailsPayload
+from ..schemas import (
+    UpdatePaymentChannelPayload,
+    UpdateOrderPaymentDetailsPayload,
+    ResetSystemPayload,
+)
+from ..config import settings
 from ..services.analytics import compute_operations_analytics, export_operations_excel
-from ..services.binance_api import fetch_funding_asset_balance, fetch_c2c_user_ads
+from ..services.binance_api import (
+    fetch_funding_asset_balance,
+    fetch_c2c_user_ads,
+    clear_credentials,
+    FUNDING_CACHE_PATH,
+    USER_ADS_CACHE_PATH,
+)
+from ..services.binance_p2p_public import reset_p2p_public_config
 from ..services.orders import upsert_binance_orders
 from ..services.parsers import parse_binance_csv
 from ..services.bank_inventory import (
@@ -164,6 +176,78 @@ def clear_operations(only_demo: bool = Query(False), db: Session = Depends(get_d
     db.query(BankAccount).delete()
     db.commit()
     return {"status": "cleared_all", "deleted_rows": deleted}
+
+
+@router.post("/system-reset")
+def reset_system_data(payload: ResetSystemPayload, db: Session = Depends(get_db)):
+    """
+    Restaura y borra datos del sistema según las opciones seleccionadas:
+    - delete_orders: elimina órdenes P2P y lotes de subida.
+    - delete_bank_accounts: elimina cuentas bancarias y sus ajustes contables.
+    - delete_api_credentials: borra credenciales locales de Binance API y configuración pública P2P.
+    - delete_backups: elimina archivos de respaldo .db locales generados.
+    Limpia siempre las cachés temporales de saldo/anuncios.
+    """
+    summary = {
+        "orders_deleted": 0,
+        "batches_deleted": 0,
+        "bank_accounts_deleted": 0,
+        "adjustments_deleted": 0,
+        "credentials_deleted": False,
+        "backups_deleted": 0,
+    }
+
+    if payload.delete_orders:
+        summary["orders_deleted"] = db.query(BinanceOrder).delete()
+        summary["batches_deleted"] = db.query(UploadBatch).delete()
+
+    if payload.delete_bank_accounts:
+        summary["adjustments_deleted"] = db.query(BankBalanceAdjustment).delete()
+        summary["bank_accounts_deleted"] = db.query(BankAccount).delete()
+    elif payload.delete_orders:
+        # Si se borraron órdenes pero se conservan cuentas, reiniciar los deltas/anclas para coherencia
+        for acc in db.query(BankAccount).all():
+            acc.manual_delta_bs = 0.0
+            acc.anchor_balance = 0.0
+            acc.anchor_timestamp = 0
+            acc.anchor_date_label = "Inicio"
+
+    db.commit()
+
+    # Siempre limpiar cachés locales huérfanas al restablecer
+    for cache_path in (FUNDING_CACHE_PATH, USER_ADS_CACHE_PATH):
+        try:
+            if cache_path.exists():
+                cache_path.unlink()
+        except OSError:
+            pass
+
+    if payload.delete_api_credentials:
+        clear_credentials()
+        try:
+            reset_p2p_public_config()
+        except Exception:
+            pass
+        summary["credentials_deleted"] = True
+
+    if payload.delete_backups:
+        backups_dir = (settings.DATA_DIR / "backups").resolve()
+        if backups_dir.exists():
+            deleted_backups = 0
+            for f in backups_dir.glob("*.db"):
+                try:
+                    f.unlink()
+                    deleted_backups += 1
+                except OSError:
+                    pass
+            summary["backups_deleted"] = deleted_backups
+
+    return {
+        "status": "success",
+        "message": "Datos eliminados según los criterios seleccionados.",
+        "summary": summary,
+    }
+
 
 
 @router.get("")

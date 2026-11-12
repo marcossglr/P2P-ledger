@@ -187,7 +187,6 @@ export default function OperationsDashboard({
     selectedAsset: cryptoAsset,
     fiatCurrency: fiat,
     refreshTrigger,
-    breakevenSellRate: metrics.breakevenSellRate,
   });
 
   // Copiar resumen del día estructurado para Telegram / WhatsApp
@@ -276,7 +275,6 @@ export default function OperationsDashboard({
             onOpenSettings={handleNavigateConnections}
             asset={cryptoAsset}
             fiat={fiat}
-            breakevenRate={metrics.breakevenSellRate}
             myAds={data?.my_ads || EMPTY_ARRAY}
           />
 
@@ -289,7 +287,6 @@ export default function OperationsDashboard({
             totalCommissionsAllUsdt={metrics.totalCommissionsAllUsdt}
             matchedUsdt={metrics.matchedUsdt}
             netMarginPct={metrics.netMarginPct}
-            breakevenSellRate={metrics.breakevenSellRate}
             completedCount={metrics.completedCount}
             totalCapitalConsolidatedUsdt={metrics.totalCapitalConsolidatedUsdt}
             totalBankBs={metrics.totalBankBs}
@@ -308,7 +305,6 @@ export default function OperationsDashboard({
         <MyAdsSection
           ads={data?.my_ads || EMPTY_ARRAY}
           evaluateMyAdOnBoard={marketBoard.evaluateMyAdOnBoard}
-          breakevenSellRate={metrics.breakevenSellRate}
           fmtUsdt={fmtUsdt}
           fmtFiat={fmtFiat}
           fmtRate={fmtRate}

@@ -4,12 +4,16 @@ import {
   Calendar,
   Calculator,
   Download,
+  Coins,
   X,
 } from 'lucide-react';
 import { fmtDate } from '../../utils/formatters';
 import { Button, Select } from '../ui';
 
 export default function OperationsFilterBar({
+  selectedAsset = 'USDT',
+  onSelectAsset,
+  availableAssets = ['USDT'],
   activePreset,
   applyDatePreset,
   startDate,
@@ -37,9 +41,33 @@ export default function OperationsFilterBar({
       ref.current.focus();
     }
   };
+
+  // Asegurar que USDT esté siempre presente y deduplicar
+  const assetOptions = Array.from(new Set(['USDT', ...(availableAssets || [])]));
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2.5">
       <div className="flex flex-wrap items-center gap-2">
+        {/* Selector de Criptomoneda (a la izquierda del selector de fechas) */}
+        <div className="w-32">
+          <Select
+            value={selectedAsset}
+            onChange={(e) => onSelectAsset && onSelectAsset(e.target.value)}
+            icon={Coins}
+            size="sm"
+            title="Seleccionar Criptomoneda a analizar"
+          >
+            <option value="ALL" className="bg-slate-900 text-slate-100 font-medium">
+              Todas
+            </option>
+            {assetOptions.map((ast) => (
+              <option key={ast} value={ast} className="bg-slate-900 text-slate-100 font-medium">
+                {ast}
+              </option>
+            ))}
+          </Select>
+        </div>
+
         {/* Selector de Período Histórico (Dropdown con valor por defecto Hoy) */}
         <div className="w-44">
           <Select
@@ -154,7 +182,7 @@ export default function OperationsFilterBar({
             size="sm"
             onClick={onNavigateFormulas}
             icon={Calculator}
-            title="Ver documentación contable y fórmulas de cálculo (WAC/WAP, Breakeven, P&L)"
+            title="Ver documentación contable y fórmulas de cálculo (WAC/WAP, P&L)"
           >
             <span>Fórmulas</span>
           </Button>

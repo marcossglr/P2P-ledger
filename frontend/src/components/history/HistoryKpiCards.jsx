@@ -43,10 +43,13 @@ export default function HistoryKpiCards({
   const netMarginPct =
     matchedUsdt > 0 ? (netProfitUsdt / matchedUsdt) * 100 : 0;
 
-  // Balance y desbalance de inventario de la jornada/período
+  // Balance y desbalance de inventario de la jornada/período (consumido directamente del backend con impacto neto en billetera)
   const buyUsdtTotal = Number(stats.buy_usdt_total || 0);
   const sellUsdtTotal = Number(stats.sell_usdt_total || 0);
-  const netInventoryUsdt = buyUsdtTotal - sellUsdtTotal;
+  const netInventoryUsdt =
+    stats.net_inventory_usdt !== undefined && stats.net_inventory_usdt !== null
+      ? Number(stats.net_inventory_usdt)
+      : buyUsdtTotal - sellUsdtTotal;
 
   // Flujo neto de caja en Fiat
   const buyFiatTotal = Number(stats.buy_fiat_total || 0);

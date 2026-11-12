@@ -5,7 +5,7 @@ from backend.app.services.analytics import compute_operations_analytics
 
 class TestAnalyticsFinancialFormulas(unittest.TestCase):
     """
-    Verifica las fórmulas financieras especificadas en docs/formulas.md:
+    Verifica las fórmulas financieras del motor de analíticas:
     1. WAC (Costo Promedio Ponderado de Compra) = Total Fiat Comprado / Total USDT Comprado
     2. WAP (Precio Promedio Ponderado de Venta) = Total Fiat Vendido / Total USDT Vendido
     3. Spread Absoluto = WAP - WAC
@@ -128,6 +128,57 @@ class TestAnalyticsFinancialFormulas(unittest.TestCase):
         self.assertAlmostEqual(result["net_profit_fiat"], 178.0, places=2)
         # Ganancia neta USDT = 178 / 40 = 4.45 USDT
         self.assertAlmostEqual(result["net_profit_usdt"], 4.45, places=2)
+
+    def test_daily_series_bank_fees_consistency(self):
+        """Verifica que la suma de comisiones bancarias de la serie diaria coincida exactamente con el global."""
+        # 3 órdenes de Pago Móvil en el mismo día, cada una de 200 VES.
+        # Con 0.3%: 200 * 0.003 = 0.60 VES, pero el piso SUDEBAN es 14 VES por orden.
+        # Total global esperado = 3 * 14 = 42 VES.
+        orders = [
+            BinanceOrder(
+                order_number=f"BUY-PM-{i}",
+                order_type="COMPRA",
+                order_status="COMPLETED",
+                fiat_amount=200.0,
+                crypto_amount=5.0,
+                unit_price=40.0,
+                asset="USDT",
+                fiat_currency="VES",
+                commission_usdt=0.0,
+                payment_channel="PAGO_MOVIL",
+                order_date="2026-10-30 10:00:00",
+            )
+            for i in range(1, 4)
+        ]
+        orders.append(
+            BinanceOrder(
+                order_number="SELL-01",
+                order_type="VENTA",
+                order_status="COMPLETED",
+                fiat_amount=630.0,
+                crypto_amount=15.0,
+                unit_price=42.0,
+                asset="USDT",
+                fiat_currency="VES",
+                commission_usdt=0.0,
+                payment_channel="TRANSFERENCIA",
+                order_date="2026-10-30 15:00:00",
+            )
+        )
+
+        result = compute_operations_analytics(orders, bank_fee_rate_pct=0.3, target_asset="USDT")
+        
+        # Comisión global esperada = 42.0 VES
+        self.assertEqual(result["estimated_bank_fees_fiat"], 42.0)
+        
+        # Verificar que la serie diaria tenga exactamente 42.0 VES de comisión bancaria
+        daily_series = result["daily_series"]
+        self.assertEqual(len(daily_series), 1)
+        self.assertEqual(daily_series[0]["bank_fee_fiat"], 42.0)
+        
+        # Verificar que la ganancia neta diaria coincida con la global
+        self.assertAlmostEqual(daily_series[0]["net_profit_fiat"], result["net_profit_fiat"], places=2)
+        self.assertAlmostEqual(daily_series[0]["net_profit_usdt"], result["net_profit_usdt"], places=2)
 
 
 if __name__ == "__main__":

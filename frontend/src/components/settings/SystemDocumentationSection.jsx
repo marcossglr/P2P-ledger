@@ -84,26 +84,6 @@ export default function SystemDocumentationSection() {
               <div className="text-slate-400 text-xs">Spread (%) = (Spread VES / Tasa Compra) × 100</div>
             </div>
           </div>
-
-          {/* Tasa Piso Breakeven */}
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                <Scale className="h-3.5 w-3.5" />
-                Tasa Piso Breakeven (Punto de Equilibrio)
-              </span>
-              <span className="text-xs font-mono text-amber-400">Protección</span>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Precio mínimo de venta indispensable para cubrir tu costo de adquisición más el 100% de comisiones (Binance + Bancos):
-            </p>
-            <div className="rounded-lg bg-slate-900 border border-amber-500/30 px-3 py-2 font-mono text-xs text-amber-200">
-              Tasa Piso = Tasa Compra + (Comisiones Totales / USDT Arbitrados)
-            </div>
-            <p className="text-xs text-slate-400">
-              * Si vendes por debajo de esta tasa, la operación genera pérdida real por impacto de comisiones.
-            </p>
-          </div>
         </div>
       </div>
 
@@ -204,7 +184,7 @@ export default function SystemDocumentationSection() {
               <tr className="hover:bg-slate-800/30">
                 <td className="py-2.5 px-3 font-semibold text-white whitespace-nowrap">2. Spread Promedio</td>
                 <td className="py-2.5 px-3 text-white font-medium">Margen % y en Bolívares</td>
-                <td className="py-2.5 px-3 text-slate-400">Muestra tu WAC de compra, WAP de venta y tu Tasa Piso Breakeven.</td>
+                <td className="py-2.5 px-3 text-slate-400">Muestra tu WAC de compra y WAP de venta.</td>
               </tr>
               <tr className="hover:bg-slate-800/30">
                 <td className="py-2.5 px-3 font-semibold text-white whitespace-nowrap">3. Volumen Cripto</td>

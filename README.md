@@ -45,8 +45,8 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
   * [SQLAlchemy](https://www.sqlalchemy.org/) + [SQLite](https://sqlite.org/) con WAL mode y `busy_timeout` para persistencia local robusta y concurrente.
   * Pandas y OpenPyXL para importación de órdenes Binance y reportes ejecutivos en Excel.
   * Empaquetado universal x86-64 con PyInstaller para distribución standalone.
-* **Documentación Matemática:**
-  * Consulta [`docs/formulas.md`](./docs/formulas.md) para conocer en profundidad las fórmulas financieras, comisiones interbancarias y algoritmos de inventario.
+* **Documentación Matemática y Financiera Integrada:**
+  * Accesible directamente desde la interfaz del sistema en la sección de **Configuración > Documentación del Sistema**, detallando las fórmulas de Costo Promedio Ponderado (WAC), Precio Ponderado de Venta (WAP), comisiones interbancarias y P&L de ciclo cerrado.
 
 ---
 
@@ -79,8 +79,6 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
 │   └── package.json            # Dependencias del cliente web y scripts
 ├── scripts/
 │   └── bump_version.sh         # Script automatizado de versionado SemVer y tags de release
-├── docs/
-│   └── formulas.md             # Especificación técnica y fórmulas financieras
 ├── AGENTS.md                   # Estándares de desarrollo y reglas de interfaz Desktop-First
 ├── run.sh                      # Script unificado de inicio y testing en desarrollo
 └── README.md

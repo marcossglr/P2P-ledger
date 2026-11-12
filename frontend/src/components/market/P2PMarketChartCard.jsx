@@ -12,7 +12,6 @@ function P2PMarketChartCard({
   onOpenSettings,
   asset = 'USDT',
   fiat = 'VES',
-  breakevenRate = null,
   myAds = [],
 }) {
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
@@ -44,7 +43,6 @@ function P2PMarketChartCard({
   const { historySeries, chartGeometry } = useP2PChartGeometry({
     marketData,
     filteredStats,
-    breakevenRate,
     filterKey: `${selectedBank}_${amountFilter}_${onlyMerchants}_${priceMode}_${fiat}_${currentAsset}`,
   });
 

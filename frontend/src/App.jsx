@@ -57,7 +57,7 @@ export default function App() {
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(() => localStorage.getItem('user_selected_asset') || 'USDT');
   const [fiatCurrency, setFiatCurrency] = useState(() => localStorage.getItem('user_selected_fiat') || 'VES');
-  const [, setAvailableAssets] = useState(['USDT']);
+  const [availableAssets, setAvailableAssets] = useState(['USDT']);
   const [, setAvailableFiats] = useState(['VES']);
 
   const {
@@ -169,6 +169,11 @@ export default function App() {
               refreshTrigger={refreshTrigger}
               onNavigateFormulas={() => openSettings('DOCS')}
               selectedAsset={selectedAsset}
+              onSelectAsset={(asset) => {
+                setSelectedAsset(asset);
+                localStorage.setItem('user_selected_asset', asset);
+              }}
+              availableAssets={availableAssets}
               fiatCurrency={fiatCurrency}
               onPairsDetected={(assets, fiats) => {
                 if (assets?.length) setAvailableAssets(assets);

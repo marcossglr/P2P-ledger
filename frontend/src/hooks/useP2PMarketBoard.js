@@ -33,7 +33,6 @@ export function useP2PMarketBoard({
   selectedAsset: initialAsset = 'USDT',
   fiatCurrency = 'VES',
   refreshTrigger,
-  breakevenSellRate = 0,
 }) {
   // --- 1. Filtros Activos con persistencia ---
   const [selectedAsset, setSelectedAsset] = useState(
@@ -538,11 +537,6 @@ export function useP2PMarketBoard({
         }
       }
 
-      const isBelowBreakeven =
-        !isBuyAd &&
-        breakevenSellRate > 0 &&
-        myPrice < breakevenSellRate;
-
       return {
         rank,
         totalCompetitors: boardAds.length,
@@ -550,10 +544,9 @@ export function useP2PMarketBoard({
         bestBoardPrice,
         deltaVsBest,
         suggestedRank1Price,
-        isBelowBreakeven,
       };
     },
-    [marketData, breakevenSellRate]
+    [marketData]
   );
 
   // --- 10. Evaluación de frescura de datos en vivo ---

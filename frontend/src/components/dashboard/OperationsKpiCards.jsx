@@ -14,7 +14,6 @@ function OperationsKpiCards({
   totalCommissionsAllUsdt = 0,
   matchedUsdt = 0,
   netMarginPct = 0,
-  breakevenSellRate = 0,
   completedCount = 0,
   totalCapitalConsolidatedUsdt = 0,
   totalBankBs = 0,
@@ -98,7 +97,7 @@ function OperationsKpiCards({
             </span>
             <InfoPopover
               title="Spread Promedio de la Jornada"
-              content="Margen ponderado entre precios de compra y venta. Incluye tasa piso de equilibrio (Breakeven) calculada para no operar a pérdida."
+              content="Margen comercial ponderado entre tus precios medios de compra (WAC) y venta (WAP)."
               ariaLabel="Información de Spread Promedio"
             />
           </div>
@@ -126,7 +125,7 @@ function OperationsKpiCards({
           </div>
         </div>
 
-        {/* Pie anclado al fondo: Precios WAC/WAP y Breakeven compactos */}
+        {/* Pie anclado al fondo: Precios WAC/WAP compactos */}
         <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2 flex-wrap">
             <span
@@ -144,18 +143,6 @@ function OperationsKpiCards({
               <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
               <span className="font-mono tabular-nums text-slate-200">{fmtRate(stats.wap_sell_price)}</span>
             </span>
-            {breakevenSellRate > 0 && (
-              <>
-                <span className="text-slate-600 select-none">·</span>
-                <span
-                  className="inline-flex items-center gap-1 text-slate-400 hover:text-slate-200 cursor-help"
-                  title={`Tasa Piso de Equilibrio (Breakeven): ${fmtRate(breakevenSellRate)} ${fiat} (Precio mínimo de venta para cubrir costos de compra y comisiones)`}
-                >
-                  <Scale className="h-3 w-3 shrink-0 text-slate-400" />
-                  <span className="font-mono tabular-nums text-slate-300">{fmtRate(breakevenSellRate)}</span>
-                </span>
-              </>
-            )}
           </div>
         </div>
       </Card>

@@ -152,30 +152,6 @@ export default function MarketDepthChart({
           {fmtRate(chartGeometry.minVal, 1)}
         </text>
 
-        {/* Línea de Referencia de Breakeven si está en rango */}
-        {chartGeometry.breakevenY != null && (
-          <g>
-            <line
-              x1="8"
-              x2={chartGeometry.W - chartGeometry.padRight + 4}
-              y1={chartGeometry.breakevenY}
-              y2={chartGeometry.breakevenY}
-              stroke="#f59e0b"
-              strokeDasharray="4 3"
-              strokeWidth="1"
-              strokeOpacity="0.75"
-            />
-            <text
-              x={chartGeometry.W - 2}
-              y={chartGeometry.breakevenY + 3}
-              textAnchor="end"
-              className="fill-amber-400 font-mono text-[8px] font-semibold select-none"
-            >
-              Eq {fmtRate(chartGeometry.breakevenNum, 0)}
-            </text>
-          </g>
-        )}
-
         {/* Áreas sombreadas con degradados fieles a cada línea */}
         {chartGeometry.sellAreaPath && (
           <path d={chartGeometry.sellAreaPath} fill="url(#p2pSellGrad)" className="p2p-chart-line" />

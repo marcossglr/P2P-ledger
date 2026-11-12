@@ -217,6 +217,11 @@ export const operationsApi = {
   seedDemo: () => request('/api/operations/demo-seed', { method: 'POST' }),
   clearOperations: (onlyDemo = false) =>
     request(`/api/operations/clear?only_demo=${onlyDemo}`, { method: 'DELETE' }),
+  systemReset: (payload) =>
+    request('/api/operations/system-reset', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   updatePaymentChannel: (orderId, paymentChannel) =>
     request('/api/operations/payment-channel', {
       method: 'POST',

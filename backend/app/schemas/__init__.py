@@ -80,3 +80,11 @@ class P2PPublicConfigPayload(BaseModel):
     publisher_type: Optional[str] = None
     top_n: Optional[int] = None
     refresh_interval_seconds: Optional[int] = None
+
+
+class ResetSystemPayload(BaseModel):
+    delete_orders: bool = True
+    delete_bank_accounts: bool = True
+    delete_api_credentials: bool = False
+    delete_backups: bool = False
+

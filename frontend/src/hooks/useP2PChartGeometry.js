@@ -28,7 +28,6 @@ function formatHistoryLabel(timeStr) {
 export function useP2PChartGeometry({
   marketData,
   filteredStats,
-  breakevenRate,
   filterKey = '',
   dimensions = DEFAULT_CHART_DIMENSIONS,
 }) {
@@ -253,16 +252,6 @@ export function useP2PChartGeometry({
           ].join(' ')
         : '';
 
-    const breakevenNum = breakevenRate != null ? Number(breakevenRate) : null;
-    const isBreakevenValid =
-      breakevenNum !== null &&
-      Number.isFinite(breakevenNum) &&
-      breakevenNum > 0 &&
-      breakevenNum >= domainMin - domainRange * 0.1 &&
-      breakevenNum <= domainMax + domainRange * 0.1;
-
-    const breakevenY = isBreakevenValid ? toY(breakevenNum) : null;
-
     // Calcular variación respecto al punto previo (Tick Delta)
     let buyDelta = 0;
     let sellDelta = 0;
@@ -288,13 +277,11 @@ export function useP2PChartGeometry({
       buyAreaPath,
       sellAreaPath,
       spreadAreaPath,
-      breakevenY,
-      breakevenNum,
       buyDelta,
       sellDelta,
       pointsCount: historySeries.length,
     };
-  }, [historySeries, breakevenRate, W, H, padLeft, padRight, padY]);
+  }, [historySeries, W, H, padLeft, padRight, padY]);
 
   return {
     historySeries,

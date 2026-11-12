@@ -58,12 +58,6 @@ export function computeOperationsMetrics({
   const netMarginPct =
     matchedUsdt > 0 ? ((stats.net_profit_usdt || 0) / matchedUsdt) * 100 : 0;
 
-  // Tasa de venta Breakeven (punto de equilibrio con comisiones)
-  const breakevenSellRate =
-    Number(stats.wac_buy_price || 0) > 0 && matchedUsdt > 0
-      ? Number(stats.wac_buy_price) + totalCommissionsAllFiat / matchedUsdt
-      : Number(stats.wac_buy_price || 0);
-
   // Ticket promedio por operación en USDT
   const completedCount = Number(
     stats.completed_orders ?? stats.total_orders ?? ordersCount ?? 0
@@ -105,7 +99,6 @@ export function computeOperationsMetrics({
     totalCommissionsAllFiat,
     matchedUsdt,
     netMarginPct,
-    breakevenSellRate,
     completedCount,
     avgTicketUsdt,
     totalBankBs,
@@ -140,7 +133,6 @@ export function buildDailySummaryText({
     `• Volumen Operado: ${fmtUsdt(stats.total_usdt_volume)} USDT (${metrics.completedCount} órdenes)`,
     `  ↳ Compras: ${fmtUsdt(stats.buy_usdt_total)} USDT · Ventas: ${fmtUsdt(stats.sell_usdt_total)} USDT`,
     `• WAC Compra: ${fmtRate(stats.wac_buy_price)} | WAP Venta: ${fmtRate(stats.wap_sell_price)} | Spread: ${spreadSign}${Number(stats.spread_pct || 0).toFixed(2)}%`,
-    metrics.breakevenSellRate > 0 ? `• Tasa Piso Breakeven: ${fmtRate(metrics.breakevenSellRate)} ${fiat}` : null,
     `• Posición Consolidada: ${fmtUsdt(metrics.totalCapitalConsolidatedUsdt)} USDT (incluye ${fmtFiat(metrics.totalBankBs)} ${fiat})`,
   ];
 

@@ -55,6 +55,7 @@ def compute_operations_analytics(
         "sell_fiat": 0.0,
         "sell_usdt": 0.0,
         "comm_usdt": 0.0,
+        "bank_fee_fiat": 0.0,
         "orders_count": 0,
         "cancelled_count": 0,
         "in_progress_count": 0,
@@ -128,19 +129,31 @@ def compute_operations_analytics(
             d_entry["comm_usdt"] += c_comm
             matched_acc = resolve_order_bank_account(o, accounts or [])
             channel = resolve_order_payment_channel(o, matched_acc)
-            if channel == "PAGO_MOVIL":
-                buy_pago_movil_fiat += f_amt
-                buy_pago_movil_count += 1
-                d_entry["buy_pago_movil_fiat"] += f_amt
-                # Cálculo de comisión bancaria exacta por orden (con mínimo de 14 VES)
+            if channel in ("PAGO_MOVIL", "TRANSFERENCIA_INTERBANCARIA"):
+                if channel == "PAGO_MOVIL":
+                    buy_pago_movil_fiat += f_amt
+                    buy_pago_movil_count += 1
+                    d_entry["buy_pago_movil_fiat"] += f_amt
+                else:
+                    buy_transfer_fiat += f_amt
+                    buy_transfer_count += 1
+
+                # Cálculo de comisión bancaria exacta por orden (con mínimo legal de 14 VES si aplica)
                 if matched_acc:
                     fee_bs, _ = compute_order_bank_fee_bs(o, matched_acc)
                 else:
                     fee_bs = max(14.0, round(f_amt * (bank_fee_rate_pct / 100.0), 2)) if bank_fee_rate_pct > 0 else 0.0
+
                 total_bank_fees_fiat += fee_bs
+                d_entry["bank_fee_fiat"] += fee_bs
             else:
                 buy_transfer_fiat += f_amt
                 buy_transfer_count += 1
+                # En transferencias del mismo banco, verificar si la cuenta tiene configurada alguna comisión
+                if matched_acc and matched_acc.apply_buy_fee and float(matched_acc.transfer_fee_pct or 0.0) > 0:
+                    fee_bs, _ = compute_order_bank_fee_bs(o, matched_acc)
+                    total_bank_fees_fiat += fee_bs
+                    d_entry["bank_fee_fiat"] += fee_bs
         elif o.order_type == "VENTA":
             f_amt = float(o.fiat_amount or 0.0)
             c_gross = float(o.crypto_amount or 0.0)
@@ -195,11 +208,7 @@ def compute_operations_analytics(
         d_gross = d_matched * d_spread
         d_ref_rate = d_wac if d_wac > 0 else (d_wap if d_wap > 0 else ref_rate)
         d_comm_fiat = d["comm_usdt"] * d_ref_rate
-        d_bank_fee_fiat = (
-            d["buy_pago_movil_fiat"] * (bank_fee_rate_pct / 100.0)
-            if bank_fee_rate_pct > 0
-            else 0.0
-        )
+        d_bank_fee_fiat = round(d["bank_fee_fiat"], 2)
         d_net_fiat = d_gross - d_comm_fiat - d_bank_fee_fiat
         d_net_usdt = (d_net_fiat / d_ref_rate) if d_ref_rate > 0 else 0.0
 

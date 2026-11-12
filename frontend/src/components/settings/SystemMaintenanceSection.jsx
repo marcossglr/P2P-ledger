@@ -4,9 +4,11 @@ import {
   Trash2,
   Activity,
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { operationsApi } from '../../services/api';
 import { Button, Badge, Checkbox } from '../ui';
+import ResetSystemModal from '../modals/ResetSystemModal';
 
 export default function SystemMaintenanceSection({
   health = {},
@@ -16,10 +18,11 @@ export default function SystemMaintenanceSection({
   setError,
 }) {
   const [loading, setLoading] = useState(false);
-  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   const demoCount = Number(health.stored_demo_orders || 0);
   const realCount = Number(health.stored_real_orders || 0);
+  const totalOrders = Number(health.stored_orders || (demoCount + realCount));
   const hasApiConfigured = Boolean(health.binance_api_configured);
   const hasRealData = realCount > 0 || hasApiConfigured;
 
@@ -217,7 +220,7 @@ export default function SystemMaintenanceSection({
         </div>
       </div>
 
-      {/* Tarjeta 3: Zona de Restablecimiento Crítico (Alto Riesgo) */}
+      {/* Tarjeta 3: Zona de Restablecimiento Crítico y Borrado Total */}
       <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/20 pb-3">
           <div className="flex items-center gap-2.5">
@@ -225,9 +228,9 @@ export default function SystemMaintenanceSection({
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-rose-200">Zona de Restablecimiento Crítico</h3>
+              <h3 className="text-sm font-bold text-rose-200">Zona de Restablecimiento y Borrado de Datos</h3>
               <p className="text-xs text-slate-400">
-                Restablece la base de datos local y limpia todos los registros
+                Opciones avanzadas para purgar o vaciar la información almacenada en el sistema
               </p>
             </div>
           </div>
@@ -237,33 +240,48 @@ export default function SystemMaintenanceSection({
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed">
-          Esta operación vaciará completamente el archivo de base de datos local: eliminará permanentemente todas las órdenes P2P registradas, lotes de inventario de costo (WAC), balances acumulados y cuentas bancarias creadas. Úsalo únicamente si necesitas empezar el reconciliador desde cero.
+          Permite eliminar selectivamente o por completo toda tu información local: órdenes P2P, lotes de importación, inventario contable (WAC), cuentas bancarias y balances, credenciales cifradas de API y archivos de respaldo.
         </p>
 
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-500/20 bg-slate-950/60 p-3.5">
-          <Checkbox
-            checked={confirmDeleteAll}
-            onChange={setConfirmDeleteAll}
-            label={
-              <span className="font-semibold text-rose-300">
-                Entiendo que esta acción destruirá permanentemente toda la base de datos local.
-              </span>
-            }
-          />
+          <div className="space-y-1">
+            <span className="text-xs font-semibold text-rose-300 block">
+              Borrado Total o Personalizado del Sistema
+            </span>
+            <p className="text-xs text-slate-400">
+              Abre el asistente interactivo con casillas de verificación y confirmación de seguridad para decidir qué borrar.
+            </p>
+          </div>
 
           <Button
             type="button"
             variant="danger"
             size="sm"
             icon={Trash2}
-            disabled={!confirmDeleteAll}
             loading={loading}
-            onClick={handleClearAllDatabase}
+            onClick={() => setIsResetModalOpen(true)}
           >
-            <span>Vaciar Base de Datos por Completo</span>
+            <span>Borrar Data del Sistema...</span>
           </Button>
         </div>
       </div>
+
+      <ResetSystemModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        hasRealData={hasRealData}
+        ordersCount={totalOrders}
+        onSuccess={(summary) => {
+          if (setMessage) {
+            setMessage(
+              `Data eliminada exitosamente (${summary.orders_deleted || 0} órdenes, ${
+                summary.bank_accounts_deleted || 0
+              } cuentas bancarias).`
+            );
+          }
+          if (onSyncComplete) onSyncComplete();
+        }}
+      />
     </div>
   );
 }
