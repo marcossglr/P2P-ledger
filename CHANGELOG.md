@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/marcossglr/P2P-ledger/compare/v0.6.1...v0.6.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **desktop:** empaquetar alembic en pyinstaller y blindar get_user_data_dir con fallbacks ([03bdecc](https://github.com/marcossglr/P2P-ledger/commit/03bdecca67515dd1a443dd8661bd1ff09f380d47))
+
 ## [0.6.1](https://github.com/marcossglr/P2P-ledger/compare/v0.6.0...v0.6.1) (2026-11-12)
 
 
