@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/marcossglr/P2P-ledger/compare/v0.5.0...v0.6.0) (2026-11-12)
+
+
+### Features
+
+* optimizar módulo de historial, analíticas y mantenimiento del sistema ([0cb7cd6](https://github.com/marcossglr/P2P-ledger/commit/0cb7cd6eb637a66c263cb13dbec3cbd33e2fefcb))
+
 ## [0.5.0](https://github.com/marcossglr/P2P-ledger/compare/v0.4.0...v0.5.0) (2026-11-11)
 
 
