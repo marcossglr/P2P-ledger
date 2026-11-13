@@ -96,6 +96,7 @@ pub fn init_database(db_path: &PathBuf) -> Result<Connection> {
 
         CREATE INDEX IF NOT EXISTS idx_orders_fiat_status_ts ON binance_orders(fiat_currency, order_status, create_timestamp);
         CREATE INDEX IF NOT EXISTS idx_orders_fiat_bank_date ON binance_orders(fiat_currency, bank_account_id, order_date);
+        CREATE INDEX IF NOT EXISTS idx_orders_fiat_asset_date ON binance_orders(fiat_currency, asset, order_date);
 
         CREATE TABLE IF NOT EXISTS binance_configs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

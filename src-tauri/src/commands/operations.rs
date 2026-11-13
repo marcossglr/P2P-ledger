@@ -8,7 +8,12 @@ use crate::services::analytics::{get_operations_data, OperationsDashboard};
 #[derive(Debug, Deserialize)]
 pub struct GetOperationsParams {
     pub order_type: Option<String>,
+    pub order_status: Option<String>,
+    pub asset: Option<String>,
     pub fiat_currency: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub only_today: Option<bool>,
     pub search: Option<String>,
 }
 
@@ -95,11 +100,26 @@ pub fn get_operations(
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let p = params.unwrap_or(GetOperationsParams {
         order_type: None,
+        order_status: None,
+        asset: None,
         fiat_currency: None,
+        start_date: None,
+        end_date: None,
+        only_today: None,
         search: None,
     });
 
-    let res = get_operations_data(&conn, p.order_type, p.fiat_currency, p.search).map_err(|e| e.to_string())?;
+    let res = get_operations_data(
+        &conn,
+        p.order_type,
+        p.order_status,
+        p.asset,
+        p.fiat_currency,
+        p.start_date,
+        p.end_date,
+        p.only_today,
+        p.search,
+    ).map_err(|e| e.to_string())?;
     info!("[Operations] Operaciones cargadas: {} órdenes encontradas", res.orders.len());
     Ok(res)
 }

@@ -157,6 +157,7 @@ export default function HistoryOperationsView({
         setStartDate={setStartDate}
         endDate={endDate}
         setEndDate={setEndDate}
+        bankFeePct={bankFeePct}
         onNavigateFormulas={onNavigateFormulas}
         onExportExcel={handleExportExcel}
         ordersCount={orders.length}

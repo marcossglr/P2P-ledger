@@ -26,6 +26,34 @@ pub struct BinanceOrderRecord {
     pub bank_fee_fiat: f64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DailyPerformanceRecord {
+    pub date: String,
+    pub orders_count: usize,
+    pub buy_fiat: f64,
+    pub buy_usdt: f64,
+    pub sell_fiat: f64,
+    pub sell_usdt: f64,
+    pub matched_usdt: f64,
+    pub avg_buy_price: f64,
+    pub avg_sell_price: f64,
+    pub spread_pct: f64,
+    pub comm_usdt: f64,
+    pub comm_fiat: f64,
+    pub bank_fee_fiat: f64,
+    pub gross_profit_fiat: f64,
+    pub net_profit_fiat: f64,
+    pub net_profit_usdt: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TopCounterpartyRecord {
+    pub name: String,
+    pub count: usize,
+    pub fiat_volume: f64,
+    pub usdt_volume: f64,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OperationsAnalytics {
     pub total_orders: usize,
@@ -48,6 +76,24 @@ pub struct OperationsAnalytics {
     pub bank_fees_usdt: f64,
     pub net_profit_usdt: f64,
     pub net_profit_fiat: f64,
+
+    // Aliases e integraciones contables consumidas por HistoryKpiCards y vistas históricas
+    pub wac_buy_price: f64,
+    pub wap_sell_price: f64,
+    pub buy_fiat_total: f64,
+    pub sell_fiat_total: f64,
+    pub total_fiat_volume: f64,
+    pub buy_usdt_total: f64,
+    pub sell_usdt_total: f64,
+    pub total_usdt_volume: f64,
+    pub matched_usdt_volume: f64,
+    pub net_inventory_usdt: f64,
+    pub estimated_bank_fees_fiat: f64,
+    pub commission_fiat_cost: f64,
+    pub cancelled_orders: usize,
+    pub completion_rate_pct: f64,
+    pub daily_series: Vec<DailyPerformanceRecord>,
+    pub top_counterparties: Vec<TopCounterpartyRecord>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,15 +101,24 @@ pub struct OperationsDashboard {
     pub orders: Vec<BinanceOrderRecord>,
     pub analytics: OperationsAnalytics,
     pub total_stored_orders: usize,
+    pub available_assets: Vec<String>,
+    pub available_fiats: Vec<String>,
+    pub server_today: String,
 }
 
 pub fn get_operations_data(
     conn: &Connection,
     order_type_filter: Option<String>,
+    order_status_filter: Option<String>,
+    asset_filter: Option<String>,
     fiat_filter: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    only_today: Option<bool>,
     search_filter: Option<String>,
 ) -> Result<OperationsDashboard, rusqlite::Error> {
     let target_fiat = fiat_filter.unwrap_or_else(|| "VES".to_string());
+    let server_today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     // Cargar cuentas para mapeo de comisiones
     let mut acc_stmt = conn.prepare(
@@ -92,6 +147,40 @@ pub fn get_operations_data(
     if let Some(ref ot) = order_type_filter {
         if ot == "COMPRA" || ot == "VENTA" {
             query.push_str(&format!(" AND order_type = '{}'", ot));
+        }
+    }
+
+    if let Some(ref os) = order_status_filter {
+        if os != "ALL" && !os.trim().is_empty() {
+            let clean_os = os.replace("'", "''");
+            query.push_str(&format!(" AND order_status = '{}'", clean_os));
+        }
+    }
+
+    if let Some(ref ast) = asset_filter {
+        if ast != "ALL" && !ast.trim().is_empty() {
+            let clean_ast = ast.replace("'", "''");
+            query.push_str(&format!(" AND asset = '{}'", clean_ast));
+        }
+    }
+
+    if only_today.unwrap_or(false) {
+        query.push_str(&format!(
+            " AND order_date >= '{} 00:00:00' AND order_date <= '{} 23:59:59'",
+            server_today, server_today
+        ));
+    } else {
+        if let Some(ref s_date) = start_date {
+            if !s_date.trim().is_empty() {
+                let clean_s = s_date.replace("'", "''");
+                query.push_str(&format!(" AND order_date >= '{} 00:00:00'", clean_s));
+            }
+        }
+        if let Some(ref e_date) = end_date {
+            if !e_date.trim().is_empty() {
+                let clean_e = e_date.replace("'", "''");
+                query.push_str(&format!(" AND order_date <= '{} 23:59:59'", clean_e));
+            }
         }
     }
 
@@ -165,12 +254,40 @@ pub fn get_operations_data(
         |r| r.get(0)
     ).unwrap_or(0);
 
+    // Detección dinámica de activos y fiats disponibles en base de datos
+    let mut available_assets = Vec::new();
+    if let Ok(mut asset_stmt) = conn.prepare("SELECT DISTINCT asset FROM binance_orders WHERE asset IS NOT NULL AND asset != '' ORDER BY asset ASC") {
+        if let Ok(asset_rows) = asset_stmt.query_map([], |r| r.get::<_, String>(0)) {
+            for a in asset_rows.flatten() {
+                available_assets.push(a);
+            }
+        }
+    }
+    if !available_assets.contains(&"USDT".to_string()) {
+        available_assets.insert(0, "USDT".to_string());
+    }
+
+    let mut available_fiats = Vec::new();
+    if let Ok(mut fiat_stmt) = conn.prepare("SELECT DISTINCT fiat_currency FROM binance_orders WHERE fiat_currency IS NOT NULL AND fiat_currency != '' ORDER BY fiat_currency ASC") {
+        if let Ok(fiat_rows) = fiat_stmt.query_map([], |r| r.get::<_, String>(0)) {
+            for f in fiat_rows.flatten() {
+                available_fiats.push(f);
+            }
+        }
+    }
+    if !available_fiats.contains(&"VES".to_string()) {
+        available_fiats.insert(0, "VES".to_string());
+    }
+
     let analytics = compute_analytics_from_orders(&orders);
 
     Ok(OperationsDashboard {
         total_stored_orders: total_stored as usize,
         analytics,
         orders,
+        available_assets,
+        available_fiats,
+        server_today,
     })
 }
 
@@ -184,20 +301,77 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
     let mut total_bank_fees = 0.0;
     let mut total_commission_usdt = 0.0;
     let mut completed_orders = 0;
+    let mut cancelled_orders = 0;
+
+    #[derive(Default)]
+    struct DayAccumulator {
+        orders_count: usize,
+        buy_fiat: f64,
+        buy_usdt: f64,
+        sell_fiat: f64,
+        sell_usdt: f64,
+        comm_usdt: f64,
+        bank_fee_fiat: f64,
+    }
+
+    #[derive(Default)]
+    struct CpAccumulator {
+        count: usize,
+        fiat_volume: f64,
+        usdt_volume: f64,
+    }
+
+    let mut daily_map: HashMap<String, DayAccumulator> = HashMap::new();
+    let mut cp_map: HashMap<String, CpAccumulator> = HashMap::new();
 
     for o in orders {
+        if o.order_status == "CANCELLED" {
+            cancelled_orders += 1;
+            continue;
+        }
+
         if o.order_status == "COMPLETED" {
             completed_orders += 1;
             total_commission_usdt += o.commission_usdt;
+
+            let day_key = if let Some(ref d) = o.order_date {
+                if d.len() >= 10 {
+                    d[..10].to_string()
+                } else if !d.is_empty() {
+                    d.clone()
+                } else {
+                    "Sin Fecha".to_string()
+                }
+            } else {
+                "Sin Fecha".to_string()
+            };
+
+            let day_entry = daily_map.entry(day_key).or_default();
+            day_entry.orders_count += 1;
+            day_entry.comm_usdt += o.commission_usdt;
+
+            let cp_name = o.counterparty.clone().unwrap_or_else(|| "Anónimo".to_string());
+            let cp_entry = cp_map.entry(cp_name).or_default();
+            cp_entry.count += 1;
+            cp_entry.fiat_volume += o.fiat_amount;
+            cp_entry.usdt_volume += o.crypto_amount;
+
             if o.order_type == "COMPRA" {
                 buy_fiat += o.fiat_amount;
                 buy_crypto += o.crypto_amount;
                 buy_count += 1;
                 total_bank_fees += o.bank_fee_fiat;
+
+                day_entry.buy_fiat += o.fiat_amount;
+                day_entry.buy_usdt += o.crypto_amount;
+                day_entry.bank_fee_fiat += o.bank_fee_fiat;
             } else if o.order_type == "VENTA" {
                 sell_fiat += o.fiat_amount;
                 sell_crypto += o.crypto_amount;
                 sell_count += 1;
+
+                day_entry.sell_fiat += o.fiat_amount;
+                day_entry.sell_usdt += o.crypto_amount;
             }
         }
     }
@@ -242,6 +416,70 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
         gross_profit_fiat - total_bank_fees
     };
 
+    // Construir desglose diario cronológico
+    let mut sorted_days: Vec<String> = daily_map.keys().cloned().collect();
+    sorted_days.sort();
+
+    let mut daily_series = Vec::new();
+    for d_key in sorted_days {
+        if let Some(d) = daily_map.get(&d_key) {
+            if d.orders_count == 0 {
+                continue;
+            }
+            let d_wac = if d.buy_usdt > 0.0 { d.buy_fiat / d.buy_usdt } else { wac_buy };
+            let d_wap = if d.sell_usdt > 0.0 { d.sell_fiat / d.sell_usdt } else { wap_sell };
+            let d_matched = d.buy_usdt.min(d.sell_usdt);
+            let d_spread = if d_wac > 0.0 && d_wap > 0.0 { d_wap - d_wac } else { 0.0 };
+            let d_gross = d_matched * d_spread;
+            let d_ref_rate = if d_wac > 0.0 { d_wac } else if d_wap > 0.0 { d_wap } else { 1.0 };
+            let d_comm_fiat = d.comm_usdt * d_ref_rate;
+            let d_net_fiat = d_gross - d_comm_fiat - d.bank_fee_fiat;
+            let d_net_usdt = if d_ref_rate > 0.0 { d_net_fiat / d_ref_rate } else { 0.0 };
+
+            daily_series.push(DailyPerformanceRecord {
+                date: d_key,
+                orders_count: d.orders_count,
+                buy_fiat: (d.buy_fiat * 100.0).round() / 100.0,
+                buy_usdt: (d.buy_usdt * 10000.0).round() / 10000.0,
+                sell_fiat: (d.sell_fiat * 100.0).round() / 100.0,
+                sell_usdt: (d.sell_usdt * 10000.0).round() / 10000.0,
+                matched_usdt: (d_matched * 10000.0).round() / 10000.0,
+                avg_buy_price: (d_wac * 10000.0).round() / 10000.0,
+                avg_sell_price: (d_wap * 10000.0).round() / 10000.0,
+                spread_pct: ((if d_wac > 0.0 { (d_spread / d_wac) * 100.0 } else { 0.0 }) * 100.0).round() / 100.0,
+                comm_usdt: (d.comm_usdt * 10000.0).round() / 10000.0,
+                comm_fiat: (d_comm_fiat * 100.0).round() / 100.0,
+                bank_fee_fiat: (d.bank_fee_fiat * 100.0).round() / 100.0,
+                gross_profit_fiat: (d_gross * 100.0).round() / 100.0,
+                net_profit_fiat: (d_net_fiat * 100.0).round() / 100.0,
+                net_profit_usdt: (d_net_usdt * 100.0).round() / 100.0,
+            });
+        }
+    }
+
+    // Top contrapartes ordenadas por volumen fiat descendente
+    let mut cp_list: Vec<TopCounterpartyRecord> = cp_map
+        .into_iter()
+        .map(|(name, acc)| TopCounterpartyRecord {
+            name,
+            count: acc.count,
+            fiat_volume: (acc.fiat_volume * 100.0).round() / 100.0,
+            usdt_volume: (acc.usdt_volume * 100.0).round() / 100.0,
+        })
+        .collect();
+    cp_list.sort_by(|a, b| b.fiat_volume.partial_cmp(&a.fiat_volume).unwrap_or(std::cmp::Ordering::Equal));
+    cp_list.truncate(6);
+
+    let total_all = completed_orders + cancelled_orders;
+    let completion_rate_pct = if total_all > 0 {
+        ((completed_orders as f64 / total_all as f64) * 1000.0).round() / 10.0
+    } else {
+        100.0
+    };
+
+    let ref_rate = if wac_buy > 0.0 { wac_buy } else if wap_sell > 0.0 { wap_sell } else { 0.0 };
+    let commission_fiat_cost = (total_commission_usdt * ref_rate * 100.0).round() / 100.0;
+
     OperationsAnalytics {
         total_orders: orders.len(),
         completed_orders,
@@ -263,6 +501,24 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
         bank_fees_usdt: (bank_fees_usdt * 100.0).round() / 100.0,
         net_profit_usdt: (net_profit_usdt * 100.0).round() / 100.0,
         net_profit_fiat: (net_profit_fiat * 100.0).round() / 100.0,
+
+        // Campos auxiliares y compatibles para UI
+        wac_buy_price: (wac_buy * 10000.0).round() / 10000.0,
+        wap_sell_price: (wap_sell * 10000.0).round() / 10000.0,
+        buy_fiat_total: (buy_fiat * 100.0).round() / 100.0,
+        sell_fiat_total: (sell_fiat * 100.0).round() / 100.0,
+        total_fiat_volume: ((buy_fiat + sell_fiat) * 100.0).round() / 100.0,
+        buy_usdt_total: (buy_crypto * 100.0).round() / 100.0,
+        sell_usdt_total: (sell_crypto * 100.0).round() / 100.0,
+        total_usdt_volume: ((buy_crypto + sell_crypto) * 100.0).round() / 100.0,
+        matched_usdt_volume: (matched_volume * 100.0).round() / 100.0,
+        net_inventory_usdt: ((buy_crypto - sell_crypto) * 100.0).round() / 100.0,
+        estimated_bank_fees_fiat: (total_bank_fees * 100.0).round() / 100.0,
+        commission_fiat_cost,
+        cancelled_orders,
+        completion_rate_pct,
+        daily_series,
+        top_counterparties: cp_list,
     }
 }
 

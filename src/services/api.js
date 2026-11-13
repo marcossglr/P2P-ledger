@@ -168,7 +168,12 @@ export const operationsApi = {
       return await invoke('get_operations', {
         params: {
           order_type: params.order_type || null,
+          order_status: params.order_status || null,
+          asset: params.asset || null,
           fiat_currency: params.fiat_currency || 'VES',
+          start_date: params.start_date || null,
+          end_date: params.end_date || null,
+          only_today: params.only_today != null ? Boolean(params.only_today) : null,
           search: params.search || null,
         },
       });

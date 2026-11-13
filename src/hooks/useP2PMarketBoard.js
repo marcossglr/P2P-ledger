@@ -130,6 +130,8 @@ export function useP2PMarketBoard({
   stateRef.current = { selectedAsset, selectedBank, amountFilter, onlyMerchants, priceMode };
 
   // --- 4. Ejecución centralizada de la petición a Binance ---
+  const consecutiveErrorsRef = useRef(0);
+
   const fetchMarketStats = useCallback(
     async (overrides = {}) => {
       if (isFetchingRef.current) return;
@@ -162,10 +164,12 @@ export function useP2PMarketBoard({
         const json = await binanceApi.getPublicMarketStats(queryParams);
 
         if (isMountedRef.current) {
+          consecutiveErrorsRef.current = 0;
           setMarketData(json);
           setMarketError(null);
         }
       } catch (err) {
+        consecutiveErrorsRef.current += 1;
         if (isMountedRef.current) {
           setMarketError(err?.message || 'Error al obtener datos de mercado');
         }
@@ -213,13 +217,18 @@ export function useP2PMarketBoard({
     fetchMarketStats();
   }, [fetchMarketStats, refreshTrigger]);
 
-  // Polling continuo inteligente (cada 5-10s)
+  // Polling continuo inteligente con backoff exponencial ante errores de red (5-10s base, escala hasta 30s)
   useEffect(() => {
     let timerId = null;
     let isActive = true;
 
     const scheduleNextPoll = () => {
-      const randomInterval = Math.floor(Math.random() * (10000 - 5000 + 1)) + 5000;
+      // Si hay fallos consecutivos, aplicamos retroceso exponencial progresivo (10s, 20s, max 30s)
+      const errCount = consecutiveErrorsRef.current;
+      const baseMin = errCount === 0 ? 5000 : Math.min(10000 + errCount * 5000, 30000);
+      const baseMax = errCount === 0 ? 10000 : Math.min(baseMin + 5000, 35000);
+      const interval = Math.floor(Math.random() * (baseMax - baseMin + 1)) + baseMin;
+
       timerId = setTimeout(async () => {
         if (!isActive) return;
         if (typeof document === 'undefined' || !document.hidden) {
@@ -228,11 +237,13 @@ export function useP2PMarketBoard({
         if (isActive) {
           scheduleNextPoll();
         }
-      }, randomInterval);
+      }, interval);
     };
 
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && !document.hidden && isActive) {
+        // Al regresar el usuario a la ventana, resetear backoff e intentar de inmediato
+        consecutiveErrorsRef.current = 0;
         fetchMarketStats();
       }
     };

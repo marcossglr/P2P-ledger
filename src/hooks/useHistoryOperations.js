@@ -35,9 +35,11 @@ export function useHistoryOperations({
   });
   const [bankFeePct, setBankFeePct] = useState(0.3);
 
+  const [error, setError] = useState(null);
   const isMountedRef = useRef(true);
   const onPairsDetectedRef = useRef(onPairsDetected);
   onPairsDetectedRef.current = onPairsDetected;
+  const hasDataRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -47,7 +49,7 @@ export function useHistoryOperations({
   }, []);
 
   const fetchHistory = useCallback(async (isInitial = false) => {
-    if (isInitial || !data) {
+    if (isInitial || !hasDataRef.current) {
       if (isMountedRef.current) setLoading(true);
     }
     try {
@@ -65,6 +67,8 @@ export function useHistoryOperations({
       const json = await operationsApi.getOperations(filters);
       if (isMountedRef.current) {
         setData(json);
+        setError(null);
+        hasDataRef.current = true;
       }
 
       if (json?.available_assets && onPairsDetectedRef.current) {
@@ -72,16 +76,19 @@ export function useHistoryOperations({
       }
     } catch (err) {
       console.error('Error cargando histórico de operaciones:', err);
+      if (isMountedRef.current) {
+        setError(err?.message || 'Error cargando datos históricos');
+      }
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
       }
     }
-  }, [data, orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct]);
+  }, [orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct]);
 
   useEffect(() => {
     fetchHistory();
-  }, [orderType, orderStatus, selectedAsset, fiatCurrency, startDate, endDate, bankFeePct, refreshTrigger]);
+  }, [fetchHistory, refreshTrigger]);
 
   // Sincronizar automáticamente la tasa de comisión bancaria configurada en los ajustes de bancos
   useEffect(() => {
@@ -151,6 +158,7 @@ export function useHistoryOperations({
     };
     if (orderType !== 'ALL') filters.order_type = orderType;
     if (orderStatus !== 'ALL') filters.order_status = orderStatus;
+    if (selectedAsset !== 'ALL') filters.asset = selectedAsset;
     if (fiatCurrency !== 'ALL') filters.fiat_currency = fiatCurrency;
     if (startDate) filters.start_date = startDate;
     if (endDate) filters.end_date = endDate;
@@ -160,6 +168,7 @@ export function useHistoryOperations({
   return {
     data,
     loading,
+    error,
     orderType,
     setOrderType,
     orderStatus,

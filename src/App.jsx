@@ -1,20 +1,32 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Radio,
   History,
   Building2,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import OperationsDashboard from './components/views/OperationsDashboard';
-import HistoryOperationsView from './components/views/HistoryOperationsView';
-import TreasuryView from './components/views/TreasuryView';
-import SettingsView from './components/views/SettingsView';
-import BinanceApiModal from './components/modals/BinanceApiModal';
 import AppHeader from './components/layout/AppHeader';
 import OnboardingBanner from './components/layout/OnboardingBanner';
 import { useAppLifecycle } from './hooks/useAppLifecycle';
 import { playCompletedTradeSound } from './utils/audioAlerts';
+
+// Carga diferida (code-splitting) de vistas secundarias y modales de configuración
+const HistoryOperationsView = lazy(() => import('./components/views/HistoryOperationsView'));
+const TreasuryView = lazy(() => import('./components/views/TreasuryView'));
+const SettingsView = lazy(() => import('./components/views/SettingsView'));
+const BinanceApiModal = lazy(() => import('./components/modals/BinanceApiModal'));
+
+function ViewFallback() {
+  return (
+    <div className="flex h-64 w-full items-center justify-center gap-2 text-slate-500">
+      <Loader2 className="h-5 w-5 animate-spin text-amber-500/70" />
+      <span className="font-mono text-xs uppercase tracking-wider">Cargando módulo...</span>
+    </div>
+  );
+}
 
 const ROUTE_TO_VIEW = {
   '/': 'DASHBOARD',
@@ -178,87 +190,93 @@ export default function App() {
 
         {visitedViews.has('HISTORY') && (
           <div className={activeView === 'HISTORY' ? 'contents' : 'hidden'}>
-            <HistoryOperationsView
-              refreshTrigger={refreshTrigger}
-              onNavigateFormulas={() => openSettings('DOCS')}
-              selectedAsset={selectedAsset}
-              onSelectAsset={(asset) => {
-                setSelectedAsset(asset);
-                localStorage.setItem('user_selected_asset', asset);
-              }}
-              availableAssets={availableAssets}
-              fiatCurrency={fiatCurrency}
-              onPairsDetected={(assets, fiats) => {
-                if (assets?.length) setAvailableAssets(assets);
-                if (fiats?.length) setAvailableFiats(fiats);
-              }}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <HistoryOperationsView
+                refreshTrigger={refreshTrigger}
+                onNavigateFormulas={() => openSettings('DOCS')}
+                selectedAsset={selectedAsset}
+                onSelectAsset={(asset) => {
+                  setSelectedAsset(asset);
+                  localStorage.setItem('user_selected_asset', asset);
+                }}
+                availableAssets={availableAssets}
+                fiatCurrency={fiatCurrency}
+                onPairsDetected={(assets, fiats) => {
+                  if (assets?.length) setAvailableAssets(assets);
+                  if (fiats?.length) setAvailableFiats(fiats);
+                }}
+              />
+            </Suspense>
           </div>
         )}
 
         {visitedViews.has('TREASURY') && (
           <div className={activeView === 'TREASURY' ? 'contents' : 'hidden'}>
-            <TreasuryView
-              isActive={activeView === 'TREASURY'}
-              refreshTrigger={refreshTrigger}
-              onInventoryChange={() => setRefreshTrigger((prev) => prev + 1)}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <TreasuryView
+                isActive={activeView === 'TREASURY'}
+                refreshTrigger={refreshTrigger}
+                onInventoryChange={() => setRefreshTrigger((prev) => prev + 1)}
+              />
+            </Suspense>
           </div>
         )}
 
         {visitedViews.has('SETTINGS') && (
           <div className={activeView === 'SETTINGS' ? 'contents' : 'hidden'}>
-            <SettingsView
-              initialSection={settingsSection}
-              health={health}
-              refreshTrigger={refreshTrigger}
-              syncIntervalSeconds={syncIntervalSeconds}
-              onUpdateSyncInterval={(val) => {
-                setSyncIntervalSeconds(val);
-                localStorage.setItem('binance_sync_interval_seconds', String(val));
-              }}
-              soundEnabled={soundEnabled}
-              onToggleSound={(val) => {
-                setSoundEnabled(val);
-                localStorage.setItem('p2p_sound_alerts_enabled', String(val));
-              }}
-              soundNewOrderEnabled={soundNewOrderEnabled}
-              onToggleSoundNewOrder={(val) => {
-                setSoundNewOrderEnabled(val);
-                localStorage.setItem('p2p_sound_new_order_enabled', String(val));
-              }}
-              soundCompletedOrderEnabled={soundCompletedOrderEnabled}
-              onToggleSoundCompletedOrder={(val) => {
-                setSoundCompletedOrderEnabled(val);
-                localStorage.setItem('p2p_sound_completed_order_enabled', String(val));
-              }}
-              toastsEnabled={toastsEnabled}
-              onToggleToasts={(val) => {
-                setToastsEnabled(val);
-                localStorage.setItem('p2p_toasts_enabled', String(val));
-              }}
-              appTheme={appTheme}
-              onUpdateAppTheme={(val) => {
-                setAppTheme(val);
-                localStorage.setItem('p2p_app_theme', val);
-              }}
-              timeFormat={timeFormat}
-              onUpdateTimeFormat={(val) => {
-                setTimeFormat(val);
-                localStorage.setItem('p2p_time_format', val);
-              }}
-              timeShowSeconds={timeShowSeconds}
-              onToggleTimeShowSeconds={(val) => {
-                setTimeShowSeconds(val);
-                localStorage.setItem('p2p_time_show_seconds', String(val));
-              }}
-              onSyncComplete={() => {
-                setRefreshTrigger((prev) => prev + 1);
-                checkHealth();
-              }}
-              onReturnDashboard={() => setActiveView('DASHBOARD')}
-              onNavigateTreasury={() => setActiveView('TREASURY')}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <SettingsView
+                initialSection={settingsSection}
+                health={health}
+                refreshTrigger={refreshTrigger}
+                syncIntervalSeconds={syncIntervalSeconds}
+                onUpdateSyncInterval={(val) => {
+                  setSyncIntervalSeconds(val);
+                  localStorage.setItem('binance_sync_interval_seconds', String(val));
+                }}
+                soundEnabled={soundEnabled}
+                onToggleSound={(val) => {
+                  setSoundEnabled(val);
+                  localStorage.setItem('p2p_sound_alerts_enabled', String(val));
+                }}
+                soundNewOrderEnabled={soundNewOrderEnabled}
+                onToggleSoundNewOrder={(val) => {
+                  setSoundNewOrderEnabled(val);
+                  localStorage.setItem('p2p_sound_new_order_enabled', String(val));
+                }}
+                soundCompletedOrderEnabled={soundCompletedOrderEnabled}
+                onToggleSoundCompletedOrder={(val) => {
+                  setSoundCompletedOrderEnabled(val);
+                  localStorage.setItem('p2p_sound_completed_order_enabled', String(val));
+                }}
+                toastsEnabled={toastsEnabled}
+                onToggleToasts={(val) => {
+                  setToastsEnabled(val);
+                  localStorage.setItem('p2p_toasts_enabled', String(val));
+                }}
+                appTheme={appTheme}
+                onUpdateAppTheme={(val) => {
+                  setAppTheme(val);
+                  localStorage.setItem('p2p_app_theme', val);
+                }}
+                timeFormat={timeFormat}
+                onUpdateTimeFormat={(val) => {
+                  setTimeFormat(val);
+                  localStorage.setItem('p2p_time_format', val);
+                }}
+                timeShowSeconds={timeShowSeconds}
+                onToggleTimeShowSeconds={(val) => {
+                  setTimeShowSeconds(val);
+                  localStorage.setItem('p2p_time_show_seconds', String(val));
+                }}
+                onSyncComplete={() => {
+                  setRefreshTrigger((prev) => prev + 1);
+                  checkHealth();
+                }}
+                onReturnDashboard={() => setActiveView('DASHBOARD')}
+                onNavigateTreasury={() => setActiveView('TREASURY')}
+              />
+            </Suspense>
           </div>
         )}
       </main>
@@ -272,16 +290,20 @@ export default function App() {
       )}
 
       {/* Modal de Configuración de API Binance */}
-      <BinanceApiModal
-        isOpen={isApiModalOpen}
-        onClose={() => setIsApiModalOpen(false)}
-        apiConfigured={health.binance_api_configured}
-        maskedKey={health.masked_api_key}
-        onSyncComplete={() => {
-          setRefreshTrigger((prev) => prev + 1);
-          checkHealth();
-        }}
-      />
+      {isApiModalOpen && (
+        <Suspense fallback={null}>
+          <BinanceApiModal
+            isOpen={isApiModalOpen}
+            onClose={() => setIsApiModalOpen(false)}
+            apiConfigured={health.binance_api_configured}
+            maskedKey={health.masked_api_key}
+            onSyncComplete={() => {
+              setRefreshTrigger((prev) => prev + 1);
+              checkHealth();
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
