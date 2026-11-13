@@ -68,7 +68,7 @@ jobs:
         run: npm install
 
       - name: Compilar paquete nativo Linux con Tauri (.rpm / .deb / .AppImage)
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -104,7 +104,7 @@ jobs:
         run: npm install
 
       - name: Compilar instalador nativo Windows con Tauri (.exe / .msi)
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
