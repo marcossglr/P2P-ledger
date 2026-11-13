@@ -112,10 +112,38 @@ export const binanceApi = {
         },
       });
     }
-    return { best_buy: 0, best_sell: 0, spread: 0, spread_pct: 0, buy_ads_count: 0, sell_ads_count: 0, buy_avg_price: 0, sell_avg_price: 0 };
+    return {
+      asset: params.asset || 'USDT',
+      fiat: params.fiat || 'VES',
+      buy: { stats: {}, total_reported: 0, ads: [] },
+      sell: { stats: {}, total_reported: 0, ads: [] },
+      spread: { absolute: null, percent: null },
+      latency_ms: 0,
+      fetched_at: new Date().toISOString(),
+    };
   },
-  getPaymentMethods: async () => [],
-  getCryptoAssets: async () => ['USDT', 'BTC', 'ETH'],
+  getPaymentMethods: async (fiat = 'VES') => {
+    if (isTauriDesktop()) {
+      return await invoke('get_payment_methods', { fiat });
+    }
+    return { fiat: fiat || 'VES', total: 0, methods: [] };
+  },
+  getCryptoAssets: async (fiat = 'VES') => {
+    if (isTauriDesktop()) {
+      return await invoke('get_crypto_assets', { fiat });
+    }
+    return {
+      fiat: fiat || 'VES',
+      total: 5,
+      assets: [
+        { id: 'USDT', label: 'USDT', name: 'Tether' },
+        { id: 'BTC', label: 'BTC', name: 'Bitcoin' },
+        { id: 'ETH', label: 'ETH', name: 'Ethereum' },
+        { id: 'USDC', label: 'USDC', name: 'USD Coin' },
+        { id: 'BNB', label: 'BNB', name: 'BNB' },
+      ],
+    };
+  },
 };
 
 // ==========================================

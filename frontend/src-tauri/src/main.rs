@@ -37,6 +37,8 @@ use commands::binance::{
     get_public_market_config,
     save_public_market_config,
     get_public_market_stats,
+    get_payment_methods,
+    get_crypto_assets,
 };
 
 const LEGACY_IDENTIFIER: &str = "com.p2pledger.app";
@@ -99,7 +101,9 @@ fn main() {
             get_my_ads,
             get_public_market_config,
             save_public_market_config,
-            get_public_market_stats
+            get_public_market_stats,
+            get_payment_methods,
+            get_crypto_assets
         ])
         .setup(|app| {
             // 1. Migrar datos de versiones anteriores

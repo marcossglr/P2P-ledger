@@ -58,16 +58,77 @@ pub struct SyncResult {
     pub period: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PublicMarketStats {
-    pub best_buy: f64,
-    pub best_sell: f64,
-    pub spread: f64,
-    pub spread_pct: f64,
-    pub buy_ads_count: usize,
-    pub sell_ads_count: usize,
-    pub buy_avg_price: f64,
-    pub sell_avg_price: f64,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct P2PNormalizedAd {
+    pub adv_no: String,
+    pub trade_type: String,
+    pub asset: String,
+    pub fiat: String,
+    pub price: f64,
+    pub available_qty: f64,
+    pub min_fiat: f64,
+    pub max_fiat: f64,
+    pub pay_methods: Vec<String>,
+    pub pay_identifiers: Vec<String>,
+    pub advertiser: String,
+    pub user_type: String,
+    pub month_orders: i64,
+    pub month_finish_rate: f64,
+    pub positive_rate: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct P2PSideStats {
+    pub count: usize,
+    pub best: Option<f64>,
+    pub worst: Option<f64>,
+    pub avg: Option<f64>,
+    pub median: Option<f64>,
+    pub top_avg: Option<f64>,
+    pub weighted_avg: Option<f64>,
+    pub total_available: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct P2PSideResult {
+    pub stats: P2PSideStats,
+    pub total_reported: usize,
+    pub ads: Vec<P2PNormalizedAd>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct P2PSpreadInfo {
+    pub absolute: Option<f64>,
+    pub percent: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PublicMarketSnapshot {
+    pub asset: String,
+    pub fiat: String,
+    pub buy: P2PSideResult,
+    pub sell: P2PSideResult,
+    pub spread: P2PSpreadInfo,
+    pub latency_ms: u128,
+    pub fetched_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BinancePaymentMethod {
+    pub identifier: String,
+    pub name: String,
+    pub short_name: Option<String>,
+    pub bg_color: Option<String>,
+    pub icon_url: Option<String>,
+    pub is_hot: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BinanceCryptoAsset {
+    pub id: String,
+    pub label: String,
+    pub name: String,
+    pub icon_url: Option<String>,
 }
 
 pub fn get_saved_config(conn: &Connection) -> Result<BinanceConfigResponse, rusqlite::Error> {
@@ -485,21 +546,178 @@ pub fn sync_orders_to_db(
 // ---------------------------------------------------------------------------
 // 4. Public Market Stats & Depth
 // ---------------------------------------------------------------------------
-pub fn fetch_public_market_stats(
+
+fn parse_safe_f64(val: Option<&serde_json::Value>) -> f64 {
+    match val {
+        Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+        Some(serde_json::Value::String(s)) => s.parse::<f64>().unwrap_or(0.0),
+        _ => 0.0,
+    }
+}
+
+fn parse_safe_i64(val: Option<&serde_json::Value>) -> i64 {
+    match val {
+        Some(serde_json::Value::Number(n)) => n.as_i64().unwrap_or(0),
+        Some(serde_json::Value::String(s)) => s.parse::<i64>().unwrap_or(0),
+        _ => 0,
+    }
+}
+
+fn normalize_p2p_ad(item: &serde_json::Value) -> Option<P2PNormalizedAd> {
+    let adv = item.get("adv")?;
+    let advertiser = item.get("advertiser");
+
+    let price = parse_safe_f64(adv.get("price"));
+    if price <= 0.0 {
+        return None;
+    }
+
+    let surplus_amt = parse_safe_f64(adv.get("surplusAmount"));
+    let tradable_qty = parse_safe_f64(adv.get("tradableQuantity"));
+    let available_qty = if surplus_amt > 0.0 { surplus_amt } else { tradable_qty };
+
+    let min_fiat = parse_safe_f64(adv.get("minSingleTransAmount"));
+    let dyn_max = parse_safe_f64(adv.get("dynamicMaxSingleTransAmount"));
+    let max_trans = parse_safe_f64(adv.get("maxSingleTransAmount"));
+    let max_fiat = if dyn_max > 0.0 { dyn_max } else { max_trans };
+
+    let mut pay_methods = Vec::new();
+    let mut pay_identifiers = Vec::new();
+    if let Some(tms) = adv.get("tradeMethods").and_then(|v| v.as_array()) {
+        for tm in tms {
+            let ident = tm.get("identifier").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let name = tm.get("tradeMethodName").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if !name.is_empty() {
+                pay_methods.push(name.clone());
+            } else if !ident.is_empty() {
+                pay_methods.push(ident.clone());
+            }
+
+            if !ident.is_empty() {
+                pay_identifiers.push(ident);
+            } else if !name.is_empty() {
+                pay_identifiers.push(name);
+            }
+        }
+    }
+
+    let nick_name = advertiser
+        .and_then(|a| a.get("nickName"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("-")
+        .to_string();
+
+    let user_type = advertiser
+        .and_then(|a| a.get("userType"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("user")
+        .to_string();
+
+    let month_orders = advertiser
+        .and_then(|a| a.get("monthOrderCount"))
+        .map(|v| parse_safe_i64(Some(v)))
+        .unwrap_or(0);
+
+    let month_finish_rate = advertiser
+        .and_then(|a| a.get("monthFinishRate"))
+        .map(|v| parse_safe_f64(Some(v)))
+        .unwrap_or(0.0);
+
+    let positive_rate = advertiser
+        .and_then(|a| a.get("positiveRate"))
+        .map(|v| parse_safe_f64(Some(v)))
+        .unwrap_or(0.0);
+
+    Some(P2PNormalizedAd {
+        adv_no: adv.get("advNo").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        trade_type: adv.get("tradeType").and_then(|v| v.as_str()).unwrap_or("").to_uppercase(),
+        asset: adv.get("asset").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        fiat: adv.get("fiatUnit").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        price,
+        available_qty,
+        min_fiat,
+        max_fiat,
+        pay_methods,
+        pay_identifiers,
+        advertiser: nick_name,
+        user_type,
+        month_orders,
+        month_finish_rate,
+        positive_rate,
+    })
+}
+
+fn compute_side_stats_from_ads(ads: &[P2PNormalizedAd], trade_type: &str, top_n: usize) -> P2PSideStats {
+    let mut prices: Vec<f64> = ads.iter().map(|a| a.price).filter(|&p| p > 0.0).collect();
+    if prices.is_empty() {
+        return P2PSideStats {
+            count: 0,
+            best: None,
+            worst: None,
+            avg: None,
+            median: None,
+            top_avg: None,
+            weighted_avg: None,
+            total_available: 0.0,
+        };
+    }
+
+    if trade_type.eq_ignore_ascii_case("BUY") {
+        prices.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    } else {
+        prices.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    }
+
+    let count = prices.len();
+    let best = prices.first().copied();
+    let worst = prices.last().copied();
+    let avg = Some(prices.iter().sum::<f64>() / count as f64);
+
+    let median = if count % 2 == 1 {
+        Some(prices[count / 2])
+    } else {
+        Some((prices[count / 2 - 1] + prices[count / 2]) / 2.0)
+    };
+
+    let take_n = top_n.max(1).min(count);
+    let top_avg = Some(prices.iter().take(take_n).sum::<f64>() / take_n as f64);
+
+    let total_available: f64 = ads.iter().map(|a| a.available_qty).sum();
+    let weighted_avg = if total_available > 0.0 {
+        let weighted_sum: f64 = ads.iter().map(|a| a.price * a.available_qty).sum();
+        Some(weighted_sum / total_available)
+    } else {
+        top_avg
+    };
+
+    P2PSideStats {
+        count,
+        best: best.map(|v| (v * 10000.0).round() / 10000.0),
+        worst: worst.map(|v| (v * 10000.0).round() / 10000.0),
+        avg: avg.map(|v| (v * 10000.0).round() / 10000.0),
+        median: median.map(|v| (v * 10000.0).round() / 10000.0),
+        top_avg: top_avg.map(|v| (v * 10000.0).round() / 10000.0),
+        weighted_avg: weighted_avg.map(|v| (v * 10000.0).round() / 10000.0),
+        total_available: (total_available * 100.0).round() / 100.0,
+    }
+}
+
+pub fn fetch_public_market_snapshot(
     fiat: &str,
     asset: &str,
     pay_types: &[String],
     amount: Option<f64>,
     only_merchants: bool,
-) -> Result<PublicMarketStats, String> {
+) -> Result<PublicMarketSnapshot, String> {
+    let start_time = std::time::Instant::now();
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(12))
         .build()
         .map_err(|e| e.to_string())?;
 
     let publisher_type = if only_merchants { Some("merchant") } else { None };
 
-    let fetch_side = |trade_type: &str| -> Result<Vec<f64>, String> {
+    let fetch_side = |trade_type: &str| -> Result<(usize, Vec<P2PNormalizedAd>), String> {
         let body = serde_json::json!({
             "asset": asset,
             "fiat": fiat,
@@ -509,7 +727,10 @@ pub fn fetch_public_market_stats(
             "publisherType": publisher_type,
             "rows": 20,
             "tradeType": trade_type,
-            "transAmount": amount
+            "transAmount": amount,
+            "countries": [],
+            "proMerchantAds": false,
+            "shieldMerchantAds": false
         });
 
         let url = format!("{}/bapi/c2c/v2/friendly/c2c/adv/search", P2P_PUBLIC_BASE_URL);
@@ -524,65 +745,198 @@ pub fn fetch_public_market_stats(
             .map_err(|e| format!("Error consultando mercado público P2P: {}", e))?;
 
         if !resp.status().is_success() {
-            return Ok(Vec::new());
+            return Ok((0, Vec::new()));
         }
 
         let data: serde_json::Value = resp.json().unwrap_or_default();
-        let ads = data.get("data").and_then(|v| v.as_array());
+        let total = parse_safe_i64(data.get("total")) as usize;
+        let mut ads = Vec::new();
 
-        let mut prices = Vec::new();
-        if let Some(ads_list) = ads {
-            for ad in ads_list {
-                if let Some(adv) = ad.get("adv") {
-                    if let Some(price_str) = adv.get("price").and_then(|v| v.as_str()) {
-                        if let Ok(p) = price_str.parse::<f64>() {
-                            if p > 0.0 {
-                                prices.push(p);
-                            }
+        if let Some(items) = data.get("data").and_then(|v| v.as_array()) {
+            for item in items {
+                if let Some(norm) = normalize_p2p_ad(item) {
+                    ads.push(norm);
+                }
+            }
+        }
+
+        Ok((total, ads))
+    };
+
+    let (buy_total, buy_ads) = fetch_side("BUY")?;
+    let (sell_total, sell_ads) = fetch_side("SELL")?;
+
+    let buy_stats = compute_side_stats_from_ads(&buy_ads, "BUY", 5);
+    let sell_stats = compute_side_stats_from_ads(&sell_ads, "SELL", 5);
+
+    let mut spread_abs = None;
+    let mut spread_pct = None;
+    if let (Some(b_best), Some(s_best)) = (buy_stats.best, sell_stats.best) {
+        let abs = b_best - s_best;
+        spread_abs = Some((abs * 10000.0).round() / 10000.0);
+        if s_best > 0.0 {
+            spread_pct = Some(((abs / s_best) * 10000.0).round() / 100.0);
+        }
+    }
+
+    let latency_ms = start_time.elapsed().as_millis();
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+
+    Ok(PublicMarketSnapshot {
+        asset: asset.to_uppercase(),
+        fiat: fiat.to_uppercase(),
+        buy: P2PSideResult {
+            stats: buy_stats,
+            total_reported: buy_total,
+            ads: buy_ads,
+        },
+        sell: P2PSideResult {
+            stats: sell_stats,
+            total_reported: sell_total,
+            ads: sell_ads,
+        },
+        spread: P2PSpreadInfo {
+            absolute: spread_abs,
+            percent: spread_pct,
+        },
+        latency_ms,
+        fetched_at,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// 5. Binance Fiat Payment Methods & Supported Crypto Assets
+// ---------------------------------------------------------------------------
+
+pub fn fetch_binance_payment_methods(fiat: &str) -> Result<Vec<BinancePaymentMethod>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let fiat_clean = fiat.trim().to_uppercase();
+    let url = format!("{}/bapi/c2c/v2/public/c2c/adv/filter-conditions", P2P_PUBLIC_BASE_URL);
+
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+        .header("Origin", P2P_PUBLIC_BASE_URL)
+        .json(&serde_json::json!({ "fiat": fiat_clean }))
+        .send()
+        .map_err(|e| format!("Error consultando métodos de pago P2P: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let data: serde_json::Value = resp.json().unwrap_or_default();
+    let raw_methods = data.get("data").and_then(|d| d.get("tradeMethods")).and_then(|v| v.as_array());
+
+    let mut result = Vec::new();
+    if let Some(methods) = raw_methods {
+        for (idx, m) in methods.iter().enumerate() {
+            let ident = m.get("identifier").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let name = m.get("tradeMethodName").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let short_name = m.get("tradeMethodShortName").and_then(|v| v.as_str()).map(|s| s.trim().to_string());
+            let bg_color = m.get("tradeMethodBgColor").and_then(|v| v.as_str()).map(|s| s.trim().to_string());
+            let icon_url = m.get("iconUrlColor").and_then(|v| v.as_str()).map(|s| s.trim().to_string());
+
+            let display_ident = if !ident.is_empty() { ident } else { name.clone() };
+            let display_name = if !name.is_empty() { name } else { display_ident.clone() };
+
+            if !display_ident.is_empty() || !display_name.is_empty() {
+                result.push(BinancePaymentMethod {
+                    identifier: display_ident,
+                    name: display_name,
+                    short_name,
+                    bg_color,
+                    icon_url,
+                    is_hot: idx < 6,
+                });
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+pub fn fetch_binance_crypto_assets(fiat: &str) -> Result<Vec<BinanceCryptoAsset>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let fiat_clean = fiat.trim().to_uppercase();
+    let url = format!("{}/bapi/c2c/v2/friendly/c2c/portal/config", P2P_PUBLIC_BASE_URL);
+
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+        .header("Origin", P2P_PUBLIC_BASE_URL)
+        .json(&serde_json::json!({ "fiat": fiat_clean }))
+        .send()
+        .map_err(|e| format!("Error consultando criptoactivos P2P: {}", e))?;
+
+    let fallback = vec![
+        BinanceCryptoAsset { id: "USDT".to_string(), label: "USDT".to_string(), name: "Tether".to_string(), icon_url: None },
+        BinanceCryptoAsset { id: "BTC".to_string(), label: "BTC".to_string(), name: "Bitcoin".to_string(), icon_url: None },
+        BinanceCryptoAsset { id: "ETH".to_string(), label: "ETH".to_string(), name: "Ethereum".to_string(), icon_url: None },
+        BinanceCryptoAsset { id: "USDC".to_string(), label: "USDC".to_string(), name: "USD Coin".to_string(), icon_url: None },
+        BinanceCryptoAsset { id: "BNB".to_string(), label: "BNB".to_string(), name: "BNB".to_string(), icon_url: None },
+    ];
+
+    if !resp.status().is_success() {
+        return Ok(fallback);
+    }
+
+    let data: serde_json::Value = resp.json().unwrap_or_default();
+    let areas = data.get("data").and_then(|d| d.get("areas")).and_then(|v| v.as_array());
+
+    if let Some(area_list) = areas {
+        let p2p_area = area_list.iter().find(|a| {
+            a.get("area").and_then(|v| v.as_str()) == Some("P2P")
+        }).or_else(|| {
+            area_list.iter().find(|a| a.get("area").and_then(|v| v.as_str()) == Some("EXPRESS"))
+        });
+
+        if let Some(area) = p2p_area {
+            let trade_sides = area.get("tradeSides").and_then(|v| v.as_array());
+            let side = trade_sides.and_then(|sides| {
+                sides.iter().find(|s| s.get("side").and_then(|v| v.as_str()) == Some("BUY"))
+                    .or_else(|| sides.first())
+            });
+
+            if let Some(side_obj) = side {
+                if let Some(assets) = side_obj.get("assets").and_then(|v| v.as_array()) {
+                    let mut seen = std::collections::HashSet::new();
+                    let mut result = Vec::new();
+
+                    for item in assets {
+                        let sym = item.get("asset").and_then(|v| v.as_str()).unwrap_or("").trim().to_uppercase();
+                        if sym.is_empty() || seen.contains(&sym) {
+                            continue;
                         }
+                        seen.insert(sym.clone());
+                        let desc = item.get("description").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                        let icon = item.get("iconUrl").and_then(|v| v.as_str()).map(|s| s.trim().to_string());
+
+                        result.push(BinanceCryptoAsset {
+                            id: sym.clone(),
+                            label: sym.clone(),
+                            name: if !desc.is_empty() { desc } else { sym },
+                            icon_url: icon,
+                        });
+                    }
+
+                    if !result.is_empty() {
+                        return Ok(result);
                     }
                 }
             }
         }
-        Ok(prices)
-    };
+    }
 
-    let buy_prices = fetch_side("BUY")?;
-    let sell_prices = fetch_side("SELL")?;
-
-    let best_buy = buy_prices.first().copied().unwrap_or(0.0);
-    let best_sell = sell_prices.first().copied().unwrap_or(0.0);
-    let spread = if best_buy > 0.0 && best_sell > 0.0 {
-        (best_sell - best_buy).abs()
-    } else {
-        0.0
-    };
-    let spread_pct = if best_buy > 0.0 {
-        (spread / best_buy) * 100.0
-    } else {
-        0.0
-    };
-
-    let buy_avg = if !buy_prices.is_empty() {
-        buy_prices.iter().take(5).sum::<f64>() / buy_prices.len().min(5) as f64
-    } else {
-        0.0
-    };
-
-    let sell_avg = if !sell_prices.is_empty() {
-        sell_prices.iter().take(5).sum::<f64>() / sell_prices.len().min(5) as f64
-    } else {
-        0.0
-    };
-
-    Ok(PublicMarketStats {
-        best_buy,
-        best_sell,
-        spread: (spread * 100.0).round() / 100.0,
-        spread_pct: (spread_pct * 100.0).round() / 100.0,
-        buy_ads_count: buy_prices.len(),
-        sell_ads_count: sell_prices.len(),
-        buy_avg_price: (buy_avg * 100.0).round() / 100.0,
-        sell_avg_price: (sell_avg * 100.0).round() / 100.0,
-    })
+    Ok(fallback)
 }

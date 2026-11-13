@@ -3,8 +3,10 @@ use tauri::State;
 use crate::db::DbState;
 use crate::services::binance::{
     get_saved_config, save_config, clear_config, fetch_funding_asset_balance,
-    sync_orders_to_db, fetch_public_market_stats, BinanceConfigResponse,
-    FundingWalletResponse, SyncResult, PublicMarketStats,
+    sync_orders_to_db, fetch_public_market_snapshot,
+    fetch_binance_payment_methods, fetch_binance_crypto_assets,
+    BinanceConfigResponse, FundingWalletResponse, SyncResult,
+    PublicMarketSnapshot, BinancePaymentMethod, BinanceCryptoAsset,
 };
 
 #[derive(Debug, Deserialize)]
@@ -176,7 +178,7 @@ pub fn save_public_market_config(
 #[tauri::command]
 pub fn get_public_market_stats(
     query: Option<PublicMarketStatsQuery>,
-) -> Result<PublicMarketStats, String> {
+) -> Result<PublicMarketSnapshot, String> {
     let q = query.unwrap_or(PublicMarketStatsQuery {
         asset: None,
         fiat: None,
@@ -196,5 +198,47 @@ pub fn get_public_market_stats(
     }
 
     let only_merchants = q.only_merchants.unwrap_or(false);
-    fetch_public_market_stats(&fiat, &asset, &pay_types, q.amount, only_merchants)
+    fetch_public_market_snapshot(&fiat, &asset, &pay_types, q.amount, only_merchants)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BinancePaymentMethodsResponse {
+    pub fiat: String,
+    pub total: usize,
+    pub methods: Vec<BinancePaymentMethod>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BinanceCryptoAssetsResponse {
+    pub fiat: String,
+    pub total: usize,
+    pub assets: Vec<BinanceCryptoAsset>,
+}
+
+#[tauri::command]
+pub fn get_payment_methods(
+    fiat: Option<String>,
+) -> Result<BinancePaymentMethodsResponse, String> {
+    let f = fiat.unwrap_or_else(|| "VES".to_string());
+    let methods = fetch_binance_payment_methods(&f)?;
+    let total = methods.len();
+    Ok(BinancePaymentMethodsResponse {
+        fiat: f.to_uppercase(),
+        total,
+        methods,
+    })
+}
+
+#[tauri::command]
+pub fn get_crypto_assets(
+    fiat: Option<String>,
+) -> Result<BinanceCryptoAssetsResponse, String> {
+    let f = fiat.unwrap_or_else(|| "VES".to_string());
+    let assets = fetch_binance_crypto_assets(&f)?;
+    let total = assets.len();
+    Ok(BinanceCryptoAssetsResponse {
+        fiat: f.to_uppercase(),
+        total,
+        assets,
+    })
 }
