@@ -61,18 +61,11 @@ if [ -f "$PACKAGE_JSON" ]; then
     echo -e "  ${GREEN}✓${NC} Actualizado: frontend/package.json"
 fi
 
-# 4. backend/app/config.py
-CONFIG_PY="$PROJECT_ROOT/backend/app/config.py"
-if [ -f "$CONFIG_PY" ]; then
-    sed -i -E "s/VERSION:\s*str\s*=\s*\"[^\"]+\"/VERSION: str = \"$NEW_VERSION\"/" "$CONFIG_PY"
-    echo -e "  ${GREEN}✓${NC} Actualizado: backend/app/config.py"
-fi
-
 echo ""
 echo -e "${BLUE}==> Creando commit y tag git...${NC}"
 cd "$PROJECT_ROOT"
 
-git add "$TAURI_CONF" "$CARGO_TOML" "$PACKAGE_JSON" "$CONFIG_PY"
+git add "$TAURI_CONF" "$CARGO_TOML" "$PACKAGE_JSON"
 git commit -m "chore(release): bump version to $NEW_VERSION"
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 

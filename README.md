@@ -61,10 +61,9 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
 │   │   └── src/
 │   │       ├── main.rs         # Punto de entrada Tauri y registro de comandos IPC
 │   │       ├── db/             # Conexión SQLite embebida y migraciones automáticas
-│   │       ├── services/       # Lógica financiera (inventario bancario, analítica, Binance)
+│   │       ├── services/       # Lógica financiera (inventario bancario, analítica, Binance, backups)
 │   │       └── commands/       # Handlers de comandos Tauri expuestos al frontend
 │   └── package.json            # Dependencias del cliente web y scripts
-├── backend/                    # Código fuente legacy en Python (conservado para referencia histórica)
 ├── scripts/
 │   └── bump_version.sh         # Script automatizado de versionado SemVer y tags de release
 ├── AGENTS.md                   # Estándares de desarrollo y reglas de interfaz Desktop-First

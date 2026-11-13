@@ -4,7 +4,7 @@ Herramienta de sincronización y validación de versión unificada para P2P Ledg
 Actualiza atómicamente:
 - frontend/package.json
 - frontend/src-tauri/tauri.conf.json
-- backend/app/config.py
+- frontend/src-tauri/Cargo.toml
 """
 
 import sys
@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 PACKAGE_JSON = ROOT_DIR / "frontend" / "package.json"
 TAURI_CONF = ROOT_DIR / "frontend" / "src-tauri" / "tauri.conf.json"
-CONFIG_PY = ROOT_DIR / "backend" / "app" / "config.py"
+CARGO_TOML = ROOT_DIR / "frontend" / "src-tauri" / "Cargo.toml"
 
 SEMVER_REGEX = r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$"
 
@@ -31,11 +31,11 @@ def get_current_versions() -> dict:
         data = json.loads(TAURI_CONF.read_text(encoding="utf-8"))
         versions["tauri.conf.json"] = data.get("version") or data.get("package", {}).get("version")
 
-    if CONFIG_PY.exists():
-        content = CONFIG_PY.read_text(encoding="utf-8")
-        match = re.search(r'VERSION:\s*str\s*=\s*["\']([^"\']+)["\']', content)
+    if CARGO_TOML.exists():
+        content = CARGO_TOML.read_text(encoding="utf-8")
+        match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
         if match:
-            versions["backend/app/config.py"] = match.group(1)
+            versions["frontend/src-tauri/Cargo.toml"] = match.group(1)
 
     return versions
 
@@ -64,16 +64,18 @@ def set_version(new_version: str):
         TAURI_CONF.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         print(f" ✓ {TAURI_CONF.relative_to(ROOT_DIR)}")
 
-    # 3. backend/app/config.py
-    if CONFIG_PY.exists():
-        content = CONFIG_PY.read_text(encoding="utf-8")
+    # 3. Cargo.toml
+    if CARGO_TOML.exists():
+        content = CARGO_TOML.read_text(encoding="utf-8")
         updated = re.sub(
-            r'VERSION:\s*str\s*=\s*["\'][^"\']+["\']',
-            f'VERSION: str = "{new_version}"',
+            r'^version\s*=\s*["\'][^"\']+["\']',
+            f'version = "{new_version}"',
             content,
+            count=1,
+            flags=re.MULTILINE,
         )
-        CONFIG_PY.write_text(updated, encoding="utf-8")
-        print(f" ✓ {CONFIG_PY.relative_to(ROOT_DIR)}")
+        CARGO_TOML.write_text(updated, encoding="utf-8")
+        print(f" ✓ {CARGO_TOML.relative_to(ROOT_DIR)}")
 
     print(f"\nSincronización completa: v{new_version}")
 

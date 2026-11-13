@@ -1,15 +1,5 @@
 version: 2
 updates:
-  # Backend Python dependencies
-  - package-ecosystem: "pip"
-    directory: "/backend"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "backend"
-
   # Frontend Node.js dependencies
   - package-ecosystem: "npm"
     directory: "/frontend"
