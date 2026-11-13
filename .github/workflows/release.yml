@@ -59,31 +59,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package.json
 
-      - name: Configurar Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
-
-      - name: Empaquetar Backend Sidecar con PyInstaller (Baseline x86-64 Universal)
-        run: |
-          python -m pip install --upgrade pip wheel
-          pip install --no-binary=:all: pyinstaller
-          pip install -r backend/requirements.txt
-          mkdir -p frontend/src-tauri/binaries
-          pyinstaller --onefile \
-            --name p2p-ledger-backend-x86_64-unknown-linux-gnu \
-            --add-data "backend/alembic.ini:." \
-            --add-data "backend/alembic:alembic" \
-            --collect-data certifi \
-            --clean \
-            backend/desktop_entry.py
-          mv dist/p2p-ledger-backend-x86_64-unknown-linux-gnu frontend/src-tauri/binaries/
 
       - name: Instalar dependencias del Frontend
         run: |
@@ -100,7 +79,7 @@ jobs:
           projectPath: frontend
           tagName: ${{ needs.resolve-tag.outputs.tag }}
           releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
-          releaseBody: 'Release multiplataforma para P2P Ledger con soporte de auto-actualizaciones.'
+          releaseBody: 'Release nativo multiplataforma en Rust para P2P Ledger con soporte de auto-actualizaciones.'
           releaseDraft: false
           prerelease: false
 
@@ -119,24 +98,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package.json
 
-      - name: Configurar Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-
-      - name: Empaquetar Backend Sidecar con PyInstaller en Windows
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt pyinstaller
-          New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries
-          pyinstaller --onefile --name p2p-ledger-backend-x86_64-pc-windows-msvc --add-data "backend/alembic.ini;." --add-data "backend/alembic;alembic" --collect-data certifi --clean backend/desktop_entry.py
-          Copy-Item -Path dist/p2p-ledger-backend-x86_64-pc-windows-msvc.exe -Destination frontend/src-tauri/binaries/p2p-ledger-backend-x86_64-pc-windows-msvc.exe
 
       - name: Instalar dependencias del Frontend
         run: |
@@ -153,5 +118,6 @@ jobs:
           projectPath: frontend
           tagName: ${{ needs.resolve-tag.outputs.tag }}
           releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
+          releaseBody: 'Release nativo multiplataforma en Rust para P2P Ledger con soporte de auto-actualizaciones.'
           releaseDraft: false
           prerelease: false
