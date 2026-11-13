@@ -37,7 +37,7 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
   * Comunicación frontend-backend mediante IPC (In-Process Communication) en memoria, sin sobrecarga HTTP ni colisiones de puertos.
 * **Frontend:**
   * [React 18](https://react.dev/) + [Vite](https://vitejs.dev/) + [Tailwind CSS](https://tailwindcss.com/)
-  * Sistema centralizado de componentes primitivos (`frontend/src/components/ui/`) bajo diseño compacto, denso y sin barras de scroll forzadas.
+  * Sistema centralizado de componentes primitivos (`src/components/ui/`) bajo diseño compacto, denso y sin barras de scroll forzadas.
   * [Lucide Icons](https://lucide.dev/) y Recharts para analítica financiera.
   * [Vitest](https://vitest.dev/) para pruebas unitarias.
 * **Documentación Matemática y Financiera Integrada:**
@@ -49,21 +49,20 @@ Plataforma de escritorio integral y local para comerciantes y mesas de arbitraje
 
 ```text
 .
-├── frontend/
-│   ├── src/
-│   │   ├── components/         # Vistas modulares (Operations, Treasury, History, Settings, ui/)
-│   │   ├── services/           # Clientes Tauri IPC para invocación de comandos Rust
-│   │   ├── test/               # Pruebas unitarias del frontend (Vitest)
-│   │   └── utils/              # Funciones auxiliares y formateadores numéricos
-│   ├── src-tauri/              # Backend nativo y configuración de escritorio (Tauri Rust)
-│   │   ├── Cargo.toml          # Dependencias y metadatos de Rust
-│   │   ├── tauri.conf.json     # Configuración de ventanas, paquetes y auto-actualizador
-│   │   └── src/
-│   │       ├── main.rs         # Punto de entrada Tauri y registro de comandos IPC
-│   │       ├── db/             # Conexión SQLite embebida y migraciones automáticas
-│   │       ├── services/       # Lógica financiera (inventario bancario, analítica, Binance, backups)
-│   │       └── commands/       # Handlers de comandos Tauri expuestos al frontend
-│   └── package.json            # Dependencias del cliente web y scripts
+├── src/                        # Interfaz React
+│   ├── components/             # Vistas modulares (Operations, Treasury, History, Settings, ui/)
+│   ├── services/               # Clientes Tauri IPC para invocación de comandos Rust
+│   ├── test/                   # Pruebas unitarias del frontend (Vitest)
+│   └── utils/                  # Funciones auxiliares y formateadores numéricos
+├── src-tauri/                  # Backend nativo y configuración de escritorio (Tauri Rust)
+│   ├── Cargo.toml              # Dependencias y metadatos de Rust
+│   ├── tauri.conf.json         # Configuración de ventanas, paquetes y auto-actualizador
+│   └── src/
+│       ├── main.rs             # Punto de entrada Tauri y registro de comandos IPC
+│       ├── db/                 # Conexión SQLite embebida y migraciones automáticas
+│       ├── services/           # Lógica financiera (inventario bancario, analítica, Binance, backups)
+│       └── commands/           # Handlers de comandos Tauri expuestos al frontend
+├── package.json                # Dependencias del cliente web y scripts
 ├── scripts/
 │   └── bump_version.sh         # Script automatizado de versionado SemVer y tags de release
 ├── AGENTS.md                   # Estándares de desarrollo y reglas de interfaz Desktop-First
@@ -107,7 +106,7 @@ Genera el paquete ejecutable nativo según tu sistema operativo (`.rpm` en Fedor
 ```bash
 ./run.sh build
 ```
-Los archivos compilados se encontrarán en `frontend/src-tauri/target/release/bundle/`.
+Los archivos compilados se encontrarán en `src-tauri/target/release/bundle/`.
 
 #### 3. Ejecutar Pruebas Automatizadas
 Ejecuta la suite de pruebas del backend en Rust y del frontend en Vitest:

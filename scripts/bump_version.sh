@@ -40,25 +40,25 @@ fi
 
 echo -e "${BLUE}==> Sincronizando versión a ${GREEN}${NEW_VERSION}${NC}..."
 
-# 1. frontend/src-tauri/tauri.conf.json
-TAURI_CONF="$PROJECT_ROOT/frontend/src-tauri/tauri.conf.json"
+# 1. src-tauri/tauri.conf.json
+TAURI_CONF="$PROJECT_ROOT/src-tauri/tauri.conf.json"
 if [ -f "$TAURI_CONF" ]; then
     sed -i -E "s/(\"version\":\s*\")[^\"]+(\")/\1$NEW_VERSION\2/" "$TAURI_CONF"
-    echo -e "  ${GREEN}✓${NC} Actualizado: frontend/src-tauri/tauri.conf.json"
+    echo -e "  ${GREEN}✓${NC} Actualizado: src-tauri/tauri.conf.json"
 fi
 
-# 2. frontend/src-tauri/Cargo.toml (solo el version del paquete raíz)
-CARGO_TOML="$PROJECT_ROOT/frontend/src-tauri/Cargo.toml"
+# 2. src-tauri/Cargo.toml (solo el version del paquete raíz)
+CARGO_TOML="$PROJECT_ROOT/src-tauri/Cargo.toml"
 if [ -f "$CARGO_TOML" ]; then
     sed -i -E "0,/^version\s*=\s*\"[^\"]+\"/s//version = \"$NEW_VERSION\"/" "$CARGO_TOML"
-    echo -e "  ${GREEN}✓${NC} Actualizado: frontend/src-tauri/Cargo.toml"
+    echo -e "  ${GREEN}✓${NC} Actualizado: src-tauri/Cargo.toml"
 fi
 
-# 3. frontend/package.json
-PACKAGE_JSON="$PROJECT_ROOT/frontend/package.json"
+# 3. package.json
+PACKAGE_JSON="$PROJECT_ROOT/package.json"
 if [ -f "$PACKAGE_JSON" ]; then
     sed -i -E "0,/\"version\":\s*\"[^\"]+\"/s//\"version\": \"$NEW_VERSION\"/" "$PACKAGE_JSON"
-    echo -e "  ${GREEN}✓${NC} Actualizado: frontend/package.json"
+    echo -e "  ${GREEN}✓${NC} Actualizado: package.json"
 fi
 
 echo ""

@@ -1,8 +1,8 @@
 version: 2
 updates:
-  # Frontend Node.js dependencies
+  # Node.js dependencies
   - package-ecosystem: "npm"
-    directory: "/frontend"
+    directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -12,7 +12,7 @@ updates:
 
   # Tauri / Rust dependencies
   - package-ecosystem: "cargo"
-    directory: "/frontend/src-tauri"
+    directory: "/src-tauri"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10

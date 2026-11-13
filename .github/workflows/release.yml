@@ -33,7 +33,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${{ github.ref_name }}"
           else
-            APP_VERSION=$(node -p "require('./frontend/src-tauri/tauri.conf.json').version")
+            APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
             TAG="v${APP_VERSION}"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
@@ -57,7 +57,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend/package.json
+          cache-dependency-path: package.json
 
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable
@@ -65,9 +65,7 @@ jobs:
           targets: x86_64-unknown-linux-gnu
 
       - name: Instalar dependencias del Frontend
-        run: |
-          cd frontend
-          npm install
+        run: npm install
 
       - name: Compilar paquete nativo Linux con Tauri (.rpm / .deb / .AppImage)
         uses: tauri-apps/tauri-action@v0
@@ -76,7 +74,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: frontend
           tagName: ${{ needs.resolve-tag.outputs.tag }}
           releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
           releaseBody: 'Release nativo multiplataforma en Rust para P2P Ledger con soporte de auto-actualizaciones.'
@@ -96,7 +93,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend/package.json
+          cache-dependency-path: package.json
 
       - name: Instalar Rust estable
         uses: dtolnay/rust-toolchain@stable
@@ -104,9 +101,7 @@ jobs:
           targets: x86_64-pc-windows-msvc
 
       - name: Instalar dependencias del Frontend
-        run: |
-          cd frontend
-          npm install
+        run: npm install
 
       - name: Compilar instalador nativo Windows con Tauri (.exe / .msi)
         uses: tauri-apps/tauri-action@v0
@@ -115,7 +110,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: frontend
           tagName: ${{ needs.resolve-tag.outputs.tag }}
           releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
           releaseBody: 'Release nativo multiplataforma en Rust para P2P Ledger con soporte de auto-actualizaciones.'

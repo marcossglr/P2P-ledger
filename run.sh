@@ -3,8 +3,7 @@
 set -eo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRONTEND_DIR="$PROJECT_ROOT/frontend"
-TAURI_DIR="$FRONTEND_DIR/src-tauri"
+TAURI_DIR="$PROJECT_ROOT/src-tauri"
 
 # Colores para salida de terminal
 GREEN='\033[0;32m'
@@ -50,9 +49,9 @@ check_prerequisites() {
     fi
 
     # 3. Node modules
-    if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
+    if [ ! -d "$PROJECT_ROOT/node_modules" ]; then
         echo -e "${YELLOW}⚠️ 'node_modules' no encontrado. Instalando dependencias del Frontend...${NC}"
-        (cd "$FRONTEND_DIR" && npm install)
+        (cd "$PROJECT_ROOT" && npm install)
     fi
 }
 
@@ -64,7 +63,7 @@ start_dev() {
     echo -e "${BLUE}   (Tauri 2.0 Rust Core + Vite HMR React)         ${NC}"
     echo -e "${BLUE}==================================================${NC}"
 
-    (cd "$FRONTEND_DIR" && npm run tauri dev)
+    (cd "$PROJECT_ROOT" && npm run tauri dev)
 }
 
 run_build() {
@@ -74,8 +73,8 @@ run_build() {
     echo -e "${BLUE}   Compilando Aplicación Nativa para Producción   ${NC}"
     echo -e "${BLUE}==================================================${NC}"
 
-    (cd "$FRONTEND_DIR" && npm run tauri build)
-    echo -e "${GREEN}✅ Compilación finalizada. Paquetes generados en frontend/src-tauri/target/release/bundle/${NC}"
+    (cd "$PROJECT_ROOT" && npm run tauri build)
+    echo -e "${GREEN}✅ Compilación finalizada. Paquetes generados en src-tauri/target/release/bundle/${NC}"
 }
 
 run_tests() {
@@ -89,7 +88,7 @@ run_tests() {
     (cd "$TAURI_DIR" && cargo test)
 
     echo -e "\n${YELLOW}🧪 Corriendo pruebas de Frontend React (Vitest)...${NC}"
-    (cd "$FRONTEND_DIR" && npm test -- --run)
+    (cd "$PROJECT_ROOT" && npm test -- --run)
 
     echo -e "\n${GREEN}✅ Pruebas ejecutadas satisfactoriamente.${NC}"
 }

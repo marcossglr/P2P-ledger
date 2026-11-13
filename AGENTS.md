@@ -14,18 +14,18 @@ Este documento establece las directrices permanentes de arquitectura, UX y dise�
 
 ---
 
-## 2. Sistema Centralizado de Diseño (`frontend/src/components/ui/`)
+## 2. Sistema Centralizado de Diseño (`src/components/ui/`)
 
-Cualquier componente nuevo o modificado debe consumir exclusivamente los componentes primitivos centralizados exportados desde [`frontend/src/components/ui/index.js`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/index.js):
+Cualquier componente nuevo o modificado debe consumir exclusivamente los componentes primitivos centralizados exportados desde [`src/components/ui/index.js`](file:///home/marcossglr/Projects/John/src/components/ui/index.js):
 
 ### A. Controles de Formulario e Inputs
-- **Componentes:** [`Input.jsx`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/Input.jsx), [`Select.jsx`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/Select.jsx)
+- **Componentes:** [`Input.jsx`](file:///home/marcossglr/Projects/John/src/components/ui/Input.jsx), [`Select.jsx`](file:///home/marcossglr/Projects/John/src/components/ui/Select.jsx)
 - **Altura estándar:** `h-8` (vía `size="sm"`).
 - **Radio de curvatura:** `rounded-xl` (12px).
 - **Estilos:** Fondo `bg-slate-900/80`, borde `border-slate-800/80`, focus ring en ámbar (`focus:ring-amber-500/50`).
 
 ### B. Botones y Acciones
-- **Componente:** [`Button.jsx`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/Button.jsx)
+- **Componente:** [`Button.jsx`](file:///home/marcossglr/Projects/John/src/components/ui/Button.jsx)
 - **Tamaño estándar:** `size="sm"` (`h-8`, `rounded-xl`).
 - **Tamaño compacto / chips:** `size="xs"` (`h-7`, `rounded-lg`).
 - **Variantes semánticas:**
@@ -46,17 +46,17 @@ Cualquier componente nuevo o modificado debe consumir exclusivamente los compone
   - Regla: El radio del hijo debe ser menor al del contenedor padre para mantener balance concéntrico visual.
 
 ### D. Badges e Indicadores de Estado
-- **Componente:** [`Badge.jsx`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/Badge.jsx)
+- **Componente:** [`Badge.jsx`](file:///home/marcossglr/Projects/John/src/components/ui/Badge.jsx)
 - **Radio:** `rounded-md`.
 - **Variantes:** `success` (verde), `warning` (ámbar), `danger` (rojo), `info` (azul cielo), `neutral` (slate).
 
 ### E. Modales y Tarjetas
-- **Componentes:** [`Modal.jsx`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/Modal.jsx), [`Card.jsx`](file:///home/marcossglr/Projects/John/frontend/src/components/ui/Card.jsx)
+- **Componentes:** [`Modal.jsx`](file:///home/marcossglr/Projects/John/src/components/ui/Modal.jsx), [`Card.jsx`](file:///home/marcossglr/Projects/John/src/components/ui/Card.jsx)
 - **Radio exterior:** `rounded-2xl` (16px) con `border-slate-800`.
 - **Fondos:** Soporte para desenfoque y capas oscuras (`bg-slate-900/95 backdrop-blur-xs`).
 
-### F. Temas Globales (`frontend/src/index.css`)
-- Respetar compatibilidad con los temas definidos en [`frontend/src/index.css`](file:///home/marcossglr/Projects/John/frontend/src/index.css):
+### F. Temas Globales (`src/index.css`)
+- Respetar compatibilidad con los temas definidos en [`src/index.css`](file:///home/marcossglr/Projects/John/src/index.css):
   - Tema por defecto (Dark Slate)
   - `LIGHT_ELEGANT`
   - `NAVY_MIDNIGHT`

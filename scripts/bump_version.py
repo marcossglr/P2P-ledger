@@ -13,9 +13,9 @@ import json
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-PACKAGE_JSON = ROOT_DIR / "frontend" / "package.json"
-TAURI_CONF = ROOT_DIR / "frontend" / "src-tauri" / "tauri.conf.json"
-CARGO_TOML = ROOT_DIR / "frontend" / "src-tauri" / "Cargo.toml"
+PACKAGE_JSON = ROOT_DIR / "package.json"
+TAURI_CONF = ROOT_DIR / "src-tauri" / "tauri.conf.json"
+CARGO_TOML = ROOT_DIR / "src-tauri" / "Cargo.toml"
 
 SEMVER_REGEX = r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$"
 
@@ -25,7 +25,7 @@ def get_current_versions() -> dict:
 
     if PACKAGE_JSON.exists():
         data = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
-        versions["frontend/package.json"] = data.get("version")
+        versions["package.json"] = data.get("version")
 
     if TAURI_CONF.exists():
         data = json.loads(TAURI_CONF.read_text(encoding="utf-8"))
@@ -35,7 +35,7 @@ def get_current_versions() -> dict:
         content = CARGO_TOML.read_text(encoding="utf-8")
         match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
         if match:
-            versions["frontend/src-tauri/Cargo.toml"] = match.group(1)
+            versions["src-tauri/Cargo.toml"] = match.group(1)
 
     return versions
 

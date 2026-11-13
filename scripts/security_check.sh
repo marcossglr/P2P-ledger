@@ -31,7 +31,7 @@ fi
 echo ""
 echo "📦 3. Auditoría de dependencias frontend (npm)..."
 if command -v npm &> /dev/null; then
-    (cd "$ROOT_DIR/frontend" && npm audit --omit=dev --audit-level=high) || true
+    (cd "$ROOT_DIR" && npm audit --omit=dev --audit-level=high) || true
     echo "  ✅ Auditoría npm (dependencias de producción) ejecutada."
 else
     echo "  ℹ️ npm no disponible en el entorno actual. Se validará automáticamente en CI/GitHub Actions."
@@ -41,7 +41,7 @@ fi
 echo ""
 echo "🦀 4. Auditoría de dependencias Rust (Cargo)..."
 if command -v cargo-audit &> /dev/null; then
-    (cd "$ROOT_DIR/frontend/src-tauri" && cargo audit) || true
+    (cd "$ROOT_DIR/src-tauri" && cargo audit) || true
     echo "  ✅ Auditoría cargo audit ejecutada."
 else
     echo "  ℹ️ cargo-audit no instalado localmente. Se validará automáticamente en CI/GitHub Actions."

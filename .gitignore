@@ -19,13 +19,9 @@ htmlcov/
 
 # Node & Frontend dependencies and builds
 node_modules/
-frontend/node_modules/
 dist/
-frontend/dist/
 build/
 .vite/
-frontend/.vite/
-backend/openapi.json
 
 # Databases, Backups & local persistent storage
 *.db
@@ -33,28 +29,16 @@ backend/openapi.json
 *.db-shm
 *.db-wal
 *.sqlite3
-backend/*.db
-backend/*.db.*
-backend/*.db.bak*
-backend/p2p_reconciliation.db
-backend/p2p_reconciliation.db.bak-canal
-backend/p2p_reconciliation.db-shm
-backend/p2p_reconciliation.db-wal
 backups/
-backend/backups/
 
 # Credentials & Sensitive Local Caches
 .env
 .env.local
 .env.*.local
 .binance_credentials.json
-backend/.binance_credentials.json
 .binance_funding_cache.json
-backend/.binance_funding_cache.json
 .binance_user_ads_cache.json
-backend/.binance_user_ads_cache.json
 .binance_p2p_public_config.json
-backend/.binance_p2p_public_config.json
 
 # Graphify & tool generated outputs
 graphify-out/
@@ -77,8 +61,9 @@ scratch/
 Thumbs.db
 
 # Tauri & Rust build artifacts
-frontend/src-tauri/target/
-frontend/src-tauri/binaries/
+target/
+src-tauri/target/
+src-tauri/binaries/
 *.bundle
 
 # IDE & Editor files
