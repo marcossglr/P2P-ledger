@@ -1,3 +1,4 @@
+use log::info;
 use tauri::{AppHandle, State};
 use crate::db::DbState;
 use crate::services::backups::{
@@ -14,6 +15,7 @@ pub fn get_backups_list(app: AppHandle) -> Result<BackupsListResponse, String> {
 
 #[tauri::command]
 pub fn create_db_backup(app: AppHandle, state: State<'_, DbState>) -> Result<CreateBackupResponse, String> {
+    info!("[Backup] Creando copia de seguridad de la base de datos...");
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     create_backup(&app, &conn)
 }
@@ -24,6 +26,7 @@ pub fn restore_db_backup(
     filename: String,
     state: State<'_, DbState>,
 ) -> Result<String, String> {
+    info!("[Backup] Restaurando base de datos desde archivo: {}...", filename);
     let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
     restore_backup(&app, &mut conn, &filename)
 }

@@ -150,6 +150,26 @@ pub fn get_operations_data(
     })?;
 
     let mut orders = Vec::new();
+    for r in rows {
+        orders.push(r?);
+    }
+
+    let total_stored: i64 = conn.query_row(
+        "SELECT count(*) FROM binance_orders",
+        [],
+        |r| r.get(0)
+    ).unwrap_or(0);
+
+    let analytics = compute_analytics_from_orders(&orders);
+
+    Ok(OperationsDashboard {
+        total_stored_orders: total_stored as usize,
+        analytics,
+        orders,
+    })
+}
+
+pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> OperationsAnalytics {
     let mut buy_fiat = 0.0;
     let mut buy_crypto = 0.0;
     let mut buy_count = 0;
@@ -159,8 +179,7 @@ pub fn get_operations_data(
     let mut total_bank_fees = 0.0;
     let mut completed_orders = 0;
 
-    for r in rows {
-        let o = r?;
+    for o in orders {
         if o.order_status == "COMPLETED" {
             completed_orders += 1;
             if o.order_type == "COMPRA" {
@@ -174,7 +193,6 @@ pub fn get_operations_data(
                 sell_count += 1;
             }
         }
-        orders.push(o);
     }
 
     let wac_buy = if buy_crypto > 0.0 { buy_fiat / buy_crypto } else { 0.0 };
@@ -186,32 +204,117 @@ pub fn get_operations_data(
     let gross_profit = matched_volume * spread_abs;
     let net_profit = gross_profit - total_bank_fees;
 
-    let total_stored: i64 = conn.query_row(
-        "SELECT count(*) FROM binance_orders",
-        [],
-        |r| r.get(0)
-    ).unwrap_or(0);
+    OperationsAnalytics {
+        total_orders: orders.len(),
+        completed_orders,
+        buy_count,
+        sell_count,
+        buy_fiat: (buy_fiat * 100.0).round() / 100.0,
+        buy_crypto: (buy_crypto * 100.0).round() / 100.0,
+        sell_fiat: (sell_fiat * 100.0).round() / 100.0,
+        sell_crypto: (sell_crypto * 100.0).round() / 100.0,
+        wac_buy: (wac_buy * 10000.0).round() / 10000.0,
+        wap_sell: (wap_sell * 10000.0).round() / 10000.0,
+        spread_abs: (spread_abs * 10000.0).round() / 10000.0,
+        spread_pct: (spread_pct * 100.0).round() / 100.0,
+        matched_volume_crypto: (matched_volume * 100.0).round() / 100.0,
+        gross_profit_fiat: (gross_profit * 100.0).round() / 100.0,
+        total_bank_fees_fiat: (total_bank_fees * 100.0).round() / 100.0,
+        net_profit_fiat: (net_profit * 100.0).round() / 100.0,
+    }
+}
 
-    Ok(OperationsDashboard {
-        total_stored_orders: total_stored as usize,
-        analytics: OperationsAnalytics {
-            total_orders: orders.len(),
-            completed_orders,
-            buy_count,
-            sell_count,
-            buy_fiat: (buy_fiat * 100.0).round() / 100.0,
-            buy_crypto: (buy_crypto * 100.0).round() / 100.0,
-            sell_fiat: (sell_fiat * 100.0).round() / 100.0,
-            sell_crypto: (sell_crypto * 100.0).round() / 100.0,
-            wac_buy: (wac_buy * 10000.0).round() / 10000.0,
-            wap_sell: (wap_sell * 10000.0).round() / 10000.0,
-            spread_abs: (spread_abs * 10000.0).round() / 10000.0,
-            spread_pct: (spread_pct * 100.0).round() / 100.0,
-            matched_volume_crypto: (matched_volume * 100.0).round() / 100.0,
-            gross_profit_fiat: (gross_profit * 100.0).round() / 100.0,
-            total_bank_fees_fiat: (total_bank_fees * 100.0).round() / 100.0,
-            net_profit_fiat: (net_profit * 100.0).round() / 100.0,
-        },
-        orders,
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mock_order(
+        order_number: &str,
+        order_type: &str,
+        order_status: &str,
+        crypto_amount: f64,
+        fiat_amount: f64,
+        bank_fee_fiat: f64,
+    ) -> BinanceOrderRecord {
+        BinanceOrderRecord {
+            id: 1,
+            order_number: order_number.to_string(),
+            adv_no: None,
+            order_type: order_type.to_string(),
+            asset: "USDT".to_string(),
+            fiat_currency: "VES".to_string(),
+            fiat_amount,
+            crypto_amount,
+            unit_price: fiat_amount / crypto_amount,
+            commission_usdt: 0.0,
+            pay_method: Some("PAGO_MOVIL".to_string()),
+            counterparty: Some("UserTest".to_string()),
+            reference_note: None,
+            create_timestamp: 1700000000,
+            order_date: Some("2026-11-13 10:00:00".to_string()),
+            order_status: order_status.to_string(),
+            source: "API".to_string(),
+            bank_account_id: None,
+            payment_channel: None,
+            bank_fee_fiat,
+        }
+    }
+
+    #[test]
+    fn test_compute_analytics_balanced_cycle() {
+        // Compra de 100 USDT a 50 VES/USDT = 5000 VES
+        // Venta de 100 USDT a 52 VES/USDT = 5200 VES
+        // Spread = 2 VES, Matched = 100 USDT, Gross Profit = 200 VES, Fee = 14 VES, Net Profit = 186 VES
+        let orders = vec![
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 14.0),
+            mock_order("ORD-2", "VENTA", "COMPLETED", 100.0, 5200.0, 0.0),
+        ];
+
+        let analytics = compute_analytics_from_orders(&orders);
+
+        assert_eq!(analytics.total_orders, 2);
+        assert_eq!(analytics.completed_orders, 2);
+        assert_eq!(analytics.buy_count, 1);
+        assert_eq!(analytics.sell_count, 1);
+        assert_eq!(analytics.wac_buy, 50.0);
+        assert_eq!(analytics.wap_sell, 52.0);
+        assert_eq!(analytics.spread_abs, 2.0);
+        assert_eq!(analytics.spread_pct, 4.0);
+        assert_eq!(analytics.matched_volume_crypto, 100.0);
+        assert_eq!(analytics.gross_profit_fiat, 200.0);
+        assert_eq!(analytics.total_bank_fees_fiat, 14.0);
+        assert_eq!(analytics.net_profit_fiat, 186.0);
+    }
+
+    #[test]
+    fn test_compute_analytics_ignores_cancelled_or_pending() {
+        let orders = vec![
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0),
+            mock_order("ORD-2", "VENTA", "CANCELLED", 100.0, 5200.0, 0.0),
+        ];
+
+        let analytics = compute_analytics_from_orders(&orders);
+
+        assert_eq!(analytics.total_orders, 2);
+        assert_eq!(analytics.completed_orders, 1);
+        assert_eq!(analytics.sell_count, 0);
+        assert_eq!(analytics.matched_volume_crypto, 0.0);
+        assert_eq!(analytics.gross_profit_fiat, 0.0);
+    }
+
+    #[test]
+    fn test_compute_analytics_weighted_average() {
+        // Dos compras: 100 USDT a 50 VES (5000 VES) y 200 USDT a 53 VES (10600 VES)
+        // Total crypto = 300, Total fiat = 15600 -> WAC = 52.0
+        let orders = vec![
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0),
+            mock_order("ORD-2", "COMPRA", "COMPLETED", 200.0, 10600.0, 0.0),
+        ];
+
+        let analytics = compute_analytics_from_orders(&orders);
+
+        assert_eq!(analytics.buy_crypto, 300.0);
+        assert_eq!(analytics.buy_fiat, 15600.0);
+        assert_eq!(analytics.wac_buy, 52.0);
+    }
 }

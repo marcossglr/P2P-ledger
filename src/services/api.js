@@ -15,7 +15,20 @@ export const isTauriDesktop = () => {
 // ESTADO Y SALUD DEL SISTEMA
 // ==========================================
 export const healthApi = {
-  check: async () => ({ status: 'healthy', mode: 'native_rust' }),
+  check: async () => {
+    if (isTauriDesktop()) {
+      return await invoke('get_system_health');
+    }
+    return {
+      status: 'healthy',
+      mode: 'web_dev',
+      stored_orders: 0,
+      stored_real_orders: 0,
+      stored_demo_orders: 0,
+      stored_in_progress_orders: 0,
+      binance_api_configured: false,
+    };
+  },
 };
 
 // ==========================================
@@ -172,7 +185,7 @@ export const operationsApi = {
 
   clearOperations: async (onlyDemo = false) => {
     if (isTauriDesktop()) {
-      return await invoke('clear_operations', { onlyDemo });
+      return await invoke('clear_operations', { only_demo: onlyDemo });
     }
     return 0;
   },

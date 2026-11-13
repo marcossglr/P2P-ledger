@@ -1,3 +1,4 @@
+use log::info;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use crate::db::DbState;
@@ -79,8 +80,13 @@ pub fn delete_binance_config(state: State<'_, DbState>) -> Result<BinanceConfigR
 
 #[tauri::command]
 pub fn get_funding_wallet(state: State<'_, DbState>) -> Result<FundingWalletResponse, String> {
+    info!("[Binance] Solicitando balance de la Funding Wallet (USDT)...");
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    fetch_funding_asset_balance(&conn, "USDT")
+    let res = fetch_funding_asset_balance(&conn, "USDT");
+    if let Ok(ref w) = res {
+        info!("[Binance] Balance obtenido ({}): Libre={:.2}, Bloqueado={:.2}, Total={:.2}", w.source, w.free, w.locked, w.total);
+    }
+    res
 }
 
 #[tauri::command]
@@ -104,6 +110,7 @@ pub fn sync_binance_orders(
     payload: Option<SyncOrdersPayload>,
     state: State<'_, DbState>,
 ) -> Result<SyncResult, String> {
+    info!("[Binance] Iniciando sincronización de órdenes P2P con Binance...");
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let payload = payload.unwrap_or(SyncOrdersPayload {
         api_key: None,
@@ -198,6 +205,7 @@ pub fn get_public_market_stats(
     }
 
     let only_merchants = q.only_merchants.unwrap_or(false);
+    info!("[Market] Consultando mercado P2P público: {}/{} ({})...", asset, fiat, if only_merchants { "solo merchants" } else { "todos" });
     fetch_public_market_snapshot(&fiat, &asset, &pay_types, q.amount, only_merchants)
 }
 

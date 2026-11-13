@@ -1,3 +1,4 @@
+use log::info;
 use rusqlite::params;
 use serde::Deserialize;
 use tauri::State;
@@ -51,8 +52,11 @@ pub struct AssignOrderPayload {
 
 #[tauri::command]
 pub fn get_bank_inventory(state: State<'_, DbState>) -> Result<BankInventorySummary, String> {
+    info!("[Banks] Consultando inventario bancario...");
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    compute_bank_inventory_summary(&conn).map_err(|e| e.to_string())
+    let summary = compute_bank_inventory_summary(&conn).map_err(|e| e.to_string())?;
+    info!("[Banks] Inventario calculado: {} cuentas, balance consolidado: {:.2} Bs", summary.accounts.len(), summary.consolidated.total_calculated_balance_bs);
+    Ok(summary)
 }
 
 #[tauri::command]
@@ -60,6 +64,7 @@ pub fn create_bank_account(
     payload: CreateAccountPayload,
     state: State<'_, DbState>,
 ) -> Result<BankInventorySummary, String> {
+    info!("[Banks] Creando nueva cuenta bancaria: {}", payload.bank_name);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let initial_balance = payload.initial_balance.unwrap_or(0.0);
     let currency = payload.currency.unwrap_or_else(|| "VES".to_string());
@@ -168,6 +173,7 @@ pub fn reconcile_bank_account(
     payload: ReconcileAccountPayload,
     state: State<'_, DbState>,
 ) -> Result<BankInventorySummary, String> {
+    info!("[Banks] Conciliando cuenta #{} (modo: {}, monto: {})", payload.account_id, payload.mode, payload.amount);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
 
     let now_ms = std::time::SystemTime::now()

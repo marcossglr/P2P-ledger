@@ -20,6 +20,7 @@ use commands::banks::{
     assign_order_to_bank,
 };
 use commands::operations::{
+    get_system_health,
     get_operations,
     update_payment_channel,
     seed_demo_operations,
@@ -82,6 +83,15 @@ fn migrate_legacy_webview_data(app: &tauri::App) {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                ])
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
@@ -95,6 +105,7 @@ fn main() {
             reconcile_bank_account,
             assign_order_to_bank,
             // Operations & analytics
+            get_system_health,
             get_operations,
             update_payment_channel,
             seed_demo_operations,

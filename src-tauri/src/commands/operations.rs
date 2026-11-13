@@ -1,5 +1,6 @@
+use log::info;
 use rusqlite::params;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 use crate::db::DbState;
 use crate::services::analytics::{get_operations_data, OperationsDashboard};
@@ -24,11 +25,73 @@ pub struct SystemResetPayload {
     pub delete_api_credentials: Option<bool>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SystemHealthResponse {
+    pub status: String,
+    pub mode: String,
+    pub stored_orders: i64,
+    pub stored_real_orders: i64,
+    pub stored_demo_orders: i64,
+    pub stored_in_progress_orders: i64,
+    pub binance_api_configured: bool,
+}
+
+#[tauri::command]
+pub fn get_system_health(state: State<'_, DbState>) -> Result<SystemHealthResponse, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+
+    let stored_real_orders: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM binance_orders WHERE source != 'DEMO'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    let stored_demo_orders: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM binance_orders WHERE source = 'DEMO'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    let stored_in_progress_orders: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM binance_orders WHERE order_status = 'IN_PROGRESS'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    let binance_api_configured: bool = conn
+        .query_row(
+            "SELECT count(*) FROM binance_configs WHERE api_key != ''",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false);
+
+    let stored_orders = stored_real_orders + stored_demo_orders;
+
+    Ok(SystemHealthResponse {
+        status: "healthy".to_string(),
+        mode: "native_rust".to_string(),
+        stored_orders,
+        stored_real_orders,
+        stored_demo_orders,
+        stored_in_progress_orders,
+        binance_api_configured,
+    })
+}
+
 #[tauri::command]
 pub fn get_operations(
     params: Option<GetOperationsParams>,
     state: State<'_, DbState>,
 ) -> Result<OperationsDashboard, String> {
+    info!("[Operations] Obteniendo lista de operaciones y métricas financieras...");
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let p = params.unwrap_or(GetOperationsParams {
         order_type: None,
@@ -36,7 +99,9 @@ pub fn get_operations(
         search: None,
     });
 
-    get_operations_data(&conn, p.order_type, p.fiat_currency, p.search).map_err(|e| e.to_string())
+    let res = get_operations_data(&conn, p.order_type, p.fiat_currency, p.search).map_err(|e| e.to_string())?;
+    info!("[Operations] Operaciones cargadas: {} órdenes encontradas", res.orders.len());
+    Ok(res)
 }
 
 #[tauri::command]
@@ -74,8 +139,14 @@ pub fn seed_demo_operations(state: State<'_, DbState>) -> Result<usize, String> 
 
     // Crear bancos de prueba si no existen
     conn.execute(
-        "INSERT OR IGNORE INTO bank_accounts (name, fiat_currency, is_default, is_active)
-         VALUES ('Banesco', 'VES', 1, 1)",
+        "INSERT OR IGNORE INTO bank_accounts (name, fiat_currency, is_default, is_active, apply_buy_fee, pago_movil_fee_pct, transfer_fee_pct)
+         VALUES ('Banesco', 'VES', 1, 1, 1, 0.3, 0.0)",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO bank_accounts (name, fiat_currency, is_default, is_active, apply_buy_fee, pago_movil_fee_pct, transfer_fee_pct)
+         VALUES ('Mercantil', 'VES', 0, 1, 1, 0.3, 0.0)",
         [],
     ).map_err(|e| e.to_string())?;
 
@@ -85,22 +156,36 @@ pub fn seed_demo_operations(state: State<'_, DbState>) -> Result<usize, String> 
         |r| r.get(0)
     ).unwrap_or(1);
 
+    let mercantil_id: i64 = conn.query_row(
+        "SELECT id FROM bank_accounts WHERE name = 'Mercantil' LIMIT 1",
+        [],
+        |r| r.get(0)
+    ).unwrap_or(2);
+
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64;
 
+    // Dataset demo realista y completo para probar cálculos contables y visualizaciones
+    // (ord_num, ord_type, crypto, price, fiat, pay_m, channel, cp, bank_id, status)
     let demo_orders = vec![
-        ("DEMO-001", "COMPRA", 500.0, 42.10, 21050.0, "Banesco Pago Móvil", "PAGO_MOVIL", "CryptoTraderVE"),
-        ("DEMO-002", "VENTA", 300.0, 42.95, 12885.0, "Banesco Transferencia", "TRANSFERENCIA", "InversionesCaracas"),
-        ("DEMO-003", "COMPRA", 800.0, 42.30, 33840.0, "Banesco Transferencia", "TRANSFERENCIA", "CambiosOrinoco"),
-        ("DEMO-004", "VENTA", 450.0, 43.20, 19440.0, "Banesco Pago Móvil", "PAGO_MOVIL", "MariaExchanges"),
-        ("DEMO-005", "VENTA", 350.0, 43.25, 15137.5, "Banesco Pago Móvil", "PAGO_MOVIL", "AndesCapital"),
+        ("DEMO-001", "COMPRA", 500.0, 42.10, 21050.0, "Banesco Pago Móvil", "PAGO_MOVIL", "CryptoTraderVE", banesco_id, "COMPLETED"),
+        ("DEMO-002", "VENTA", 300.0, 42.95, 12885.0, "Banesco Transferencia", "TRANSFERENCIA", "InversionesCaracas", banesco_id, "COMPLETED"),
+        ("DEMO-003", "COMPRA", 800.0, 42.30, 33840.0, "Mercantil Transferencia", "TRANSFERENCIA", "CambiosOrinoco", mercantil_id, "COMPLETED"),
+        ("DEMO-004", "VENTA", 450.0, 43.20, 19440.0, "Banesco Pago Móvil", "PAGO_MOVIL", "MariaExchanges", banesco_id, "COMPLETED"),
+        ("DEMO-005", "VENTA", 350.0, 43.25, 15137.5, "Mercantil Pago Móvil", "PAGO_MOVIL", "AndesCapital", mercantil_id, "COMPLETED"),
+        ("DEMO-006", "COMPRA", 1200.0, 42.15, 50580.0, "Banesco Transferencia", "TRANSFERENCIA", "FintechSolutions", banesco_id, "COMPLETED"),
+        ("DEMO-007", "VENTA", 600.0, 43.10, 25860.0, "Banesco Pago Móvil", "PAGO_MOVIL", "FastP2P_Vzla", banesco_id, "COMPLETED"),
+        ("DEMO-008", "COMPRA", 400.0, 42.20, 16880.0, "Mercantil Pago Móvil", "PAGO_MOVIL", "BolivarDigital", mercantil_id, "COMPLETED"),
+        ("DEMO-009", "VENTA", 550.0, 43.30, 23815.0, "Mercantil Transferencia", "TRANSFERENCIA", "SolucionesP2P", mercantil_id, "COMPLETED"),
+        ("DEMO-010", "COMPRA", 250.0, 42.25, 10562.5, "Banesco Pago Móvil", "PAGO_MOVIL", "UserVIP_Trade", banesco_id, "COMPLETED"),
     ];
 
     let mut inserted = 0;
-    for (i, (ord_num, ord_type, crypto, price, fiat, pay_m, channel, cp)) in demo_orders.into_iter().enumerate() {
-        let ts = now_ms - (i as i64 * 3600 * 1000 * 6);
+    for (i, (ord_num, ord_type, crypto, price, fiat, pay_m, channel, cp, bank_id, status)) in demo_orders.into_iter().enumerate() {
+        // Distribuir temporalmente en las últimas 48 horas
+        let ts = now_ms - (i as i64 * 3600 * 1000 * 4);
         let date_str = chrono::DateTime::from_timestamp_millis(ts)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_else(|| "2026-11-12 10:00:00".to_string());
@@ -110,7 +195,7 @@ pub fn seed_demo_operations(state: State<'_, DbState>) -> Result<usize, String> 
                 order_number, order_type, asset, fiat_currency, fiat_amount, crypto_amount,
                 unit_price, pay_method, counterparty, create_timestamp, order_date,
                 order_status, source, bank_account_id, payment_channel
-             ) VALUES (?1, ?2, 'USDT', 'VES', ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETED', 'DEMO', ?10, ?11)",
+             ) VALUES (?1, ?2, 'USDT', 'VES', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'DEMO', ?11, ?12)",
             params![
                 ord_num,
                 ord_type,
@@ -121,7 +206,8 @@ pub fn seed_demo_operations(state: State<'_, DbState>) -> Result<usize, String> 
                 cp,
                 ts,
                 date_str,
-                banesco_id,
+                status,
+                bank_id,
                 channel
             ],
         );
