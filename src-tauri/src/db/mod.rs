@@ -46,6 +46,7 @@ pub fn init_database(db_path: &PathBuf) -> Result<Connection> {
             is_default INTEGER DEFAULT 0,
             apply_buy_fee INTEGER DEFAULT 1,
             pago_movil_fee_pct REAL DEFAULT 0.3,
+            pago_movil_min_fee REAL DEFAULT 14.0,
             transfer_fee_pct REAL DEFAULT 0.0,
             anchor_balance REAL DEFAULT 0.0,
             anchor_timestamp INTEGER DEFAULT 0,
@@ -114,6 +115,9 @@ pub fn init_database(db_path: &PathBuf) -> Result<Connection> {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );"
     )?;
+
+    // Migraciones automáticas no destructivas
+    let _ = conn.execute("ALTER TABLE bank_accounts ADD COLUMN pago_movil_min_fee REAL DEFAULT 14.0", []);
 
     Ok(conn)
 }

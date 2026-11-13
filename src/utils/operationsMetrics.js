@@ -39,13 +39,27 @@ export function computeOperationsMetrics({
       ? Number(stats.wap_sell_price)
       : Number(bankInventory?.consolidated?.reference_rate || 1);
 
-  // Ganancia bruta contable en USDT
+  // Ganancia bruta contable en USDT (si Rust ya la envió calculada bajo Escuela A, respetarla)
   const grossProfitUsdt =
-    refRate > 0 ? (stats.gross_profit_fiat || 0) / refRate : 0;
+    stats.gross_profit_usdt != null
+      ? Number(stats.gross_profit_usdt)
+      : refRate > 0
+      ? (stats.gross_profit_fiat || 0) / refRate
+      : 0;
 
   // Comisiones bancarias convertidas a USDT
   const bankFeesUsdt =
-    refRate > 0 ? (stats.estimated_bank_fees_fiat || 0) / refRate : 0;
+    stats.bank_fees_usdt != null
+      ? Number(stats.bank_fees_usdt)
+      : refRate > 0
+      ? (stats.estimated_bank_fees_fiat || 0) / refRate
+      : 0;
+
+  // Ganancia neta contable en USDT
+  const netProfitUsdt =
+    stats.net_profit_usdt != null
+      ? Number(stats.net_profit_usdt)
+      : grossProfitUsdt - bankFeesUsdt;
 
   // Total de comisiones unificadas en USDT y en Fiat
   const totalCommissionsAllUsdt =
@@ -54,9 +68,9 @@ export function computeOperationsMetrics({
     (stats.commission_fiat_cost || 0) + (stats.estimated_bank_fees_fiat || 0);
 
   // Margen neto % sobre el volumen USDT realmente arbitrado
-  const matchedUsdt = Number(stats.matched_usdt_volume || 0);
+  const matchedUsdt = Number(stats.matched_volume_crypto || stats.matched_usdt_volume || 0);
   const netMarginPct =
-    matchedUsdt > 0 ? ((stats.net_profit_usdt || 0) / matchedUsdt) * 100 : 0;
+    matchedUsdt > 0 ? (netProfitUsdt / matchedUsdt) * 100 : 0;
 
   // Ticket promedio por operación en USDT
   const completedCount = Number(
@@ -95,6 +109,7 @@ export function computeOperationsMetrics({
     refRate,
     grossProfitUsdt,
     bankFeesUsdt,
+    netProfitUsdt,
     totalCommissionsAllUsdt,
     totalCommissionsAllFiat,
     matchedUsdt,

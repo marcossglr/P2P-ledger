@@ -66,6 +66,7 @@ describe('operationsMetrics utilities', () => {
       expect(metrics.refRate).toBe(50.0);
       expect(metrics.grossProfitUsdt).toBe(20.0); // 1000 / 50
       expect(metrics.bankFeesUsdt).toBe(1.0); // 50 / 50
+      expect(metrics.netProfitUsdt).toBe(18.0);
       expect(metrics.totalCommissionsAllUsdt).toBe(3.0); // 2 + 1
       expect(metrics.totalCommissionsAllFiat).toBe(150.0); // 100 + 50
       expect(metrics.matchedUsdt).toBe(500.0);

@@ -41,8 +41,12 @@ pub struct OperationsAnalytics {
     pub spread_abs: f64,        // WAP - WAC
     pub spread_pct: f64,        // Margen porcentual
     pub matched_volume_crypto: f64,
+    pub total_commission_usdt: f64,
+    pub gross_profit_usdt: f64,
     pub gross_profit_fiat: f64,
     pub total_bank_fees_fiat: f64,
+    pub bank_fees_usdt: f64,
+    pub net_profit_usdt: f64,
     pub net_profit_fiat: f64,
 }
 
@@ -63,14 +67,15 @@ pub fn get_operations_data(
 
     // Cargar cuentas para mapeo de comisiones
     let mut acc_stmt = conn.prepare(
-        "SELECT id, pago_movil_fee_pct, apply_buy_fee FROM bank_accounts"
+        "SELECT id, pago_movil_fee_pct, apply_buy_fee, COALESCE(pago_movil_min_fee, 14.0) FROM bank_accounts"
     )?;
-    let acc_fees: HashMap<i64, (f64, bool)> = acc_stmt
+    let acc_fees: HashMap<i64, (f64, bool, f64)> = acc_stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
             let fee: f64 = row.get(1)?;
             let apply: i64 = row.get(2)?;
-            Ok((id, (fee, apply != 0)))
+            let min_fee: f64 = row.get(3)?;
+            Ok((id, (fee, apply != 0, min_fee)))
         })?
         .filter_map(|r| r.ok())
         .collect();
@@ -109,16 +114,16 @@ pub fn get_operations_data(
         let fiat_amount: f64 = row.get(6)?;
         let order_type: String = row.get(3)?;
 
-        // Calcular comisión bancaria en compras si aplica
+        // Calcular comisión bancaria en compras si aplica (decimales estrictos, sin round)
         let mut bank_fee = 0.0;
         if order_type == "COMPRA" {
             if let Some(acc_id) = bank_account_id {
-                if let Some((fee_pct, apply)) = acc_fees.get(&acc_id) {
+                if let Some((fee_pct, apply, min_fee)) = acc_fees.get(&acc_id) {
                     if *apply {
                         let ch = payment_channel.as_deref().unwrap_or("TRANSFERENCIA");
                         if ch == "PAGO_MOVIL" || ch == "TRANSFERENCIA_INTERBANCARIA" {
-                            let calc = (fiat_amount * (fee_pct / 100.0)).round();
-                            bank_fee = calc.max(14.0);
+                            let calc = fiat_amount * (fee_pct / 100.0);
+                            bank_fee = calc.max(*min_fee);
                         }
                     }
                 }
@@ -177,11 +182,13 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
     let mut sell_crypto = 0.0;
     let mut sell_count = 0;
     let mut total_bank_fees = 0.0;
+    let mut total_commission_usdt = 0.0;
     let mut completed_orders = 0;
 
     for o in orders {
         if o.order_status == "COMPLETED" {
             completed_orders += 1;
+            total_commission_usdt += o.commission_usdt;
             if o.order_type == "COMPRA" {
                 buy_fiat += o.fiat_amount;
                 buy_crypto += o.crypto_amount;
@@ -201,8 +208,39 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
     let spread_pct = if wac_buy > 0.0 && wap_sell > 0.0 { (spread_abs / wac_buy) * 100.0 } else { 0.0 };
 
     let matched_volume = buy_crypto.min(sell_crypto);
-    let gross_profit = matched_volume * spread_abs;
-    let net_profit = gross_profit - total_bank_fees;
+
+    // Spread comercial puro en USDT y en Fiat
+    let pure_spread_usdt = if wap_sell > 0.0 && wac_buy > 0.0 {
+        matched_volume * (1.0 - (wac_buy / wap_sell))
+    } else {
+        0.0
+    };
+
+    // Escuela A:
+    // Ganancia Bruta (USDT) = Spread Puro en USDT MENOS Comisiones de Binance
+    let gross_profit_usdt = pure_spread_usdt - total_commission_usdt;
+    let gross_profit_fiat = if wap_sell > 0.0 {
+        gross_profit_usdt * wap_sell
+    } else {
+        matched_volume * spread_abs - (total_commission_usdt * wac_buy)
+    };
+
+    // Comisiones bancarias convertidas a USDT al costo de reposición (WAC)
+    let bank_fees_usdt = if wac_buy > 0.0 {
+        total_bank_fees / wac_buy
+    } else if wap_sell > 0.0 {
+        total_bank_fees / wap_sell
+    } else {
+        0.0
+    };
+
+    // Ganancia Neta = Ganancia Bruta MENOS Comisiones Bancarias
+    let net_profit_usdt = gross_profit_usdt - bank_fees_usdt;
+    let net_profit_fiat = if wap_sell > 0.0 {
+        net_profit_usdt * wap_sell
+    } else {
+        gross_profit_fiat - total_bank_fees
+    };
 
     OperationsAnalytics {
         total_orders: orders.len(),
@@ -218,9 +256,13 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
         spread_abs: (spread_abs * 10000.0).round() / 10000.0,
         spread_pct: (spread_pct * 100.0).round() / 100.0,
         matched_volume_crypto: (matched_volume * 100.0).round() / 100.0,
-        gross_profit_fiat: (gross_profit * 100.0).round() / 100.0,
+        total_commission_usdt: (total_commission_usdt * 10000.0).round() / 10000.0,
+        gross_profit_usdt: (gross_profit_usdt * 100.0).round() / 100.0,
+        gross_profit_fiat: (gross_profit_fiat * 100.0).round() / 100.0,
         total_bank_fees_fiat: (total_bank_fees * 100.0).round() / 100.0,
-        net_profit_fiat: (net_profit * 100.0).round() / 100.0,
+        bank_fees_usdt: (bank_fees_usdt * 100.0).round() / 100.0,
+        net_profit_usdt: (net_profit_usdt * 100.0).round() / 100.0,
+        net_profit_fiat: (net_profit_fiat * 100.0).round() / 100.0,
     }
 }
 
@@ -264,7 +306,10 @@ mod tests {
     fn test_compute_analytics_balanced_cycle() {
         // Compra de 100 USDT a 50 VES/USDT = 5000 VES
         // Venta de 100 USDT a 52 VES/USDT = 5200 VES
-        // Spread = 2 VES, Matched = 100 USDT, Gross Profit = 200 VES, Fee = 14 VES, Net Profit = 186 VES
+        // Pure Spread USDT = 100 * (1 - 50/52) = 3.84615 USDT
+        // Comisiones Binance = 0.0 -> Gross Profit USDT = 3.85 USDT, Gross Profit Fiat = 3.84615 * 52 = 200 VES
+        // Bank fee = 14 VES -> Bank fee USDT = 14 / 50 = 0.28 USDT
+        // Net Profit USDT = 3.84615 - 0.28 = 3.566 USDT -> Net Profit Fiat = 3.566 * 52 = 185.44 VES (o 200 - 14.56)
         let orders = vec![
             mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 14.0),
             mock_order("ORD-2", "VENTA", "COMPLETED", 100.0, 5200.0, 0.0),
@@ -281,9 +326,11 @@ mod tests {
         assert_eq!(analytics.spread_abs, 2.0);
         assert_eq!(analytics.spread_pct, 4.0);
         assert_eq!(analytics.matched_volume_crypto, 100.0);
+        assert_eq!(analytics.gross_profit_usdt, 3.85);
         assert_eq!(analytics.gross_profit_fiat, 200.0);
+        assert_eq!(analytics.bank_fees_usdt, 0.28);
         assert_eq!(analytics.total_bank_fees_fiat, 14.0);
-        assert_eq!(analytics.net_profit_fiat, 186.0);
+        assert_eq!(analytics.net_profit_usdt, 3.57);
     }
 
     #[test]

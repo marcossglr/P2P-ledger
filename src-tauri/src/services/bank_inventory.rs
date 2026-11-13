@@ -14,6 +14,7 @@ pub struct BankAccountSummary {
     pub is_active: bool,
     pub apply_buy_fee: bool,
     pub pago_movil_fee_pct: f64,
+    pub pago_movil_min_fee: f64,
     pub transfer_fee_pct: f64,
     pub anchor_balance: f64,
     pub anchor_timestamp: i64,
@@ -49,7 +50,7 @@ pub fn compute_bank_inventory_summary(conn: &Connection) -> Result<BankInventory
         "SELECT id, binance_pay_id, pay_method_identifier, name, fiat_currency, is_active,
                 account_alias, match_keywords, is_default, apply_buy_fee, pago_movil_fee_pct,
                 transfer_fee_pct, anchor_balance, anchor_timestamp, anchor_date_label,
-                manual_delta_bs
+                manual_delta_bs, COALESCE(pago_movil_min_fee, 14.0)
          FROM bank_accounts
          WHERE is_active = 1
          ORDER BY is_default DESC, id ASC"
@@ -73,6 +74,7 @@ pub fn compute_bank_inventory_summary(conn: &Connection) -> Result<BankInventory
             anchor_timestamp: row.get(13)?,
             anchor_date_label: row.get(14)?,
             manual_delta_bs: row.get(15)?,
+            pago_movil_min_fee: row.get(16)?,
             calculated_balance: row.get(12)?, // Base
             inflow_sell_bs: 0.0,
             outflow_buy_bs: 0.0,
@@ -124,8 +126,9 @@ pub fn compute_bank_inventory_summary(conn: &Connection) -> Result<BankInventory
                 if acc.apply_buy_fee {
                     let channel = payment_channel.unwrap_or_else(|| "TRANSFERENCIA".to_string());
                     if channel == "PAGO_MOVIL" || channel == "TRANSFERENCIA_INTERBANCARIA" {
-                        let calc_fee = (fiat_amount * (acc.pago_movil_fee_pct / 100.0)).round();
-                        fees += calc_fee.max(14.0); // 14 VES piso mínimo SUDEBAN
+                        let calc_fee = fiat_amount * (acc.pago_movil_fee_pct / 100.0);
+                        let fee = calc_fee.max(acc.pago_movil_min_fee);
+                        fees += fee;
                     }
                 }
             }

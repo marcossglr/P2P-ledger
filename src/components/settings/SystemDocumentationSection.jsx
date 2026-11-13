@@ -120,17 +120,17 @@ export default function SystemDocumentationSection() {
           <div className="rounded-xl border border-slate-800/80 bg-slate-950/70 p-4 space-y-2">
             <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
               <Receipt className="h-3.5 w-3.5 text-rose-400" />
-              Deducción Transparente de Comisiones Operativas
+              Deducción Transparente de Comisiones Operativas (Escuela A - Base USDT)
             </h4>
             <p>
-              El sistema no oculta ni altera tus tasas nominales; descuenta los costos de forma 100% visible:
+              El sistema adopta el estándar financiero <strong>Cripto-céntrico (Base USDT)</strong>, midiendo la rentabilidad en moneda dura sin distorsión cambiaria:
             </p>
             <ul className="list-disc list-inside space-y-1 text-slate-400 pl-1">
               <li>
-                <strong className="text-slate-200">Comisiones de Binance P2P</strong>: Suma el 100% de comisiones en USDT (Maker + Taker de compras y ventas) y las descuenta al costo de reposición WAC.
+                <strong className="text-slate-200">Comisiones de Binance P2P (Escuela A)</strong>: Se deducen directamente de la <strong>Ganancia Bruta en USDT</strong>, ya que representan un costo directo e ineludible de la transacción en la plataforma.
               </li>
               <li>
-                <strong className="text-slate-200">Comisiones Bancarias</strong>: Las transferencias del mismo banco tienen 0% comisión. El recargo bancario (0.3%) se aplica exclusivamente a las compras realizadas por Pago Móvil.
+                <strong className="text-slate-200">Comisiones Bancarias</strong>: Se aplican exclusivamente a las compras completadas (cuando emites el dinero). Las operaciones por Pago Móvil o transferencia interbancaria aplican el porcentaje configurado (0.3% estándar) con un piso mínimo legal (por defecto 14.00 Bs según circular del BCV, configurable por cuenta). Se convierten a USDT dividiéndolas entre la tasa WAC de reposición.
               </li>
             </ul>
           </div>
@@ -139,14 +139,15 @@ export default function SystemDocumentationSection() {
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
             <h4 className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5" />
-              Ganancia Neta Limpia (Lo que te queda en el bolsillo)
+              Ganancia Neta Limpia (Base USDT y Equivalente en VES)
             </h4>
             <div className="rounded-lg bg-slate-900 border border-emerald-500/30 px-3 py-2 font-mono text-xs text-emerald-200 space-y-1">
-              <div>P&L Neto (VES) = Ganancia Bruta - Comisiones Binance (VES) - Comisiones Bancarias (VES)</div>
-              <div className="text-white font-bold text-xs pt-1">P&L Neto (USDT) = P&L Neto (VES) / Tasa Compra (WAC)</div>
+              <div>Ganancia Bruta (USDT) = Spread Puro (USDT) - Comisiones Binance (USDT)</div>
+              <div>Ganancia Neta (USDT) = Ganancia Bruta (USDT) - (Comisiones Bancarias VES / WAC Compra)</div>
+              <div className="text-white font-bold text-xs pt-1">Ganancia Neta (VES) = Ganancia Neta (USDT) × WAP Venta</div>
             </div>
             <p className="text-xs text-slate-400">
-              Te muestra con exactitud cuántos dólares netos y limpios le agregaste a tu patrimonio en la jornada o período consultado.
+              Te muestra con rigor contable cuántos dólares netos y limpios le agregaste a tu patrimonio en la jornada o período consultado, y su valor en Bolívares al precio ponderado de venta.
             </p>
           </div>
         </div>

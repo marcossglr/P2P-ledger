@@ -32,6 +32,7 @@ pub struct UpdateAccountPayload {
     pub is_active: Option<bool>,
     pub apply_buy_fee: Option<bool>,
     pub pago_movil_fee_pct: Option<f64>,
+    pub pago_movil_min_fee: Option<f64>,
     pub transfer_fee_pct: Option<f64>,
 }
 
@@ -117,9 +118,10 @@ pub fn update_bank_account(
             is_active = ?8,
             apply_buy_fee = ?9,
             pago_movil_fee_pct = ?10,
-            transfer_fee_pct = ?11,
+            pago_movil_min_fee = ?11,
+            transfer_fee_pct = ?12,
             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?12",
+         WHERE id = ?13",
         params![
             payload.name,
             payload.account_alias.unwrap_or_default(),
@@ -131,6 +133,7 @@ pub fn update_bank_account(
             if payload.is_active.unwrap_or(true) { 1 } else { 0 },
             if payload.apply_buy_fee.unwrap_or(true) { 1 } else { 0 },
             payload.pago_movil_fee_pct.unwrap_or(0.3),
+            payload.pago_movil_min_fee.unwrap_or(14.0),
             payload.transfer_fee_pct.unwrap_or(0.0),
             account_id
         ],

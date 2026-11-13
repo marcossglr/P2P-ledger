@@ -14,6 +14,7 @@ export default function BankAccountFormModal({
   const [accIsDefault, setAccIsDefault] = useState(false);
   const [accApplyFee, setAccApplyFee] = useState(true);
   const [accPmFeePct, setAccPmFeePct] = useState(0.3);
+  const [accPmMinFee, setAccPmMinFee] = useState(14.0);
   const [accTransfFeePct, setAccTransfFeePct] = useState(0.0);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -28,6 +29,7 @@ export default function BankAccountFormModal({
       setAccIsDefault(Boolean(editingAccount.is_default));
       setAccApplyFee(Boolean(editingAccount.apply_buy_fee));
       setAccPmFeePct(Number(editingAccount.pago_movil_fee_pct ?? 0.3));
+      setAccPmMinFee(Number(editingAccount.pago_movil_min_fee ?? 14.0));
       setAccTransfFeePct(Number(editingAccount.transfer_fee_pct ?? 0.0));
     }
   }, [isOpen, editingAccount]);
@@ -50,6 +52,7 @@ export default function BankAccountFormModal({
         is_default: accIsDefault,
         apply_buy_fee: accApplyFee,
         pago_movil_fee_pct: parseFloat(accPmFeePct) || 0,
+        pago_movil_min_fee: parseFloat(accPmMinFee) || 0,
         transfer_fee_pct: parseFloat(accTransfFeePct) || 0,
       };
 
@@ -159,10 +162,10 @@ export default function BankAccountFormModal({
             />
 
             {accApplyFee && (
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/60">
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Comisión Pago Móvil / Interbancaria (%)
+                    Comisión Pago Móvil (%)
                   </label>
                   <Input
                     type="number"
@@ -175,7 +178,20 @@ export default function BankAccountFormModal({
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Comisión Mismo Banco / Directa (%)
+                    Tarifa Mínima Piso (Bs)
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={accPmMinFee}
+                    onChange={(e) => setAccPmMinFee(e.target.value)}
+                    className="tabular-nums font-mono"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">14.00 Bs (BCV)</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                    Mismo Banco (%)
                   </label>
                   <Input
                     type="number"

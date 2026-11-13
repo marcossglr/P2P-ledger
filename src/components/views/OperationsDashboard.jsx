@@ -227,6 +227,7 @@ export default function OperationsDashboard({
             cryptoAsset={cryptoAsset}
             fiat={fiat}
             grossProfitUsdt={metrics.grossProfitUsdt}
+            netProfitUsdt={metrics.netProfitUsdt}
             totalCommissionsAllUsdt={metrics.totalCommissionsAllUsdt}
             matchedUsdt={metrics.matchedUsdt}
             netMarginPct={metrics.netMarginPct}

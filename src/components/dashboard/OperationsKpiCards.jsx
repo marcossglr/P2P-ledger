@@ -11,6 +11,7 @@ function OperationsKpiCards({
   cryptoAsset = 'USDT',
   fiat = 'VES',
   grossProfitUsdt = 0,
+  netProfitUsdt = null,
   totalCommissionsAllUsdt = 0,
   matchedUsdt = 0,
   netMarginPct = 0,
@@ -22,7 +23,7 @@ function OperationsKpiCards({
   fmtFiat = (n) => String(n),
   fmtRate = (n) => String(n),
 }) {
-  const netProfit = Number(stats.net_profit_usdt || 0);
+  const netProfit = Number(netProfitUsdt != null ? netProfitUsdt : (stats.net_profit_usdt || 0));
   const isProfit = netProfit > 0.005;
   const isLoss = netProfit < -0.005;
 
