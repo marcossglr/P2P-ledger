@@ -40,6 +40,15 @@ use commands::binance::{
     get_payment_methods,
     get_crypto_assets,
 };
+use commands::backups::{
+    get_backups_list,
+    create_db_backup,
+    restore_db_backup,
+    delete_db_backup,
+    upload_db_backup,
+    export_db_backup,
+    import_binance_csv,
+};
 
 const LEGACY_IDENTIFIER: &str = "com.p2pledger.app";
 
@@ -103,7 +112,15 @@ fn main() {
             save_public_market_config,
             get_public_market_stats,
             get_payment_methods,
-            get_crypto_assets
+            get_crypto_assets,
+            // Backups & CSV
+            get_backups_list,
+            create_db_backup,
+            restore_db_backup,
+            delete_db_backup,
+            upload_db_backup,
+            export_db_backup,
+            import_binance_csv
         ])
         .setup(|app| {
             // 1. Migrar datos de versiones anteriores

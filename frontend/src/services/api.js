@@ -256,16 +256,78 @@ export const bankInventoryApi = {
 };
 
 export const reconciliationApi = {
-  uploadBinanceCsv: async () => {
-    throw new Error('Carga de CSV en preparación');
+  uploadBinanceCsv: async (formData) => {
+    if (isTauriDesktop()) {
+      const file = formData.get('file');
+      if (!file) throw new Error('No se encontró el archivo CSV en el formulario');
+      const text = await file.text();
+      return await invoke('import_binance_csv', {
+        csvText: text,
+        filename: file.name || 'binance_orders.csv',
+      });
+    }
+    return { filename: 'mock.csv', total_rows_raw: 0, valid_rows: 0, new_orders: 0, updated_orders: 0 };
   },
 };
 
 export const backupsApi = {
-  list: async () => [],
-  create: async () => {},
-  restore: async () => {},
-  delete: async () => {},
-  upload: async () => {},
-  getDownloadUrl: () => '#',
+  list: async () => {
+    if (isTauriDesktop()) {
+      return await invoke('get_backups_list');
+    }
+    return { status: 'success', current_db_size_bytes: 0, current_db_size_kb: 0, current_db_size_mb: 0, backups: [] };
+  },
+
+  create: async () => {
+    if (isTauriDesktop()) {
+      return await invoke('create_db_backup');
+    }
+    return { status: 'success', filename: 'backup_mock.db', size_mb: 0.1, message: 'Backup creado' };
+  },
+
+  restore: async (filename) => {
+    if (isTauriDesktop()) {
+      const message = await invoke('restore_db_backup', { filename });
+      return { status: 'success', message };
+    }
+    return { status: 'success', message: 'Restaurado correctamente (modo web)' };
+  },
+
+  delete: async (filename) => {
+    if (isTauriDesktop()) {
+      return await invoke('delete_db_backup', { filename });
+    }
+  },
+
+  upload: async (formData) => {
+    if (isTauriDesktop()) {
+      const file = formData.get('file');
+      if (!file) throw new Error('No se encontró archivo en el formulario');
+      const buffer = await file.arrayBuffer();
+      const fileBytes = Array.from(new Uint8Array(buffer));
+      return await invoke('upload_db_backup', {
+        filename: file.name || 'backup.db',
+        fileBytes,
+      });
+    }
+    return { status: 'success', filename: 'backup.db', size_mb: 0.1, message: 'Copia importada' };
+  },
+
+  downloadBackup: async (filename) => {
+    if (isTauriDesktop()) {
+      const bytes = await invoke('export_db_backup', { filename });
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'application/x-sqlite3' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+  },
+
+  getDownloadUrl: (filename) => `#download-${filename}`,
 };

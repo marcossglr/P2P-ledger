@@ -326,16 +326,15 @@ export default function DatabaseBackupsSection({
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5">
-                          <a
-                            href={backupsApi.getDownloadUrl(b.filename)}
-                            download={b.filename}
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => backupsApi.downloadBackup(b.filename)}
                             title="Descargar archivo .db a tu equipo"
                             className="inline-flex items-center gap-1 rounded-lg border border-slate-800/80 bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-slate-700 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer shadow-xs"
                           >
                             <Download className="h-3 w-3 text-slate-400" />
                             <span>Descargar</span>
-                          </a>
+                          </button>
                           <Button
                             type="button"
                             variant="primary"
