@@ -5,6 +5,7 @@ use crate::db::DbState;
 use crate::services::bank_inventory::{compute_bank_inventory_summary, BankInventorySummary};
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct CreateAccountPayload {
     pub bank_name: String,
     pub account_number: Option<String>,
@@ -18,6 +19,7 @@ pub struct CreateAccountPayload {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct UpdateAccountPayload {
     pub name: String,
     pub account_alias: Option<String>,
@@ -33,6 +35,7 @@ pub struct UpdateAccountPayload {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ReconcileAccountPayload {
     pub account_id: i64,
     pub mode: String, // "CUADRE_CONSOLIDADO" | "MOVIMIENTO_MANUAL" | etc.
