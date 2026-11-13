@@ -185,7 +185,7 @@ export const operationsApi = {
 
   clearOperations: async (onlyDemo = false) => {
     if (isTauriDesktop()) {
-      return await invoke('clear_operations', { only_demo: onlyDemo });
+      return await invoke('clear_operations', { onlyDemo, only_demo: onlyDemo });
     }
     return 0;
   },
