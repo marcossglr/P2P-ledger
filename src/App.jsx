@@ -12,6 +12,7 @@ import TreasuryView from './components/views/TreasuryView';
 import SettingsView from './components/views/SettingsView';
 import BinanceApiModal from './components/modals/BinanceApiModal';
 import AppHeader from './components/layout/AppHeader';
+import OnboardingBanner from './components/layout/OnboardingBanner';
 import { useAppLifecycle } from './hooks/useAppLifecycle';
 import { playCompletedTradeSound } from './utils/audioAlerts';
 
@@ -142,6 +143,18 @@ export default function App() {
 
       {/* Contenido Principal con Keep-Alive */}
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-5 sm:px-6">
+        {/* Banner global de entorno: Onboarding inicial o Alerta/Depuración de Operaciones Demo */}
+        <OnboardingBanner
+          apiConfigured={health?.binance_api_configured}
+          demoCount={Number(health?.stored_demo_orders || 0)}
+          storedOrders={Number(health?.stored_orders || 0)}
+          onOpenApiModal={() => setIsApiModalOpen(true)}
+          onStateChanged={() => {
+            checkHealth();
+            setRefreshTrigger((prev) => prev + 1);
+          }}
+        />
+
         {visitedViews.has('DASHBOARD') && (
           <div className={activeView === 'DASHBOARD' ? 'contents' : 'hidden'}>
             <OperationsDashboard

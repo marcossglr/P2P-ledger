@@ -206,63 +206,6 @@ export default function OperationsDashboard({
   return (
     <div className="space-y-6">
 
-      {/* Onboarding Banner cuando la BD está completamente vacía */}
-      {!loading && totalStoredOrders === 0 && !apiConfigured && (
-        <div className="flex flex-col items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-5 sm:flex-row">
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-white">
-              Conecta tu API de Binance P2P o explora con datos de demostración
-            </h2>
-            <p className="text-xs text-slate-400 max-w-2xl">
-              El sistema extrae automáticamente tus órdenes de Compra y Venta en tiempo real, calculando tu spread,
-              tasas promedio ponderadas (WAC/WAP) y ganancia neta del día.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              icon={Sparkles}
-              onClick={handleSeedDemo}
-            >
-              <span>Cargar Operaciones Demo</span>
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              icon={RefreshCw}
-              onClick={onOpenApiModal}
-            >
-              <span>Conectar API de Binance</span>
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Aviso de Datos Demo */}
-      {hasDemoOrders && (
-        <div className="flex items-center justify-between rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-400" />
-            <span>
-              Estás visualizando <strong>operaciones de demostración</strong> (incluyendo órdenes simuladas para hoy).
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            icon={Trash2}
-            onClick={handleClearDemo}
-            className="text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
-          >
-            <span>Borrar datos demo</span>
-          </Button>
-        </div>
-      )}
-
       {/* =========================================================================
           ZONA 1: RENDIMIENTO GENERAL DE LA JORNADA (Grid 4x2: Mercado P2P + KPIs)
          ========================================================================= */}
