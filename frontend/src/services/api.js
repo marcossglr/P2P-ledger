@@ -82,8 +82,38 @@ export const binanceApi = {
     return payload;
   },
 
+  syncOrders: async (payload = {}) => {
+    if (isTauriDesktop()) {
+      return await invoke('sync_binance_orders', { payload });
+    }
+    return {
+      status: 'synced',
+      sync_mode: 'MOCK',
+      fetched_count: 0,
+      new_orders: 0,
+      updated_orders: 0,
+      has_in_progress: false,
+      in_progress_count: 0,
+      last_synced_at: new Date().toLocaleTimeString(),
+      period: 'Modo Web Mock',
+    };
+  },
+
   testPublicMarketConnection: async () => ({ status: 'ok', latency_ms: 12 }),
-  getPublicMarketStats: async () => ({ best_buy: 0, best_sell: 0, spread: 0 }),
+  getPublicMarketStats: async (params = {}) => {
+    if (isTauriDesktop()) {
+      return await invoke('get_public_market_stats', {
+        query: {
+          asset: params.asset || null,
+          fiat: params.fiat || null,
+          bank: params.bank || null,
+          amount: params.amount ? Number(params.amount) : null,
+          only_merchants: Boolean(params.only_merchants),
+        },
+      });
+    }
+    return { best_buy: 0, best_sell: 0, spread: 0, spread_pct: 0, buy_ads_count: 0, sell_ads_count: 0, buy_avg_price: 0, sell_avg_price: 0 };
+  },
   getPaymentMethods: async () => [],
   getCryptoAssets: async () => ['USDT', 'BTC', 'ETH'],
 };

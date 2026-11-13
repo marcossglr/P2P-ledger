@@ -32,9 +32,11 @@ use commands::binance::{
     delete_binance_config,
     get_funding_wallet,
     set_funding_wallet_manual,
+    sync_binance_orders,
     get_my_ads,
     get_public_market_config,
     save_public_market_config,
+    get_public_market_stats,
 };
 
 const LEGACY_IDENTIFIER: &str = "com.p2pledger.app";
@@ -93,9 +95,11 @@ fn main() {
             delete_binance_config,
             get_funding_wallet,
             set_funding_wallet_manual,
+            sync_binance_orders,
             get_my_ads,
             get_public_market_config,
-            save_public_market_config
+            save_public_market_config,
+            get_public_market_stats
         ])
         .setup(|app| {
             // 1. Migrar datos de versiones anteriores

@@ -2,13 +2,24 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use crate::db::DbState;
 use crate::services::binance::{
-    get_saved_config, save_config, clear_config, BinanceConfigResponse, FundingWalletResponse,
+    get_saved_config, save_config, clear_config, fetch_funding_asset_balance,
+    sync_orders_to_db, fetch_public_market_stats, BinanceConfigResponse,
+    FundingWalletResponse, SyncResult, PublicMarketStats,
 };
 
 #[derive(Debug, Deserialize)]
 pub struct CredentialsPayload {
     pub api_key: String,
     pub api_secret: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncOrdersPayload {
+    pub api_key: Option<String>,
+    pub api_secret: Option<String>,
+    pub force_full_180d: Option<bool>,
+    pub force_full_90d: Option<bool>,
+    pub days: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +35,15 @@ pub struct PublicMarketConfig {
     pub trade_type: String,
     pub payment_methods: Vec<String>,
     pub rows: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PublicMarketStatsQuery {
+    pub asset: Option<String>,
+    pub fiat: Option<String>,
+    pub bank: Option<String>,
+    pub amount: Option<f64>,
+    pub only_merchants: Option<bool>,
 }
 
 #[tauri::command]
@@ -56,15 +76,9 @@ pub fn delete_binance_config(state: State<'_, DbState>) -> Result<BinanceConfigR
 }
 
 #[tauri::command]
-pub fn get_funding_wallet() -> Result<FundingWalletResponse, String> {
-    Ok(FundingWalletResponse {
-        asset: "USDT".to_string(),
-        free: 0.0,
-        locked: 0.0,
-        total: 0.0,
-        source: "LOCAL".to_string(),
-        updated_at: chrono::Local::now().to_rfc3339(),
-    })
+pub fn get_funding_wallet(state: State<'_, DbState>) -> Result<FundingWalletResponse, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    fetch_funding_asset_balance(&conn, "USDT")
 }
 
 #[tauri::command]
@@ -81,6 +95,24 @@ pub fn set_funding_wallet_manual(payload: ManualFundingPayload) -> Result<Fundin
         source: "MANUAL".to_string(),
         updated_at: chrono::Local::now().to_rfc3339(),
     })
+}
+
+#[tauri::command]
+pub fn sync_binance_orders(
+    payload: Option<SyncOrdersPayload>,
+    state: State<'_, DbState>,
+) -> Result<SyncResult, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let payload = payload.unwrap_or(SyncOrdersPayload {
+        api_key: None,
+        api_secret: None,
+        force_full_180d: None,
+        force_full_90d: None,
+        days: None,
+    });
+
+    let force_full = payload.force_full_180d.unwrap_or(false) || payload.force_full_90d.unwrap_or(false);
+    sync_orders_to_db(&conn, payload.days, force_full, payload.api_key, payload.api_secret)
 }
 
 #[tauri::command]
@@ -139,4 +171,30 @@ pub fn save_public_market_config(
     ).map_err(|e| e.to_string())?;
 
     Ok(payload)
+}
+
+#[tauri::command]
+pub fn get_public_market_stats(
+    query: Option<PublicMarketStatsQuery>,
+) -> Result<PublicMarketStats, String> {
+    let q = query.unwrap_or(PublicMarketStatsQuery {
+        asset: None,
+        fiat: None,
+        bank: None,
+        amount: None,
+        only_merchants: None,
+    });
+
+    let fiat = q.fiat.unwrap_or_else(|| "VES".to_string());
+    let asset = q.asset.unwrap_or_else(|| "USDT".to_string());
+    let mut pay_types = Vec::new();
+    if let Some(b) = q.bank {
+        let b_clean = b.trim();
+        if !b_clean.is_empty() && !b_clean.eq_ignore_ascii_case("ALL") {
+            pay_types.push(b_clean.to_string());
+        }
+    }
+
+    let only_merchants = q.only_merchants.unwrap_or(false);
+    fetch_public_market_stats(&fiat, &asset, &pay_types, q.amount, only_merchants)
 }
