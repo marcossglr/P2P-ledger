@@ -448,6 +448,13 @@ pub fn sync_orders_to_db(
     // Eliminar órdenes demo si ingresan datos reales de API
     if !orders.is_empty() {
         let _ = conn.execute("DELETE FROM binance_orders WHERE source = 'DEMO'", []);
+        // Si las cuentas bancarias de prueba no tienen órdenes reales asignadas, depurarlas
+        let _ = conn.execute(
+            "DELETE FROM bank_accounts 
+             WHERE name IN ('Banesco', 'Mercantil') 
+               AND id NOT IN (SELECT DISTINCT bank_account_id FROM binance_orders WHERE bank_account_id IS NOT NULL)",
+            [],
+        );
     }
 
     let mut new_orders = 0;

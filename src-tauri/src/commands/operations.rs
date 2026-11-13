@@ -224,7 +224,24 @@ pub fn seed_demo_operations(state: State<'_, DbState>) -> Result<usize, String> 
 pub fn clear_operations(only_demo: bool, state: State<'_, DbState>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let deleted = if only_demo {
-        conn.execute("DELETE FROM binance_orders WHERE source = 'DEMO'", []).map_err(|e| e.to_string())?
+        let count = conn.execute("DELETE FROM binance_orders WHERE source = 'DEMO'", []).map_err(|e| e.to_string())?;
+
+        // Si no quedan órdenes reales, depurar también las cuentas bancarias de prueba creadas durante el seed demo
+        let real_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM binance_orders WHERE source != 'DEMO'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        if real_count == 0 {
+            // Eliminar ajustes de saldo y cuentas creadas para demo (o huérfanas sin órdenes)
+            let _ = conn.execute("DELETE FROM bank_balance_adjustments", []);
+            let _ = conn.execute("DELETE FROM bank_accounts WHERE name IN ('Banesco', 'Mercantil')", []);
+        }
+
+        count
     } else {
         conn.execute("DELETE FROM binance_orders", []).map_err(|e| e.to_string())?
     };
