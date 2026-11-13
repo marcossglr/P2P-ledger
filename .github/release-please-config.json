@@ -15,8 +15,8 @@
           "jsonpath": "$.version"
         },
         {
-          "type": "generic",
-          "path": "backend/app/config.py"
+          "type": "cargo",
+          "path": "frontend/src-tauri/Cargo.toml"
         }
       ]
     }
