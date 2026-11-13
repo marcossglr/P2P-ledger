@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/marcossglr/P2P-ledger/compare/v0.6.2...v0.7.0) (2026-11-13)
+
+
+### Features
+
+* **backups:** migrar gestión de respaldos e importador csv a rust nativo ([672f5dd](https://github.com/marcossglr/P2P-ledger/commit/672f5ddde39bbca3e7865549bcf2db5bb88f777c))
+* **binance:** implementar conexion nativa rust con binance api (funding wallet, sync c2c y mercado publico) ([820c81b](https://github.com/marcossglr/P2P-ledger/commit/820c81b6eb79a193d9a58eebd076ebe5c9056c85))
+* hacer global el banner de onboarding y alerta de datos demo ([af523d5](https://github.com/marcossglr/P2P-ledger/commit/af523d50269cc956dc32b1876f93c662444f8f94))
+* **market:** integrar métodos de pago y libro de órdenes completo en Tauri Rust ([dc26288](https://github.com/marcossglr/P2P-ledger/commit/dc26288f2550e2f99a97ef6559407d3a83497835))
+* **rust:** migrar backend a rust nativo en tauri (sqlite, inventario, operaciones y binance) ([9ebf187](https://github.com/marcossglr/P2P-ledger/commit/9ebf1879a60d2df547c5e43193c6fd76a2492fba))
+
+
+### Bug Fixes
+
+* compatibilidad camelCase/snake_case en clear_operations de Tauri ([e3e6d57](https://github.com/marcossglr/P2P-ledger/commit/e3e6d57c09368ef9d5a6cade26160a6fd418daf1))
+* depurar cuentas bancarias de prueba al limpiar datos demo ([6c1bc92](https://github.com/marcossglr/P2P-ledger/commit/6c1bc92c2c90b12ab62a8202af918e5d3d428020))
+* **frontend:** corregir exportaciones de api.js y main.jsx para compatibilidad completa con vite ([d81f3f7](https://github.com/marcossglr/P2P-ledger/commit/d81f3f7357fe8ad2da576992a33ae02fc2cdf842))
+
 ## [0.6.2](https://github.com/marcossglr/P2P-ledger/compare/v0.6.1...v0.6.2) (2026-11-12)
 
 
