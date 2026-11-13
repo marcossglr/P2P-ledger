@@ -15,8 +15,9 @@
           "jsonpath": "$.version"
         },
         {
-          "type": "cargo",
-          "path": "frontend/src-tauri/Cargo.toml"
+          "type": "toml",
+          "path": "frontend/src-tauri/Cargo.toml",
+          "jsonpath": "$.package.version"
         }
       ]
     }
