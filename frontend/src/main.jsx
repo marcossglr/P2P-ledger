@@ -11,13 +11,7 @@ import '@fontsource/jetbrains-mono/600.css'
 import '@fontsource/jetbrains-mono/700.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
-import { resolveBackendPort } from './services/api.js'
 import './index.css'
-
-// Disparar resolución temprana del puerto dinámico en entorno Desktop (Tauri)
-resolveBackendPort().catch((err) => {
-  console.warn('[P2P Ledger] Error inicializando puerto dinámico de backend:', err);
-});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

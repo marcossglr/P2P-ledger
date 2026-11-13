@@ -12,6 +12,13 @@ export const isTauriDesktop = () => {
 };
 
 // ==========================================
+// ESTADO Y SALUD DEL SISTEMA
+// ==========================================
+export const healthApi = {
+  check: async () => ({ status: 'healthy', mode: 'native_rust' }),
+};
+
+// ==========================================
 // BINANCE API & CONFIGURACIÓN
 // ==========================================
 export const binanceApi = {
