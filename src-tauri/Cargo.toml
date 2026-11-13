@@ -1,6 +1,6 @@
 [package]
 name = "p2p-ledger"
-version = "0.3.9"
+version = "0.6.2"
 description = "P2P Ledger — Terminal de Conciliación P2P"
 authors = ["marcossglr"]
 license = "GPL-3.0-only"
