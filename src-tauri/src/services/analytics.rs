@@ -357,21 +357,25 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
             cp_entry.usdt_volume += o.crypto_amount;
 
             if o.order_type == "COMPRA" {
+                // Entrada efectiva de cripto en billetera: monto acordado menos comisión deducida por Binance
+                let effective_crypto = (o.crypto_amount - o.commission_usdt).max(0.0);
                 buy_fiat += o.fiat_amount;
-                buy_crypto += o.crypto_amount;
+                buy_crypto += effective_crypto;
                 buy_count += 1;
                 total_bank_fees += o.bank_fee_fiat;
 
                 day_entry.buy_fiat += o.fiat_amount;
-                day_entry.buy_usdt += o.crypto_amount;
+                day_entry.buy_usdt += effective_crypto;
                 day_entry.bank_fee_fiat += o.bank_fee_fiat;
             } else if o.order_type == "VENTA" {
+                // Salida efectiva de cripto de billetera: monto entregado más comisión cobrada por Binance
+                let effective_crypto = o.crypto_amount + o.commission_usdt;
                 sell_fiat += o.fiat_amount;
-                sell_crypto += o.crypto_amount;
+                sell_crypto += effective_crypto;
                 sell_count += 1;
 
                 day_entry.sell_fiat += o.fiat_amount;
-                day_entry.sell_usdt += o.crypto_amount;
+                day_entry.sell_usdt += effective_crypto;
             }
         }
     }
@@ -383,23 +387,21 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
 
     let matched_volume = buy_crypto.min(sell_crypto);
 
-    // Spread comercial puro en USDT y en Fiat
-    let pure_spread_usdt = if wap_sell > 0.0 && wac_buy > 0.0 {
+    // Con volúmenes efectivos (netos de comisiones de Binance),
+    // el spread comercial puro ya es la ganancia bruta real de la rotación
+    let gross_profit_usdt = if wap_sell > 0.0 && wac_buy > 0.0 {
         matched_volume * (1.0 - (wac_buy / wap_sell))
     } else {
         0.0
     };
 
-    // Escuela A:
-    // Ganancia Bruta (USDT) = Spread Puro en USDT MENOS Comisiones de Binance
-    let gross_profit_usdt = pure_spread_usdt - total_commission_usdt;
     let gross_profit_fiat = if wap_sell > 0.0 {
         gross_profit_usdt * wap_sell
     } else {
-        matched_volume * spread_abs - (total_commission_usdt * wac_buy)
+        matched_volume * spread_abs
     };
 
-    // Comisiones bancarias convertidas a USDT al costo de reposición (WAC)
+    // Comisiones bancarias convertidas a cripto al costo de reposición efectivo (WAC)
     let bank_fees_usdt = if wac_buy > 0.0 {
         total_bank_fees / wac_buy
     } else if wap_sell > 0.0 {
@@ -408,7 +410,7 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
         0.0
     };
 
-    // Ganancia Neta = Ganancia Bruta MENOS Comisiones Bancarias
+    // Ganancia Neta = Ganancia Bruta (ya efectiva de Binance) MENOS Comisiones Bancarias
     let net_profit_usdt = gross_profit_usdt - bank_fees_usdt;
     let net_profit_fiat = if wap_sell > 0.0 {
         net_profit_usdt * wap_sell
@@ -430,11 +432,31 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
             let d_wap = if d.sell_usdt > 0.0 { d.sell_fiat / d.sell_usdt } else { wap_sell };
             let d_matched = d.buy_usdt.min(d.sell_usdt);
             let d_spread = if d_wac > 0.0 && d_wap > 0.0 { d_wap - d_wac } else { 0.0 };
-            let d_gross = d_matched * d_spread;
+            let d_gross_usdt = if d_wac > 0.0 && d_wap > 0.0 {
+                d_matched * (1.0 - (d_wac / d_wap))
+            } else {
+                0.0
+            };
+            let d_gross_fiat = if d_wap > 0.0 {
+                d_gross_usdt * d_wap
+            } else {
+                d_matched * d_spread
+            };
             let d_ref_rate = if d_wac > 0.0 { d_wac } else if d_wap > 0.0 { d_wap } else { 1.0 };
             let d_comm_fiat = d.comm_usdt * d_ref_rate;
-            let d_net_fiat = d_gross - d_comm_fiat - d.bank_fee_fiat;
-            let d_net_usdt = if d_ref_rate > 0.0 { d_net_fiat / d_ref_rate } else { 0.0 };
+            let d_bank_fee_usdt = if d_wac > 0.0 {
+                d.bank_fee_fiat / d_wac
+            } else if d_wap > 0.0 {
+                d.bank_fee_fiat / d_wap
+            } else {
+                0.0
+            };
+            let d_net_usdt = d_gross_usdt - d_bank_fee_usdt;
+            let d_net_fiat = if d_wap > 0.0 {
+                d_net_usdt * d_wap
+            } else {
+                d_gross_fiat - d.bank_fee_fiat
+            };
 
             daily_series.push(DailyPerformanceRecord {
                 date: d_key,
@@ -450,7 +472,7 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
                 comm_usdt: (d.comm_usdt * 10000.0).round() / 10000.0,
                 comm_fiat: (d_comm_fiat * 100.0).round() / 100.0,
                 bank_fee_fiat: (d.bank_fee_fiat * 100.0).round() / 100.0,
-                gross_profit_fiat: (d_gross * 100.0).round() / 100.0,
+                gross_profit_fiat: (d_gross_fiat * 100.0).round() / 100.0,
                 net_profit_fiat: (d_net_fiat * 100.0).round() / 100.0,
                 net_profit_usdt: (d_net_usdt * 100.0).round() / 100.0,
             });
@@ -533,6 +555,7 @@ mod tests {
         crypto_amount: f64,
         fiat_amount: f64,
         bank_fee_fiat: f64,
+        commission_usdt: f64,
     ) -> BinanceOrderRecord {
         BinanceOrderRecord {
             id: 1,
@@ -544,7 +567,7 @@ mod tests {
             fiat_amount,
             crypto_amount,
             unit_price: fiat_amount / crypto_amount,
-            commission_usdt: 0.0,
+            commission_usdt,
             pay_method: Some("PAGO_MOVIL".to_string()),
             counterparty: Some("UserTest".to_string()),
             reference_note: None,
@@ -560,15 +583,15 @@ mod tests {
 
     #[test]
     fn test_compute_analytics_balanced_cycle() {
-        // Compra de 100 USDT a 50 VES/USDT = 5000 VES
-        // Venta de 100 USDT a 52 VES/USDT = 5200 VES
+        // Compra de 100 USDT a 50 VES/USDT = 5000 VES (sin comisión)
+        // Venta de 100 USDT a 52 VES/USDT = 5200 VES (sin comisión)
         // Pure Spread USDT = 100 * (1 - 50/52) = 3.84615 USDT
-        // Comisiones Binance = 0.0 -> Gross Profit USDT = 3.85 USDT, Gross Profit Fiat = 3.84615 * 52 = 200 VES
+        // Gross Profit USDT = 3.85 USDT, Gross Profit Fiat = 3.84615 * 52 = 200 VES
         // Bank fee = 14 VES -> Bank fee USDT = 14 / 50 = 0.28 USDT
-        // Net Profit USDT = 3.84615 - 0.28 = 3.566 USDT -> Net Profit Fiat = 3.566 * 52 = 185.44 VES (o 200 - 14.56)
+        // Net Profit USDT = 3.84615 - 0.28 = 3.566 USDT -> Net Profit Fiat = 3.566 * 52 = 185.44 VES
         let orders = vec![
-            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 14.0),
-            mock_order("ORD-2", "VENTA", "COMPLETED", 100.0, 5200.0, 0.0),
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 14.0, 0.0),
+            mock_order("ORD-2", "VENTA", "COMPLETED", 100.0, 5200.0, 0.0, 0.0),
         ];
 
         let analytics = compute_analytics_from_orders(&orders);
@@ -592,8 +615,8 @@ mod tests {
     #[test]
     fn test_compute_analytics_ignores_cancelled_or_pending() {
         let orders = vec![
-            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0),
-            mock_order("ORD-2", "VENTA", "CANCELLED", 100.0, 5200.0, 0.0),
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0, 0.0),
+            mock_order("ORD-2", "VENTA", "CANCELLED", 100.0, 5200.0, 0.0, 0.0),
         ];
 
         let analytics = compute_analytics_from_orders(&orders);
@@ -610,8 +633,8 @@ mod tests {
         // Dos compras: 100 USDT a 50 VES (5000 VES) y 200 USDT a 53 VES (10600 VES)
         // Total crypto = 300, Total fiat = 15600 -> WAC = 52.0
         let orders = vec![
-            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0),
-            mock_order("ORD-2", "COMPRA", "COMPLETED", 200.0, 10600.0, 0.0),
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0, 0.0),
+            mock_order("ORD-2", "COMPRA", "COMPLETED", 200.0, 10600.0, 0.0, 0.0),
         ];
 
         let analytics = compute_analytics_from_orders(&orders);
@@ -619,5 +642,28 @@ mod tests {
         assert_eq!(analytics.buy_crypto, 300.0);
         assert_eq!(analytics.buy_fiat, 15600.0);
         assert_eq!(analytics.wac_buy, 52.0);
+    }
+
+    #[test]
+    fn test_compute_analytics_with_binance_commissions() {
+        // Compra Maker: 100 USDT facial a 50 VES (5000 VES), comisión Binance 0.1 USDT
+        // Cripto recibida en billetera = 99.9 USDT -> WAC efectivo = 5000 / 99.9 = 50.05005 VES/USDT
+        // Venta Maker: 100 USDT facial a 52 VES (5200 VES), comisión Binance 0.1 USDT
+        // Cripto entregada de billetera = 100.1 USDT -> WAP efectivo = 5200 / 100.1 = 51.94805 VES/USDT
+        let orders = vec![
+            mock_order("ORD-1", "COMPRA", "COMPLETED", 100.0, 5000.0, 0.0, 0.1),
+            mock_order("ORD-2", "VENTA", "COMPLETED", 100.0, 5200.0, 0.0, 0.1),
+        ];
+
+        let analytics = compute_analytics_from_orders(&orders);
+
+        assert_eq!(analytics.buy_crypto, 99.9);
+        assert_eq!(analytics.sell_crypto, 100.1);
+        assert_eq!(analytics.matched_volume_crypto, 99.9);
+        assert_eq!(analytics.wac_buy, 50.0501);
+        assert_eq!(analytics.wap_sell, 51.9481);
+        assert_eq!(analytics.total_commission_usdt, 0.2);
+        // Spread puro efectivo = 99.9 * (1 - 50.05005 / 51.94805) = 3.649 USDT
+        assert_eq!(analytics.gross_profit_usdt, 3.65);
     }
 }

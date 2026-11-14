@@ -22,6 +22,161 @@ export const fmtRate = (n) =>
   });
 
 /**
+ * Normaliza y estandariza las métricas operativas provistas por el backend (Rust).
+ * Actúa como contrato universal e inmutable de datos para componentes KPI y resúmenes.
+ *
+ * @param {Object} stats Objeto analytics del backend
+ * @param {Array} [orders] Lista de órdenes como fallback de conteo
+ * @returns {Object} Contrato normalizado de métricas
+ */
+export function normalizeKpiMetrics(stats = {}, orders = []) {
+  // 1. Precios y Tasas Ponderadas
+  const wacBuy = Number(stats.wac_buy_price || stats.wac_buy || 0);
+  const wapSell = Number(stats.wap_sell_price || stats.wap_sell || 0);
+  const refRate = wacBuy > 0 ? wacBuy : wapSell > 0 ? wapSell : 0;
+  const spreadAbs = Number(stats.spread_abs || 0);
+  const spreadPct = Number(stats.spread_pct || 0);
+
+  // 2. Resultados de Ganancia (P&L Escuela A)
+  const grossProfitCrypto =
+    stats.gross_profit_usdt != null
+      ? Number(stats.gross_profit_usdt)
+      : refRate > 0
+      ? Number(stats.gross_profit_fiat || 0) / refRate
+      : 0;
+  const grossProfitFiat = Number(stats.gross_profit_fiat || 0);
+
+  const bankFeesCrypto =
+    stats.bank_fees_usdt != null
+      ? Number(stats.bank_fees_usdt)
+      : refRate > 0
+      ? Number(stats.estimated_bank_fees_fiat || stats.total_bank_fees_fiat || 0) / refRate
+      : 0;
+  const bankFeesFiat = Number(stats.total_bank_fees_fiat || stats.estimated_bank_fees_fiat || 0);
+
+  const binanceCommissionsCrypto = Number(stats.total_commission_usdt || 0);
+  const binanceCommissionsFiat = Number(
+    stats.commission_fiat_cost != null
+      ? stats.commission_fiat_cost
+      : binanceCommissionsCrypto * refRate
+  );
+
+  const totalCommissionsCrypto = binanceCommissionsCrypto + bankFeesCrypto;
+  const totalCommissionsFiat = binanceCommissionsFiat + bankFeesFiat;
+
+  const netProfitCrypto =
+    stats.net_profit_usdt != null
+      ? Number(stats.net_profit_usdt)
+      : grossProfitCrypto - bankFeesCrypto;
+  const netProfitFiat = Number(stats.net_profit_fiat || 0);
+
+  // 3. Volúmenes y Ciclado Comercial
+  const matchedCrypto = Number(stats.matched_volume_crypto || stats.matched_usdt_volume || 0);
+  const netMarginPct = matchedCrypto > 0 ? (netProfitCrypto / matchedCrypto) * 100 : 0;
+
+  const buyCryptoTotal = Number(stats.buy_usdt_total || stats.buy_crypto || 0);
+  const sellCryptoTotal = Number(stats.sell_usdt_total || stats.sell_crypto || 0);
+  const totalCryptoVolume = Number(
+    stats.total_usdt_volume != null
+      ? stats.total_usdt_volume
+      : buyCryptoTotal + sellCryptoTotal
+  );
+
+  const netInventoryCrypto =
+    stats.net_inventory_usdt !== undefined && stats.net_inventory_usdt !== null
+      ? Number(stats.net_inventory_usdt)
+      : buyCryptoTotal - sellCryptoTotal;
+
+  const buyFiatTotal = Number(stats.buy_fiat_total || stats.buy_fiat || 0);
+  const sellFiatTotal = Number(stats.sell_fiat_total || stats.sell_fiat || 0);
+  const totalFiatVolume = Number(
+    stats.total_fiat_volume != null
+      ? stats.total_fiat_volume
+      : buyFiatTotal + sellFiatTotal
+  );
+  const netCashFlowFiat = sellFiatTotal - buyFiatTotal;
+
+  // 4. Operativa y Conteo de Órdenes
+  const completedOrdersCount = Number(
+    stats.completed_orders ?? stats.total_orders ?? orders?.length ?? 0
+  );
+  const buyOrdersCount = Number(stats.buy_count || 0);
+  const sellOrdersCount = Number(stats.sell_count || 0);
+  const cancelledOrdersCount = Number(stats.cancelled_orders || 0);
+  const totalOrdersCount = completedOrdersCount + cancelledOrdersCount;
+  const completionRatePct =
+    stats.completion_rate_pct != null
+      ? Number(stats.completion_rate_pct)
+      : totalOrdersCount > 0
+      ? (completedOrdersCount / totalOrdersCount) * 100
+      : 100;
+  const avgTicketCrypto =
+    completedOrdersCount > 0 ? totalCryptoVolume / completedOrdersCount : 0;
+
+  // Estados derivados de conveniencia
+  const isProfit = netProfitCrypto > 0.005;
+  const isLoss = netProfitCrypto < -0.005;
+
+  return {
+    // Tasas
+    wacBuy,
+    wapSell,
+    refRate,
+    spreadAbs,
+    spreadPct,
+
+    // P&L
+    grossProfitCrypto,
+    grossProfitFiat,
+    bankFeesCrypto,
+    bankFeesFiat,
+    binanceCommissionsCrypto,
+    binanceCommissionsFiat,
+    totalCommissionsCrypto,
+    totalCommissionsFiat,
+    netProfitCrypto,
+    netProfitFiat,
+    netMarginPct,
+    isProfit,
+    isLoss,
+
+    // Volúmenes Cripto
+    matchedCrypto,
+    buyCryptoTotal,
+    sellCryptoTotal,
+    totalCryptoVolume,
+    netInventoryCrypto,
+
+    // Volúmenes Fiat
+    buyFiatTotal,
+    sellFiatTotal,
+    totalFiatVolume,
+    netCashFlowFiat,
+
+    // Órdenes
+    totalOrdersCount,
+    completedOrdersCount,
+    buyOrdersCount,
+    sellOrdersCount,
+    cancelledOrdersCount,
+    completionRatePct,
+    avgTicketCrypto,
+
+    // Aliases de compatibilidad heredada (para evitar cualquier quiebre puntual)
+    matchedUsdt: matchedCrypto,
+    netProfitUsdt: netProfitCrypto,
+    grossProfitUsdt: grossProfitCrypto,
+    bankFeesUsdt: bankFeesCrypto,
+    totalCommissionsAllUsdt: totalCommissionsCrypto,
+    totalCommissionsAllFiat: totalCommissionsFiat,
+    buyUsdtTotal: buyCryptoTotal,
+    sellUsdtTotal: sellCryptoTotal,
+    netInventoryUsdt: netInventoryCrypto,
+    avgTicketUsdt: avgTicketCrypto,
+  };
+}
+
+/**
  * Computa las métricas derivadas financieras para el dashboard de operaciones
  */
 export function computeOperationsMetrics({
