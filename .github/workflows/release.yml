@@ -1,9 +1,6 @@
 name: Multiplatform Release (.rpm, .deb, .exe)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -11,6 +8,11 @@ on:
         required: false
         type: string
         default: ''
+      prerelease:
+        description: '¿Marcar como Pre-release / Inestable?'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -78,7 +80,7 @@ jobs:
           releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
           releaseBody: 'Release nativo multiplataforma en Rust para P2P Ledger con soporte de auto-actualizaciones.'
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ inputs.prerelease }}
 
   build-windows:
     name: Compilar para Windows (.exe / .msi)
@@ -114,4 +116,4 @@ jobs:
           releaseName: 'P2P Ledger ${{ needs.resolve-tag.outputs.tag }}'
           releaseBody: 'Release nativo multiplataforma en Rust para P2P Ledger con soporte de auto-actualizaciones.'
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ inputs.prerelease }}
