@@ -38,15 +38,16 @@ export default function SystemDocumentationSection() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                 <ArrowDownRight className="h-3.5 w-3.5" />
-                Tasa Promedio de Compra (WAC)
+                Tasa Promedio de Compra Efectiva (WAC)
               </span>
-              <span className="text-xs font-mono text-slate-500">Costo Ponderado</span>
+              <span className="text-xs font-mono text-slate-500">Costo Efectivo Billetera</span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Precio medio real pagado por cada USDT adquirido según los anuncios pactados. Pondera cada orden por su volumen en dólares:
+              Costo medio real pagado por cada USDT neto ingresado en billetera tras descontar comisiones de Binance:
             </p>
-            <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 font-mono text-xs text-slate-200">
-              Tasa Compra = Total Bolívares Pagados / Total USDT Comprados
+            <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 font-mono text-xs text-slate-200 space-y-1">
+              <div>USDT Recibido = Monto Facial - Comisión Binance (USDT)</div>
+              <div className="text-emerald-400 font-medium">WAC Efectivo = Total Bolívares Pagados / Total USDT Recibidos</div>
             </div>
           </div>
 
@@ -55,15 +56,16 @@ export default function SystemDocumentationSection() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                 <ArrowUpRight className="h-3.5 w-3.5" />
-                Tasa Promedio de Venta (WAP)
+                Tasa Promedio de Venta Efectiva (WAP)
               </span>
-              <span className="text-xs font-mono text-slate-500">Precio Ponderado</span>
+              <span className="text-xs font-mono text-slate-500">Precio Efectivo Billetera</span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Precio medio real en Bolívares cobrado por cada USDT liquidado en tus anuncios de venta:
+              Precio medio real en Bolívares cobrado por cada USDT entregado de tu inventario incluyendo comisiones cobradas:
             </p>
-            <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 font-mono text-xs text-slate-200">
-              Tasa Venta = Total Bolívares Recibidos / Total USDT Vendidos
+            <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 font-mono text-xs text-slate-200 space-y-1">
+              <div>USDT Entregado = Monto Facial + Comisión Binance (USDT)</div>
+              <div className="text-amber-400 font-medium">WAP Efectivo = Total Bolívares Recibidos / Total USDT Entregados</div>
             </div>
           </div>
 
@@ -72,16 +74,16 @@ export default function SystemDocumentationSection() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <TrendingUp className="h-3.5 w-3.5 text-sky-400" />
-                Spread Comercial (Bruto)
+                Spread Comercial (Bruto Efectivo)
               </span>
-              <span className="text-xs font-mono text-slate-500">Diferencial</span>
+              <span className="text-xs font-mono text-slate-500">Diferencial Efectivo</span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Diferencia directa entre lo que cobras al vender y lo que pagas al comprar:
+              Diferencia directa entre el precio efectivo cobrado al vender y el costo efectivo pagado al comprar:
             </p>
             <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 font-mono text-xs text-slate-200 space-y-1">
-              <div>Spread (VES) = Tasa Venta - Tasa Compra</div>
-              <div className="text-slate-400 text-xs">Spread (%) = (Spread VES / Tasa Compra) × 100</div>
+              <div>Spread (VES) = WAP Venta - WAC Compra</div>
+              <div className="text-slate-400 text-xs">Spread (%) = (Spread VES / WAC Compra) × 100</div>
             </div>
           </div>
         </div>
@@ -106,13 +108,13 @@ export default function SystemDocumentationSection() {
           <div className="rounded-xl border border-slate-800/80 bg-slate-950/70 p-4 space-y-2">
             <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              Principio de Ciclo Cerrado (Matched Volume)
+              Principio de Ciclo Cerrado (Matched Effective Volume)
             </h4>
             <p>
-              En el comercio y arbitraje financiero, <strong>no se reconoce ganancia sobre mercancía que no has vendido</strong>. Si compraste 1.500 USDT y vendiste 1.000 USDT, tu ganancia realizada se calcula únicamente sobre los <strong>1.000 USDT</strong> que completaron el ciclo comercial. Los 500 USDT restantes son inventario disponible en billetera.
+              En el arbitraje financiero, <strong>no se reconoce ganancia sobre mercancía que no ha completado el ciclo de compra y venta</strong>. El volumen arbitrado se mide en base a la rotación efectiva real en billetera (neto de comisiones de Binance).
             </p>
             <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-1.5 font-mono text-xs text-slate-200">
-              Volumen Arbitrado = Mínimo(Total USDT Comprados, Total USDT Vendidos)
+              Volumen Arbitrado Efectivo = Mínimo(Total USDT Efectivo Comprado, Total USDT Efectivo Vendido)
             </div>
           </div>
 
@@ -120,17 +122,17 @@ export default function SystemDocumentationSection() {
           <div className="rounded-xl border border-slate-800/80 bg-slate-950/70 p-4 space-y-2">
             <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
               <Receipt className="h-3.5 w-3.5 text-rose-400" />
-              Deducción Transparente de Comisiones Operativas (Escuela A - Base USDT)
+              Contabilidad Efectiva y Comisiones Operativas (Base USDT)
             </h4>
             <p>
-              El sistema adopta el estándar financiero <strong>Cripto-céntrico (Base USDT)</strong>, midiendo la rentabilidad en moneda dura sin distorsión cambiaria:
+              El sistema adopta el estándar financiero <strong>Cripto-céntrico de Billetera Efectiva (Base USDT)</strong>, midiendo la rentabilidad en moneda dura con exactitud contable:
             </p>
             <ul className="list-disc list-inside space-y-1 text-slate-400 pl-1">
               <li>
-                <strong className="text-slate-200">Comisiones de Binance P2P (Escuela A)</strong>: Se deducen directamente de la <strong>Ganancia Bruta en USDT</strong>, ya que representan un costo directo e ineludible de la transacción en la plataforma.
+                <strong className="text-slate-200">Comisiones de Binance P2P</strong>: Se integran en el cálculo de flujo efectivo de cripto (reduciendo el USDT recibido en compras y aumentando el USDT entregado en ventas). De esta forma, el spread comercial puro refleja automáticamente la Ganancia Bruta real sin doble descuento.
               </li>
               <li>
-                <strong className="text-slate-200">Comisiones Bancarias</strong>: Se aplican exclusivamente a las compras completadas (cuando emites el dinero). Las operaciones por Pago Móvil o transferencia interbancaria aplican el porcentaje configurado (0.3% estándar) con un piso mínimo legal (por defecto 14.00 Bs según circular del BCV, configurable por cuenta). Se convierten a USDT dividiéndolas entre la tasa WAC de reposición.
+                <strong className="text-slate-200">Comisiones Bancarias</strong>: Se aplican a los egresos bancarios en compras completadas. Aplican el porcentaje configurado (0.3% estándar) con piso mínimo legal (por defecto 14.00 Bs, configurable por cuenta). Se convierten a USDT dividiéndolas entre la tasa efectiva de reposición (WAC Efectivo).
               </li>
             </ul>
           </div>
@@ -139,15 +141,15 @@ export default function SystemDocumentationSection() {
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
             <h4 className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5" />
-              Ganancia Neta Limpia (Base USDT y Equivalente en VES)
+              Ganancia Bruta y Neta Limpia (Base USDT y Equivalente en VES)
             </h4>
             <div className="rounded-lg bg-slate-900 border border-emerald-500/30 px-3 py-2 font-mono text-xs text-emerald-200 space-y-1">
-              <div>Ganancia Bruta (USDT) = Spread Puro (USDT) - Comisiones Binance (USDT)</div>
-              <div>Ganancia Neta (USDT) = Ganancia Bruta (USDT) - (Comisiones Bancarias VES / WAC Compra)</div>
-              <div className="text-white font-bold text-xs pt-1">Ganancia Neta (VES) = Ganancia Neta (USDT) × WAP Venta</div>
+              <div>Ganancia Bruta (USDT) = Volumen Arbitrado Efectivo × (1 - WAC Efectivo / WAP Efectivo)</div>
+              <div>Ganancia Neta (USDT) = Ganancia Bruta (USDT) - (Comisiones Bancarias VES / WAC Efectivo)</div>
+              <div className="text-white font-bold text-xs pt-1">Ganancia Neta (VES) = Ganancia Neta (USDT) × WAP Efectivo</div>
             </div>
             <p className="text-xs text-slate-400">
-              Te muestra con rigor contable cuántos dólares netos y limpios le agregaste a tu patrimonio en la jornada o período consultado, y su valor en Bolívares al precio ponderado de venta.
+              Te muestra con rigor contable cuántos dólares netos y limpios le agregaste a tu balance en el período consultado, y su equivalencia en Bolívares liquidable al precio ponderado de venta.
             </p>
           </div>
         </div>

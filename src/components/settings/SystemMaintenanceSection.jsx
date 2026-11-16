@@ -63,31 +63,6 @@ export default function SystemMaintenanceSection({
     }
   };
 
-  const handleClearAllDatabase = async () => {
-    if (!confirmDeleteAll) return;
-    if (
-      !window.confirm(
-        '¡PELIGRO! ¿Estás ABSOLUTAMENTE SEGURO de que deseas vaciar toda la base de datos? Se perderán todas las órdenes y cuentas bancarias.'
-      )
-    ) {
-      return;
-    }
-    if (setError) setError(null);
-    if (setMessage) setMessage(null);
-    setLoading(true);
-    try {
-      await operationsApi.clearOperations(false);
-      setConfirmDeleteAll(false);
-      if (setMessage) {
-        setMessage('Base de datos restablecida a cero. Todo el historial ha sido eliminado.');
-      }
-      if (onSyncComplete) onSyncComplete();
-    } catch (err) {
-      if (setError) setError(err.message || 'Error al restablecer la base de datos.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -273,11 +248,18 @@ export default function SystemMaintenanceSection({
         ordersCount={totalOrders}
         onSuccess={(summary) => {
           if (setMessage) {
-            setMessage(
-              `Data eliminada exitosamente (${summary.orders_deleted || 0} órdenes, ${
-                summary.bank_accounts_deleted || 0
-              } cuentas bancarias).`
-            );
+            const parts = [];
+            if (summary?.orders_deleted !== undefined) {
+              parts.push(`${summary.orders_deleted} órdenes`);
+            }
+            if (summary?.bank_accounts_deleted !== undefined) {
+              parts.push(`${summary.bank_accounts_deleted} cuentas bancarias`);
+            }
+            if (summary?.backups_deleted) {
+              parts.push(`${summary.backups_deleted} respaldos`);
+            }
+            const details = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+            setMessage(`Data depurada exitosamente${details}.`);
           }
           if (onSyncComplete) onSyncComplete();
         }}

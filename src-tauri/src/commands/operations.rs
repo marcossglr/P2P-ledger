@@ -1,9 +1,10 @@
 use log::info;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 use crate::db::DbState;
 use crate::services::analytics::{get_operations_data, OperationsDashboard};
+use crate::services::backups::get_backups_dir;
 
 #[derive(Debug, Deserialize)]
 pub struct GetOperationsParams {
@@ -24,10 +25,24 @@ pub struct UpdatePaymentChannelPayload {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemResetPayload {
+    #[serde(alias = "delete_orders")]
     pub delete_orders: Option<bool>,
+    #[serde(alias = "delete_bank_accounts")]
     pub delete_bank_accounts: Option<bool>,
+    #[serde(alias = "delete_api_credentials")]
     pub delete_api_credentials: Option<bool>,
+    #[serde(alias = "delete_backups")]
+    pub delete_backups: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SystemResetResult {
+    pub status: String,
+    pub orders_deleted: usize,
+    pub bank_accounts_deleted: usize,
+    pub backups_deleted: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -270,16 +285,24 @@ pub fn clear_operations(only_demo: bool, state: State<'_, DbState>) -> Result<us
 }
 
 #[tauri::command]
-pub fn system_reset(payload: SystemResetPayload, state: State<'_, DbState>) -> Result<(), String> {
+pub fn system_reset(
+    payload: SystemResetPayload,
+    state: State<'_, DbState>,
+    app: AppHandle,
+) -> Result<SystemResetResult, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
 
+    let mut orders_deleted = 0;
+    let mut bank_accounts_deleted = 0;
+    let mut backups_deleted = 0;
+
     if payload.delete_orders.unwrap_or(false) {
-        let _ = conn.execute("DELETE FROM binance_orders", []);
+        orders_deleted = conn.execute("DELETE FROM binance_orders", []).unwrap_or(0);
     }
 
     if payload.delete_bank_accounts.unwrap_or(false) {
         let _ = conn.execute("DELETE FROM bank_balance_adjustments", []);
-        let _ = conn.execute("DELETE FROM bank_accounts", []);
+        bank_accounts_deleted = conn.execute("DELETE FROM bank_accounts", []).unwrap_or(0);
     } else if payload.delete_orders.unwrap_or(false) {
         let _ = conn.execute(
             "UPDATE bank_accounts SET manual_delta_bs = 0.0, anchor_balance = 0.0, anchor_timestamp = 0, anchor_date_label = 'Inicio'",
@@ -292,5 +315,24 @@ pub fn system_reset(payload: SystemResetPayload, state: State<'_, DbState>) -> R
         let _ = conn.execute("DELETE FROM public_market_config", []);
     }
 
-    Ok(())
+    if payload.delete_backups.unwrap_or(false) {
+        let backups_dir = get_backups_dir(&app);
+        if let Ok(entries) = std::fs::read_dir(backups_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |ext| ext == "db") {
+                    if std::fs::remove_file(path).is_ok() {
+                        backups_deleted += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(SystemResetResult {
+        status: "success".to_string(),
+        orders_deleted,
+        bank_accounts_deleted,
+        backups_deleted,
+    })
 }
