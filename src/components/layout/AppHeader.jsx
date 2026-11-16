@@ -6,6 +6,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { Button, Logo } from '../ui';
+import WorkspaceSelector from './WorkspaceSelector';
 import { fmtTime } from '../../utils/formatters';
 
 export default function AppHeader({
@@ -22,6 +23,11 @@ export default function AppHeader({
   onOpenSettings,
   timeFormat,
   timeShowSeconds,
+  workspaces = [],
+  activeWorkspaceId,
+  isSwitchingWorkspace,
+  onSwitchWorkspace,
+  onOpenWorkspacesModal,
 }) {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
@@ -73,6 +79,15 @@ export default function AppHeader({
 
         {/* 2. Derecha: Estatus de Binance, Audio y Botón de Ajustes */}
         <div className="flex items-center justify-end gap-2 shrink-0">
+          {/* Selector de Workspace / Perfil */}
+          <WorkspaceSelector
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            isSwitching={isSwitchingWorkspace}
+            onSwitch={onSwitchWorkspace}
+            onOpenManageModal={onOpenWorkspacesModal}
+          />
+
           {health.binance_api_configured ? (
             <button
               type="button"

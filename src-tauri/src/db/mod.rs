@@ -9,6 +9,7 @@ pub struct DbState {
     pub conn: Mutex<Connection>,
 }
 
+#[allow(dead_code)]
 pub fn get_database_path(app: &AppHandle) -> PathBuf {
     let app_dir = app
         .path()

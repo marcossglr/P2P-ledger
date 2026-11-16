@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri::Manager;
-use crate::db::get_database_path;
+use crate::services::workspaces::{get_workspace_db_path, load_or_init_workspaces_config};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupEntry {
@@ -34,12 +34,14 @@ pub struct CreateBackupResponse {
 }
 
 pub fn get_backups_dir(app: &AppHandle) -> PathBuf {
+    let ws_config = load_or_init_workspaces_config(app);
     let dir = app
         .path()
         .app_data_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("p2p-ledger")
-        .join("backups");
+        .join("backups")
+        .join(&ws_config.active_workspace_id);
 
     if !dir.exists() {
         let _ = fs::create_dir_all(&dir);
@@ -55,7 +57,8 @@ fn is_safe_filename(name: &str) -> bool {
 }
 
 pub fn list_backups(app: &AppHandle) -> Result<BackupsListResponse, String> {
-    let db_path = get_database_path(app);
+    let ws_config = load_or_init_workspaces_config(app);
+    let db_path = get_workspace_db_path(app, &ws_config.active_workspace_id);
     let backups_dir = get_backups_dir(app);
 
     let current_db_size = if db_path.exists() {

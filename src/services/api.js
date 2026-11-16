@@ -349,3 +349,91 @@ export const backupsApi = {
 
   getDownloadUrl: (filename) => `#download-${filename}`,
 };
+
+// ==========================================
+// WORKSPACES / PERFILES
+// ==========================================
+export const workspacesApi = {
+  list: async () => {
+    if (isTauriDesktop()) {
+      return await invoke('get_workspaces');
+    }
+    const stored = localStorage.getItem('mock_workspaces');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      active_workspace_id: 'default',
+      workspaces: [
+        {
+          id: 'default',
+          name: 'Principal',
+          description: 'Espacio de trabajo principal',
+          created_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          is_active: true,
+          is_default: true,
+          db_size_mb: 0.25,
+        },
+      ],
+    };
+  },
+
+  create: async (name, description = '') => {
+    if (isTauriDesktop()) {
+      return await invoke('create_workspace', { name, description });
+    }
+    const current = await workspacesApi.list();
+    const newWs = {
+      id: `mock_${Date.now()}`,
+      name,
+      description,
+      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      is_active: false,
+      is_default: false,
+      db_size_mb: 0.1,
+    };
+    current.workspaces.push(newWs);
+    localStorage.setItem('mock_workspaces', JSON.stringify(current));
+    return newWs;
+  },
+
+  switch: async (workspaceId) => {
+    if (isTauriDesktop()) {
+      return await invoke('switch_workspace', { workspaceId });
+    }
+    const current = await workspacesApi.list();
+    current.active_workspace_id = workspaceId;
+    current.workspaces.forEach((w) => {
+      w.is_active = w.id === workspaceId;
+    });
+    localStorage.setItem('mock_workspaces', JSON.stringify(current));
+    const target = current.workspaces.find((w) => w.id === workspaceId);
+    return target;
+  },
+
+  update: async (workspaceId, name, description = '') => {
+    if (isTauriDesktop()) {
+      return await invoke('update_workspace', { workspaceId, name, description });
+    }
+    const current = await workspacesApi.list();
+    const target = current.workspaces.find((w) => w.id === workspaceId);
+    if (target) {
+      target.name = name;
+      target.description = description;
+      localStorage.setItem('mock_workspaces', JSON.stringify(current));
+    }
+  },
+
+  delete: async (workspaceId) => {
+    if (isTauriDesktop()) {
+      return await invoke('delete_workspace', { workspaceId });
+    }
+    const current = await workspacesApi.list();
+    current.workspaces = current.workspaces.filter((w) => w.id !== workspaceId);
+    localStorage.setItem('mock_workspaces', JSON.stringify(current));
+  },
+};

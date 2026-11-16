@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use tauri::{Manager, WebviewWindowBuilder};
-use db::{init_database, get_database_path, DbState};
+use db::{init_database, DbState};
 use commands::banks::{
     get_bank_inventory,
     create_bank_account,
@@ -49,6 +49,17 @@ use commands::backups::{
     upload_db_backup,
     export_db_backup,
     import_binance_csv,
+};
+use commands::workspaces::{
+    get_workspaces,
+    create_workspace,
+    switch_workspace,
+    update_workspace,
+    delete_workspace,
+};
+use services::workspaces::{
+    load_or_init_workspaces_config,
+    get_workspace_db_path,
 };
 
 const LEGACY_IDENTIFIER: &str = "com.p2pledger.app";
@@ -131,14 +142,21 @@ fn main() {
             delete_db_backup,
             upload_db_backup,
             export_db_backup,
-            import_binance_csv
+            import_binance_csv,
+            // Workspaces / Perfiles
+            get_workspaces,
+            create_workspace,
+            switch_workspace,
+            update_workspace,
+            delete_workspace
         ])
         .setup(|app| {
             // 1. Migrar datos de versiones anteriores
             migrate_legacy_webview_data(app);
 
-            // 2. Inicializar base de datos SQLite embebida
-            let db_path = get_database_path(app.handle());
+            // 2. Inicializar base de datos SQLite embebida según el workspace activo
+            let ws_config = load_or_init_workspaces_config(app.handle());
+            let db_path = get_workspace_db_path(app.handle(), &ws_config.active_workspace_id);
             let conn = init_database(&db_path).expect("Error al inicializar la base de datos SQLite");
             app.manage(DbState {
                 conn: Mutex::new(conn),

@@ -18,6 +18,8 @@ const HistoryOperationsView = lazy(() => import('./components/views/HistoryOpera
 const TreasuryView = lazy(() => import('./components/views/TreasuryView'));
 const SettingsView = lazy(() => import('./components/views/SettingsView'));
 const BinanceApiModal = lazy(() => import('./components/modals/BinanceApiModal'));
+const WorkspacesModal = lazy(() => import('./components/modals/WorkspacesModal'));
+import { useWorkspaces } from './hooks/useWorkspaces';
 
 function ViewFallback() {
   return (
@@ -68,8 +70,13 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState('CONNECTIONS');
   const [visitedViews, setVisitedViews] = useState(() => new Set(['DASHBOARD', activeView]));
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState(() => localStorage.getItem('user_selected_asset') || 'USDT');
-  const [fiatCurrency, setFiatCurrency] = useState(() => localStorage.getItem('user_selected_fiat') || 'VES');
+  const [isWorkspacesModalOpen, setIsWorkspacesModalOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState(() => {
+    return localStorage.getItem('ws_active_user_selected_asset') || localStorage.getItem('user_selected_asset') || 'USDT';
+  });
+  const [fiatCurrency, setFiatCurrency] = useState(() => {
+    return localStorage.getItem('ws_active_user_selected_fiat') || localStorage.getItem('user_selected_fiat') || 'VES';
+  });
   const [availableAssets, setAvailableAssets] = useState(['USDT']);
   const [, setAvailableFiats] = useState(['VES']);
 
@@ -100,6 +107,32 @@ export default function App() {
     timeShowSeconds,
     setTimeShowSeconds,
   } = useAppLifecycle();
+
+  const handleWorkspaceSwitched = useCallback(async (newWorkspaceId) => {
+    // Restaurar filtros y monedas según el workspace o recargar estado
+    const savedFiat = localStorage.getItem(`ws_${newWorkspaceId}_user_selected_fiat`) || 'VES';
+    const savedAsset = localStorage.getItem(`ws_${newWorkspaceId}_user_selected_asset`) || 'USDT';
+    setFiatCurrency(savedFiat);
+    setSelectedAsset(savedAsset);
+    localStorage.setItem('ws_active_user_selected_fiat', savedFiat);
+    localStorage.setItem('ws_active_user_selected_asset', savedAsset);
+    setRefreshTrigger((prev) => prev + 1);
+    await checkHealth();
+    showToast('Espacio de trabajo cambiado exitosamente');
+  }, [checkHealth, setRefreshTrigger, showToast]);
+
+  const {
+    workspaces,
+    activeWorkspaceId,
+    activeWorkspace,
+    isSwitching: isSwitchingWorkspace,
+    switchWorkspace,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace,
+  } = useWorkspaces({
+    onWorkspaceSwitched: handleWorkspaceSwitched,
+  });
 
   useEffect(() => {
     setVisitedViews((prev) => {
@@ -151,6 +184,11 @@ export default function App() {
         onOpenSettings={openSettings}
         timeFormat={timeFormat}
         timeShowSeconds={timeShowSeconds}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        isSwitchingWorkspace={isSwitchingWorkspace}
+        onSwitchWorkspace={switchWorkspace}
+        onOpenWorkspacesModal={() => setIsWorkspacesModalOpen(true)}
       />
 
       {/* Contenido Principal con Keep-Alive */}
@@ -197,7 +235,8 @@ export default function App() {
                 selectedAsset={selectedAsset}
                 onSelectAsset={(asset) => {
                   setSelectedAsset(asset);
-                  localStorage.setItem('user_selected_asset', asset);
+                  localStorage.setItem(`ws_${activeWorkspaceId}_user_selected_asset`, asset);
+                  localStorage.setItem('ws_active_user_selected_asset', asset);
                 }}
                 availableAssets={availableAssets}
                 fiatCurrency={fiatCurrency}
@@ -301,6 +340,26 @@ export default function App() {
               setRefreshTrigger((prev) => prev + 1);
               checkHealth();
             }}
+          />
+        </Suspense>
+      )}
+
+      {/* Modal de Gestión de Perfiles / Workspaces */}
+      {isWorkspacesModalOpen && (
+        <Suspense fallback={null}>
+          <WorkspacesModal
+            isOpen={isWorkspacesModalOpen}
+            onClose={() => setIsWorkspacesModalOpen(false)}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            isSwitching={isSwitchingWorkspace}
+            onSwitch={async (wsId) => {
+              await switchWorkspace(wsId);
+              setIsWorkspacesModalOpen(false);
+            }}
+            onCreate={createWorkspace}
+            onUpdate={updateWorkspace}
+            onDelete={deleteWorkspace}
           />
         </Suspense>
       )}
