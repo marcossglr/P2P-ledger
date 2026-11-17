@@ -59,6 +59,16 @@ pub struct SyncResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncProgressEvent {
+    pub stage: String, // "VALIDATING", "FETCHING", "SAVING", "DONE", "ERROR"
+    pub current_window: usize,
+    pub total_windows: usize,
+    pub percent: u8,
+    pub orders_found: usize,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct P2PNormalizedAd {
     pub adv_no: String,
     pub trade_type: String,
@@ -181,7 +191,7 @@ pub fn clear_config(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
-fn current_timestamp_ms() -> u128 {
+pub fn current_timestamp_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -281,12 +291,16 @@ pub fn fetch_funding_asset_balance(
 // ---------------------------------------------------------------------------
 // 2. Fetch C2C Orders Range
 // ---------------------------------------------------------------------------
-pub fn fetch_c2c_orders_range(
+pub fn fetch_c2c_orders_range<F>(
     api_key: &str,
     api_secret: &str,
     start_ms: i64,
     end_ms: i64,
-) -> Result<Vec<NormalizedC2cOrder>, String> {
+    mut on_progress: F,
+) -> Result<Vec<NormalizedC2cOrder>, String>
+where
+    F: FnMut(usize, usize, usize, &str),
+{
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -294,10 +308,31 @@ pub fn fetch_c2c_orders_range(
 
     let window_ms: i64 = 15 * 24 * 60 * 60 * 1000;
     let mut normalized_orders: HashMap<String, NormalizedC2cOrder> = HashMap::new();
+
+    // Calcular el número total de ventanas de 15 días
+    let span_ms = (end_ms - start_ms).max(1);
+    let total_windows = ((span_ms as f64) / (window_ms as f64)).ceil() as usize;
+    let total_windows = total_windows.max(1);
+    let mut current_window = 0;
+
     let mut cur_end = end_ms;
 
     while cur_end > start_ms {
         let cur_start = std::cmp::max(start_ms, cur_end - window_ms);
+        current_window += 1;
+
+        let start_date_str = chrono::DateTime::from_timestamp_millis(cur_start)
+            .map(|dt| dt.naive_local().format("%d/%m").to_string())
+            .unwrap_or_else(|| "-".to_string());
+        let end_date_str = chrono::DateTime::from_timestamp_millis(cur_end)
+            .map(|dt| dt.naive_local().format("%d/%m").to_string())
+            .unwrap_or_else(|| "-".to_string());
+
+        let msg = format!(
+            "Consultando compras y ventas ({} al {})...",
+            start_date_str, end_date_str
+        );
+        on_progress(current_window, total_windows, normalized_orders.len(), &msg);
 
         for trade_type in &["BUY", "SELL"] {
             let mut page = 1;
@@ -387,10 +422,13 @@ pub fn fetch_c2c_orders_range(
                 }
 
                 page += 1;
-                std::thread::sleep(std::time::Duration::from_millis(80));
+                // Pequeña pausa amigable para ceder CPU al sistema (Fedora / GNOME)
+                std::thread::sleep(std::time::Duration::from_millis(150));
             }
         }
 
+        // Ceder tiempo de CPU entre ventanas temporales de 15 días
+        std::thread::sleep(std::time::Duration::from_millis(100));
         cur_end = cur_start - 1;
     }
 
@@ -402,13 +440,27 @@ pub fn fetch_c2c_orders_range(
 // ---------------------------------------------------------------------------
 // 3. Sync Orders into SQLite
 // ---------------------------------------------------------------------------
-pub fn sync_orders_to_db(
+#[allow(dead_code)]
+pub fn sync_orders_to_db<P>(
     conn: &Connection,
     days: Option<i64>,
     force_full: bool,
     api_key_override: Option<String>,
     api_secret_override: Option<String>,
-) -> Result<SyncResult, String> {
+    mut progress_callback: P,
+) -> Result<SyncResult, String>
+where
+    P: FnMut(SyncProgressEvent),
+{
+    progress_callback(SyncProgressEvent {
+        stage: "VALIDATING".to_string(),
+        current_window: 0,
+        total_windows: 1,
+        percent: 5,
+        orders_found: 0,
+        message: "Verificando credenciales con Binance...".to_string(),
+    });
+
     let (api_key, api_secret) = if let (Some(k), Some(s)) = (api_key_override, api_secret_override) {
         if !k.trim().is_empty() && !s.trim().is_empty() {
             save_config(conn, k.trim(), s.trim()).map_err(|e| e.to_string())?;
@@ -443,13 +495,56 @@ pub fn sync_orders_to_db(
         (inc_start, "INCREMENTAL".to_string())
     };
 
-    let orders = fetch_c2c_orders_range(&api_key, &api_secret, start_ms, now_ms)?;
+    let orders = fetch_c2c_orders_range(&api_key, &api_secret, start_ms, now_ms, |cur_w, tot_w, found, msg| {
+        let calculated_pct = 10 + (((cur_w as f64) / (tot_w as f64)) * 75.0) as u8;
+        let percent = calculated_pct.clamp(10, 85);
+        progress_callback(SyncProgressEvent {
+            stage: "FETCHING".to_string(),
+            current_window: cur_w,
+            total_windows: tot_w,
+            percent,
+            orders_found: found,
+            message: msg.to_string(),
+        });
+    })?;
+
+    progress_callback(SyncProgressEvent {
+        stage: "SAVING".to_string(),
+        current_window: 1,
+        total_windows: 1,
+        percent: 90,
+        orders_found: orders.len(),
+        message: format!("Guardando {} órdenes en SQLite...", orders.len()),
+    });
+
+    let sync_result = save_orders_batch(conn, &orders, start_ms, now_ms, &sync_mode)?;
+
+    progress_callback(SyncProgressEvent {
+        stage: "DONE".to_string(),
+        current_window: 1,
+        total_windows: 1,
+        percent: 100,
+        orders_found: orders.len(),
+        message: format!("Sincronización completada: {} órdenes ({} nuevas).", orders.len(), sync_result.new_orders),
+    });
+
+    Ok(sync_result)
+}
+
+pub fn save_orders_batch(
+    conn: &Connection,
+    orders: &[NormalizedC2cOrder],
+    start_ms: i64,
+    end_ms: i64,
+    sync_mode: &str,
+) -> Result<SyncResult, String> {
+    // Guardar en una sola transacción atómica en SQLite para evitar saturar el I/O del disco
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
 
     // Eliminar órdenes demo si ingresan datos reales de API
     if !orders.is_empty() {
-        let _ = conn.execute("DELETE FROM binance_orders WHERE source = 'DEMO'", []);
-        // Si las cuentas bancarias de prueba no tienen órdenes reales asignadas, depurarlas
-        let _ = conn.execute(
+        let _ = tx.execute("DELETE FROM binance_orders WHERE source = 'DEMO'", []);
+        let _ = tx.execute(
             "DELETE FROM bank_accounts 
              WHERE name IN ('Banesco', 'Mercantil') 
                AND id NOT IN (SELECT DISTINCT bank_account_id FROM binance_orders WHERE bank_account_id IS NOT NULL)",
@@ -460,17 +555,13 @@ pub fn sync_orders_to_db(
     let mut new_orders = 0;
     let mut updated_orders = 0;
 
-    for ord in &orders {
-        let exists: bool = conn
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM binance_orders WHERE order_number = ?1)",
-                [&ord.order_number],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
+    {
+        let mut check_stmt = tx
+            .prepare_cached("SELECT EXISTS(SELECT 1 FROM binance_orders WHERE order_number = ?1)")
+            .map_err(|e| e.to_string())?;
 
-        if exists {
-            let res = conn.execute(
+        let mut update_stmt = tx
+            .prepare_cached(
                 "UPDATE binance_orders SET
                     order_status = ?1,
                     fiat_amount = ?2,
@@ -478,27 +569,39 @@ pub fn sync_orders_to_db(
                     unit_price = ?4,
                     commission_usdt = ?5
                  WHERE order_number = ?6",
-                rusqlite::params![
-                    ord.order_status,
-                    ord.fiat_amount,
-                    ord.crypto_amount,
-                    ord.unit_price,
-                    ord.commission_usdt,
-                    ord.order_number,
-                ],
-            );
-            if res.is_ok() {
-                updated_orders += 1;
-            }
-        } else {
-            let res = conn.execute(
+            )
+            .map_err(|e| e.to_string())?;
+
+        let mut insert_stmt = tx
+            .prepare_cached(
                 "INSERT INTO binance_orders (
                     order_number, adv_no, order_type, asset, fiat_currency,
                     fiat_amount, crypto_amount, unit_price, commission_usdt,
                     pay_method, counterparty, create_timestamp, order_date,
                     order_status, source
                  ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                rusqlite::params![
+            )
+            .map_err(|e| e.to_string())?;
+
+        for ord in orders {
+            let exists: bool = check_stmt
+                .query_row([&ord.order_number], |row| row.get(0))
+                .unwrap_or(false);
+
+            if exists {
+                let res = update_stmt.execute(rusqlite::params![
+                    ord.order_status,
+                    ord.fiat_amount,
+                    ord.crypto_amount,
+                    ord.unit_price,
+                    ord.commission_usdt,
+                    ord.order_number,
+                ]);
+                if res.is_ok() {
+                    updated_orders += 1;
+                }
+            } else {
+                let res = insert_stmt.execute(rusqlite::params![
                     ord.order_number,
                     ord.adv_no,
                     ord.order_type,
@@ -514,13 +617,15 @@ pub fn sync_orders_to_db(
                     ord.order_date,
                     ord.order_status,
                     ord.source,
-                ],
-            );
-            if res.is_ok() {
-                new_orders += 1;
+                ]);
+                if res.is_ok() {
+                    new_orders += 1;
+                }
             }
         }
     }
+
+    tx.commit().map_err(|e| e.to_string())?;
 
     let in_progress_count: i64 = conn
         .query_row(
@@ -533,13 +638,13 @@ pub fn sync_orders_to_db(
     let start_dt = chrono::DateTime::from_timestamp_millis(start_ms)
         .map(|dt| dt.naive_local().format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
-    let end_dt = chrono::DateTime::from_timestamp_millis(now_ms)
+    let end_dt = chrono::DateTime::from_timestamp_millis(end_ms)
         .map(|dt| dt.naive_local().format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
 
     Ok(SyncResult {
         status: "synced".to_string(),
-        sync_mode,
+        sync_mode: sync_mode.to_string(),
         fetched_count: orders.len(),
         new_orders,
         updated_orders,

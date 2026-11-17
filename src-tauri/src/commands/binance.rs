@@ -1,12 +1,12 @@
 use log::info;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use crate::db::DbState;
 use crate::services::binance::{
     get_saved_config, save_config, clear_config, fetch_funding_asset_balance,
-    sync_orders_to_db, fetch_public_market_snapshot,
+    get_raw_credentials, fetch_public_market_snapshot,
     fetch_binance_payment_methods, fetch_binance_crypto_assets,
-    BinanceConfigResponse, FundingWalletResponse, SyncResult,
+    BinanceConfigResponse, FundingWalletResponse, SyncResult, SyncProgressEvent,
     PublicMarketSnapshot, BinancePaymentMethod, BinanceCryptoAsset,
 };
 
@@ -106,12 +106,12 @@ pub fn set_funding_wallet_manual(payload: ManualFundingPayload) -> Result<Fundin
 }
 
 #[tauri::command]
-pub fn sync_binance_orders(
+pub async fn sync_binance_orders(
+    app: AppHandle,
     payload: Option<SyncOrdersPayload>,
     state: State<'_, DbState>,
 ) -> Result<SyncResult, String> {
     info!("[Binance] Iniciando sincronización de órdenes P2P con Binance...");
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let payload = payload.unwrap_or(SyncOrdersPayload {
         api_key: None,
         api_secret: None,
@@ -121,7 +121,143 @@ pub fn sync_binance_orders(
     });
 
     let force_full = payload.force_full_180d.unwrap_or(false) || payload.force_full_90d.unwrap_or(false);
-    sync_orders_to_db(&conn, payload.days, force_full, payload.api_key, payload.api_secret)
+
+    // 1. Obtener credenciales y rango sin retener el Mutex durante la llamada HTTP
+    let (api_key, api_secret, start_ms, sync_mode) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+
+        let (k, s) = if let (Some(k), Some(s)) = (&payload.api_key, &payload.api_secret) {
+            if !k.trim().is_empty() && !s.trim().is_empty() {
+                save_config(&conn, k.trim(), s.trim()).map_err(|e| e.to_string())?;
+                (k.trim().to_string(), s.trim().to_string())
+            } else {
+                return Err("Credenciales de API vacías".to_string());
+            }
+        } else {
+            match get_raw_credentials(&conn).map_err(|e| e.to_string())? {
+                Some(creds) => creds,
+                None => return Err("No se han configurado credenciales de API de Binance".to_string()),
+            }
+        };
+
+        let now_ms = crate::services::binance::current_timestamp_ms() as i64;
+        let days_back = payload.days.unwrap_or(180).clamp(1, 180);
+        let full_range_ms = now_ms - (days_back * 24 * 60 * 60 * 1000);
+
+        let latest_ts: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(create_timestamp) FROM binance_orders WHERE source = 'API'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+
+        let (st_ms, mode) = if force_full || latest_ts.is_none() || latest_ts.unwrap_or(0) <= 0 {
+            (full_range_ms, format!("FULL_{}D", days_back))
+        } else {
+            let overlap_ms = 12 * 3600 * 1000;
+            let inc_start = std::cmp::max(full_range_ms, latest_ts.unwrap() - overlap_ms);
+            (inc_start, "INCREMENTAL".to_string())
+        };
+
+        (k, s, st_ms, mode)
+    }; // <- AQUÍ SE LIBERA EL MUTEX DE SQLITE! La app sigue respondiendo sin congelarse.
+
+    let _ = app.emit(
+        "binance-sync-progress",
+        &SyncProgressEvent {
+            stage: "VALIDATING".to_string(),
+            current_window: 0,
+            total_windows: 1,
+            percent: 5,
+            orders_found: 0,
+            message: "Conectando con Binance P2P...".to_string(),
+        },
+    );
+
+    // 2. Descargar órdenes en un hilo secundario sin retener el Mutex de la base de datos
+    let end_ms = crate::services::binance::current_timestamp_ms() as i64;
+    let app_for_thread = app.clone();
+    let api_key_clone = api_key.clone();
+    let api_secret_clone = api_secret.clone();
+
+    let orders_res = tauri::async_runtime::spawn_blocking(move || {
+        crate::services::binance::fetch_c2c_orders_range(
+            &api_key_clone,
+            &api_secret_clone,
+            start_ms,
+            end_ms,
+            move |cur_w, tot_w, found, msg| {
+                let calculated_pct = 10 + (((cur_w as f64) / (tot_w as f64)) * 75.0) as u8;
+                let percent = calculated_pct.clamp(10, 85);
+                let _ = app_for_thread.emit(
+                    "binance-sync-progress",
+                    &SyncProgressEvent {
+                        stage: "FETCHING".to_string(),
+                        current_window: cur_w,
+                        total_windows: tot_w,
+                        percent,
+                        orders_found: found,
+                        message: msg.to_string(),
+                    },
+                );
+            },
+        )
+    })
+    .await
+    .map_err(|e| format!("Error en tarea de descarga: {}", e))?;
+
+    let orders = match orders_res {
+        Ok(ords) => ords,
+        Err(e) => {
+            let _ = app.emit(
+                "binance-sync-progress",
+                &SyncProgressEvent {
+                    stage: "ERROR".to_string(),
+                    current_window: 0,
+                    total_windows: 1,
+                    percent: 0,
+                    orders_found: 0,
+                    message: e.clone(),
+                },
+            );
+            return Err(e);
+        }
+    };
+
+    let _ = app.emit(
+        "binance-sync-progress",
+        &SyncProgressEvent {
+            stage: "SAVING".to_string(),
+            current_window: 1,
+            total_windows: 1,
+            percent: 90,
+            orders_found: orders.len(),
+            message: format!("Guardando {} órdenes en SQLite...", orders.len()),
+        },
+    );
+
+    // 3. Volver a abrir SQLite brevemente para hacer el commit en bloque
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let sync_result = crate::services::binance::save_orders_batch(&conn, &orders, start_ms, end_ms, &sync_mode)?;
+
+    let _ = app.emit(
+        "binance-sync-progress",
+        &SyncProgressEvent {
+            stage: "DONE".to_string(),
+            current_window: 1,
+            total_windows: 1,
+            percent: 100,
+            orders_found: orders.len(),
+            message: format!(
+                "Sincronización completada: {} órdenes ({} nuevas).",
+                orders.len(),
+                sync_result.new_orders
+            ),
+        },
+    );
+
+    Ok(sync_result)
 }
 
 #[tauri::command]

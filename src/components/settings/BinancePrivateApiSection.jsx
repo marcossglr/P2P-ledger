@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   KeyRound,
   RefreshCw,
@@ -8,8 +8,9 @@ import {
   Lock,
   Clock,
 } from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
 import { binanceApi } from '../../services/api';
-import { Button, Input, Badge } from '../ui';
+import { Button, Input, Badge, SyncProgressBar } from '../ui';
 
 export default function BinancePrivateApiSection({
   health = {},
@@ -24,10 +25,39 @@ export default function BinancePrivateApiSection({
   const [showSecret, setShowSecret] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showKeyForm, setShowKeyForm] = useState(!health.binance_api_configured);
+  const [syncProgress, setSyncProgress] = useState(null);
 
   const apiConfigured = Boolean(health.binance_api_configured);
   const maskedKey = health.masked_api_key || '';
   const canSubmit = Boolean(apiKey.trim() && apiSecret.trim());
+
+  useEffect(() => {
+    let unlistenFn = null;
+    let isMounted = true;
+
+    async function setupListener() {
+      try {
+        unlistenFn = await listen('binance-sync-progress', (event) => {
+          if (!isMounted) return;
+          if (event && event.payload) {
+            setSyncProgress(event.payload);
+            if (event.payload.stage === 'ERROR' && setError) {
+              setError(event.payload.message || 'Error durante la sincronización');
+            }
+          }
+        });
+      } catch {
+        // En entorno no-Tauri
+      }
+    }
+
+    setupListener();
+
+    return () => {
+      isMounted = false;
+      if (unlistenFn) unlistenFn();
+    };
+  }, [setError]);
 
   const handlePasteKey = async () => {
     try {
@@ -42,11 +72,31 @@ export default function BinancePrivateApiSection({
     }
   };
 
-  const handleConnectAndSync = async (e) => {
+  const handleConnectAndSync = async (e, forceFull = false) => {
     if (e && e.preventDefault) e.preventDefault();
     if (setError) setError(null);
     if (setMessage) setMessage(null);
+
+    const isNewKeys = canSubmit;
+    const shouldDoFull180d = forceFull || isNewKeys;
+
+    if (shouldDoFull180d) {
+      const confirmed = window.confirm(
+        'Se descargará el historial completo de los últimos 180 días desde Binance. ' +
+          'Puede tardar unos momentos y realiza consultas a la API. ¿Deseas continuar?'
+      );
+      if (!confirmed) return;
+    }
+
     setLoading(true);
+    setSyncProgress({
+      stage: 'VALIDATING',
+      current_window: 0,
+      total_windows: 1,
+      percent: 5,
+      orders_found: 0,
+      message: 'Conectando con Binance...',
+    });
 
     try {
       if (canSubmit) {
@@ -54,15 +104,27 @@ export default function BinancePrivateApiSection({
         if (setMessage) setMessage('Credenciales de Binance guardadas localmente.');
       }
 
-      const syncResult = await binanceApi.syncOrders({ force_full_90d: false });
+      const syncResult = await binanceApi.syncOrders({
+        force_full_180d: shouldDoFull180d,
+        days: 180,
+      });
+
       if (setMessage) {
         setMessage(
-          `Sincronización finalizada: ${syncResult.new_orders || 0} nuevas órdenes.`
+          `Sincronización ${syncResult.sync_mode === 'INCREMENTAL' ? 'incremental' : 'completa de 180 días'} finalizada: ${syncResult.new_orders || 0} nuevas órdenes.`
         );
       }
       setApiKey('');
       setApiSecret('');
       setShowKeyForm(false);
+      setSyncProgress({
+        stage: 'DONE',
+        current_window: 1,
+        total_windows: 1,
+        percent: 100,
+        orders_found: syncResult.fetched_count || 0,
+        message: `Sincronización finalizada: ${syncResult.fetched_count || 0} órdenes procesadas (${syncResult.new_orders || 0} nuevas).`,
+      });
       if (onSyncComplete) onSyncComplete();
     } catch (err) {
       if (setError) setError(err.message || 'Error al conectar con Binance API');
@@ -123,20 +185,37 @@ export default function BinancePrivateApiSection({
           )}
 
           {apiConfigured && (
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              icon={RefreshCw}
-              loading={loading}
-              onClick={handleConnectAndSync}
-              title="Sincronizar órdenes nuevas ahora"
-            >
-              {loading ? 'Sincronizando...' : 'Sincronizar'}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={loading}
+                onClick={(e) => handleConnectAndSync(e, true)}
+                title="Descargar historial completo de los últimos 180 días"
+              >
+                Completa (180d)
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={RefreshCw}
+                loading={loading}
+                onClick={(e) => handleConnectAndSync(e, false)}
+                title="Sincronizar órdenes nuevas ahora"
+              >
+                {loading ? 'Sincronizando...' : 'Sincronizar'}
+              </Button>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Feedback de Progreso en Vivo */}
+      {loading && syncProgress && (
+        <SyncProgressBar progress={syncProgress} />
+      )}
 
       {/* Formulario Compacto de API Key & Secret */}
       <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-3.5">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   KeyRound,
   RefreshCw,
@@ -7,8 +7,9 @@ import {
   AlertCircle,
   Upload,
 } from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
 import { binanceApi, reconciliationApi } from '../../services/api';
-import { Modal, Button, Input, Badge } from '../ui';
+import { Modal, Button, Input, Badge, SyncProgressBar } from '../ui';
 
 export default function BinanceApiModal({
   isOpen,
@@ -23,6 +24,37 @@ export default function BinanceApiModal({
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [showKeyForm, setShowKeyForm] = useState(!apiConfigured);
+  const [syncProgress, setSyncProgress] = useState(null);
+
+  useEffect(() => {
+    let unlistenFn = null;
+    let isMounted = true;
+
+    async function setupListener() {
+      try {
+        unlistenFn = await listen('binance-sync-progress', (event) => {
+          if (!isMounted) return;
+          if (event && event.payload) {
+            setSyncProgress(event.payload);
+            if (event.payload.stage === 'ERROR') {
+              setError(event.payload.message || 'Error durante la sincronización');
+            }
+          }
+        });
+      } catch {
+        // En entorno de test/web no Tauri
+      }
+    }
+
+    if (isOpen) {
+      setupListener();
+    }
+
+    return () => {
+      isMounted = false;
+      if (unlistenFn) unlistenFn();
+    };
+  }, [isOpen]);
 
   const handleConnectAndSync = async (e, forceFull = false) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -38,6 +70,14 @@ export default function BinanceApiModal({
     setError(null);
     setMessage(null);
     setLoading(true);
+    setSyncProgress({
+      stage: 'VALIDATING',
+      current_window: 0,
+      total_windows: 1,
+      percent: 5,
+      orders_found: 0,
+      message: 'Conectando con Binance...',
+    });
 
     try {
       const payload = forceFull ? { force_full_180d: true, days: 180 } : {};
@@ -51,6 +91,14 @@ export default function BinanceApiModal({
       setApiKey('');
       setApiSecret('');
       setShowKeyForm(false);
+      setSyncProgress({
+        stage: 'DONE',
+        current_window: 1,
+        total_windows: 1,
+        percent: 100,
+        orders_found: data.fetched_count || 0,
+        message: `Sincronización finalizada: ${data.fetched_count} órdenes procesadas (${data.new_orders} nuevas).`,
+      });
       setMessage(
         `Sincronización ${data.sync_mode === 'INCREMENTAL' ? 'incremental' : 'completa de 180 días'} completada: ${data.fetched_count} órdenes verificadas (${data.new_orders} nuevas).`
       );
@@ -216,6 +264,11 @@ export default function BinanceApiModal({
             </div>
           )}
         </div>
+
+        {/* Barra y Feedback de Progreso en Vivo */}
+        {loading && syncProgress && (
+          <SyncProgressBar progress={syncProgress} />
+        )}
 
         {/* Alternativa CSV */}
         <div className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-950/40 px-3.5 py-2.5 text-xs text-slate-400">
