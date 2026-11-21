@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use chrono::{DateTime, Utc};
 use rusqlite::{Connection, Result};
 use tauri::AppHandle;
 use tauri::Manager;
@@ -120,6 +121,28 @@ pub fn init_database(db_path: &PathBuf) -> Result<Connection> {
 
     // Migraciones automáticas no destructivas
     let _ = conn.execute("ALTER TABLE bank_accounts ADD COLUMN pago_movil_min_fee REAL DEFAULT 14.0", []);
+
+    // Migración idempotente: normalizar order_date a formato ISO UTC estándar si create_timestamp es válido
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT id, create_timestamp FROM binance_orders
+         WHERE create_timestamp > 0 AND (order_date IS NULL OR order_date NOT LIKE '%Z')"
+    ) {
+        let rows_to_update: Vec<(i64, i64)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|mapped| mapped.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default();
+
+        if !rows_to_update.is_empty() {
+            if let Ok(mut update_stmt) = conn.prepare("UPDATE binance_orders SET order_date = ?1 WHERE id = ?2") {
+                for (id, ts) in rows_to_update {
+                    if let Some(dt) = DateTime::<Utc>::from_timestamp_millis(ts) {
+                        let iso_str = dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                        let _ = update_stmt.execute(rusqlite::params![iso_str, id]);
+                    }
+                }
+            }
+        }
+    }
 
     Ok(conn)
 }

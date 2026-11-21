@@ -9,6 +9,7 @@ import {
   TopCounterpartiesCard,
 } from '../history';
 import { useHistoryOperations } from '../../hooks/useHistoryOperations';
+import { exportOrdersToCsv } from '../../utils/operationsMetrics';
 
 export default function HistoryOperationsView({
   refreshTrigger,
@@ -98,7 +99,9 @@ export default function HistoryOperationsView({
       const valB = b[key];
 
       if (key === 'order_date') {
-        return ((new Date(valA).getTime() || 0) - (new Date(valB).getTime() || 0)) * factor;
+        const tsA = a.create_timestamp || (valA ? new Date(valA).getTime() : 0);
+        const tsB = b.create_timestamp || (valB ? new Date(valB).getTime() : 0);
+        return (tsA - tsB) * factor;
       }
       if (['crypto_amount', 'commission_usdt', 'unit_price', 'fiat_amount'].includes(key)) {
         return (Number(valA || 0) - Number(valB || 0)) * factor;
@@ -144,6 +147,14 @@ export default function HistoryOperationsView({
     setActivePreset('CUSTOM');
   };
 
+  const handleExport = () => {
+    const assetTag = selectedAsset || 'ALL';
+    const fiatTag = fiat || 'VES';
+    const dateRangeTag = startDate && endDate ? `${startDate}_al_${endDate}` : activePreset;
+    const filename = `operaciones_p2p_${assetTag}_${fiatTag}_${dateRangeTag}.csv`.toLowerCase();
+    exportOrdersToCsv(sortedFilteredOrders, { filename });
+  };
+
   return (
     <div className="space-y-4">
       {/* Barra Flotante Compacta de Filtros Históricos (Cripto, Período, Rango, Moneda Fiat y Exportar) */}
@@ -159,8 +170,8 @@ export default function HistoryOperationsView({
         setEndDate={setEndDate}
         bankFeePct={bankFeePct}
         onNavigateFormulas={onNavigateFormulas}
-        onExportExcel={handleExportExcel}
-        ordersCount={orders.length}
+        onExportExcel={handleExport}
+        ordersCount={sortedFilteredOrders.length}
       />
 
       {/* Tarjetas de Resumen Acumulado del Período (Componente Modular HistoryKpiCards) */}

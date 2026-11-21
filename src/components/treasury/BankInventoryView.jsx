@@ -16,6 +16,7 @@ import BankAdjustmentsModal from '../modals/BankAdjustmentsModal';
 import BankAccountFormModal from '../modals/BankAccountFormModal';
 import { bankInventoryApi } from '../../services/api';
 import { Button, Badge } from '../ui';
+import { fmtDate, fmtTime } from '../../utils/formatters';
 
 // Formateador numérico estático de alta velocidad (sin recreación en cada render)
 const amountFormatter = new Intl.NumberFormat('es-ES', {
@@ -140,14 +141,15 @@ export default function BankInventoryView({ isActive = true, refreshTrigger, onI
     return accounts.find((a) => String(a.id) === String(selectedAccountId)) || accounts[0];
   }, [accounts, selectedAccountId]);
 
-  // Agrupar movimientos recientes de la cuenta por fecha (YYYY-MM-DD)
+  // Agrupar movimientos recientes de la cuenta por fecha local formateada (DD/MM/YYYY)
   const groupedMovements = useMemo(() => {
     const list = currentAccount?.recent_movements || [];
     if (!list.length) return [];
 
     const groups = {};
     list.slice(0, 15).forEach((m) => {
-      const dateKey = m.order_date ? m.order_date.slice(0, 10) : 'Sin Fecha';
+      const rawDate = m.create_timestamp || m.order_date;
+      const dateKey = rawDate ? fmtDate(rawDate) : 'Sin Fecha';
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -434,7 +436,8 @@ export default function BankInventoryView({ isActive = true, refreshTrigger, onI
                           {items.map((m) => {
                             const isSell = m.order_type === 'VENTA';
                             const fiatSymbol = currentAccount.fiat_currency || 'VES';
-                            const timeStr = m.order_date && m.order_date.length >= 16 ? m.order_date.slice(11, 16) : '--:--';
+                            const rawDate = m.create_timestamp || m.order_date;
+                            const timeStr = rawDate ? fmtTime(rawDate) : '--:--';
 
                             return (
                               <div

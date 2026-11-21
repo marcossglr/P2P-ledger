@@ -566,7 +566,9 @@ function OperationsTable({
       const valB = b[key];
 
       if (colType === 'date') {
-        return ((new Date(valA).getTime() || 0) - (new Date(valB).getTime() || 0)) * factor;
+        const tsA = a.create_timestamp || (valA ? new Date(valA).getTime() : 0);
+        const tsB = b.create_timestamp || (valB ? new Date(valB).getTime() : 0);
+        return (tsA - tsB) * factor;
       }
       if (colType === 'number') {
         return (Number(valA || 0) - Number(valB || 0)) * factor;

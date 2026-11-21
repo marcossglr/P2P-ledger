@@ -53,7 +53,12 @@ export default function BankMovementsModal({
       });
     });
 
-    list.sort((a, b) => String(b.order_date || '').localeCompare(String(a.order_date || '')));
+    list.sort((a, b) => {
+      const tsA = a.create_timestamp || (a.order_date ? new Date(a.order_date).getTime() : 0);
+      const tsB = b.create_timestamp || (b.order_date ? new Date(b.order_date).getTime() : 0);
+      if (tsA !== tsB) return tsB - tsA;
+      return String(b.order_date || '').localeCompare(String(a.order_date || ''));
+    });
 
     const q = searchQuery.trim().toLowerCase().replace(/^#/, '');
     if (!q) return list;

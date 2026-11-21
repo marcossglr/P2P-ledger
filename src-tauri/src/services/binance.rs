@@ -464,10 +464,10 @@ where
         current_window += 1;
 
         let start_date_str = chrono::DateTime::from_timestamp_millis(cur_start)
-            .map(|dt| dt.naive_local().format("%d/%m").to_string())
+            .map(|dt| chrono::DateTime::<chrono::Local>::from(dt).format("%d/%m").to_string())
             .unwrap_or_else(|| "-".to_string());
         let end_date_str = chrono::DateTime::from_timestamp_millis(cur_end)
-            .map(|dt| dt.naive_local().format("%d/%m").to_string())
+            .map(|dt| chrono::DateTime::<chrono::Local>::from(dt).format("%d/%m").to_string())
             .unwrap_or_else(|| "-".to_string());
 
         let msg = format!(
@@ -523,7 +523,7 @@ where
                     let create_ts = item.get("createTime").and_then(|v| v.as_i64()).unwrap_or(0);
                     let dt_str = if create_ts > 0 {
                         chrono::DateTime::from_timestamp_millis(create_ts)
-                            .map(|dt| dt.naive_local().format("%Y-%m-%d %H:%M:%S").to_string())
+                            .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
                             .unwrap_or_else(|| "-".to_string())
                     } else {
                         "-".to_string()
@@ -778,10 +778,10 @@ pub fn save_orders_batch(
         .unwrap_or(0);
 
     let start_dt = chrono::DateTime::from_timestamp_millis(start_ms)
-        .map(|dt| dt.naive_local().format("%Y-%m-%d %H:%M").to_string())
+        .map(|dt| chrono::DateTime::<chrono::Local>::from(dt).format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
     let end_dt = chrono::DateTime::from_timestamp_millis(end_ms)
-        .map(|dt| dt.naive_local().format("%Y-%m-%d %H:%M").to_string())
+        .map(|dt| chrono::DateTime::<chrono::Local>::from(dt).format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
 
     Ok(SyncResult {

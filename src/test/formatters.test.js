@@ -54,4 +54,19 @@ describe('formatters and smart parsers', () => {
     expect(fmtTime(raw)).toBe('09:05:08 AM');
     expect(fmtDateTime(raw)).toBe('03/11/2026 09:05:08 AM');
   });
+
+  it('converts UTC ISO string with Z indicator to user local time', () => {
+    // 2026-11-21T04:16:14Z convertido a objeto Date local
+    const isoUtc = '2026-11-21T04:16:14Z';
+    const localDate = new Date(isoUtc);
+    const expectedDay = String(localDate.getDate()).padStart(2, '0');
+    const expectedMonth = String(localDate.getMonth() + 1).padStart(2, '0');
+    const expectedYear = localDate.getFullYear();
+    const expectedHour = String(localDate.getHours()).padStart(2, '0');
+    const expectedMinute = String(localDate.getMinutes()).padStart(2, '0');
+
+    expect(fmtDate(isoUtc)).toBe(`${expectedDay}/${expectedMonth}/${expectedYear}`);
+    expect(fmtTime(isoUtc)).toBe(`${expectedHour}:${expectedMinute}`);
+    expect(fmtDateTime(isoUtc)).toBe(`${expectedDay}/${expectedMonth}/${expectedYear} ${expectedHour}:${expectedMinute}`);
+  });
 });

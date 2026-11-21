@@ -100,7 +100,24 @@ function parseDateTimeComponents(val) {
   const str = String(val).trim();
   if (!str || str === '—' || str === '-') return null;
 
-  // Formato común SQLite o Binance: "YYYY-MM-DD HH:MM:SS" o "YYYY-MM-DDTHH:MM:SS"
+  // Si la cadena tiene indicador UTC explícito ("...Z" o offset "+00:00" / "-04:00"),
+  // o formato ISO con T ("YYYY-MM-DDTHH:MM:SSZ"), se convierte a la hora local del navegador vía Date:
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(str) || (str.includes('T') && !str.includes(' '))) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return {
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        day: d.getDate(),
+        hour: d.getHours(),
+        minute: d.getMinutes(),
+        second: d.getSeconds(),
+        hasTime: true,
+      };
+    }
+  }
+
+  // Formato común SQLite o Binance plano (sin offset explícito): "YYYY-MM-DD HH:MM:SS" o "YYYY-MM-DD"
   const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
   if (isoMatch) {
     return {

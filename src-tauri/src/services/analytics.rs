@@ -1,3 +1,4 @@
+use chrono::{Local, NaiveDate, TimeZone};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -165,21 +166,62 @@ pub fn get_operations_data(
     }
 
     if only_today.unwrap_or(false) {
-        query.push_str(&format!(
-            " AND order_date >= '{} 00:00:00' AND order_date <= '{} 23:59:59'",
-            server_today, server_today
-        ));
+        if let Ok(today_date) = NaiveDate::parse_from_str(&server_today, "%Y-%m-%d") {
+            if let Some(start_dt) = today_date.and_hms_opt(0, 0, 0) {
+                if let Some(end_dt) = today_date.and_hms_opt(23, 59, 59) {
+                    if let (Some(s_loc), Some(e_loc)) = (
+                        Local.from_local_datetime(&start_dt).single(),
+                        Local.from_local_datetime(&end_dt).single(),
+                    ) {
+                        let start_ts = s_loc.timestamp_millis();
+                        let end_ts = e_loc.timestamp_millis() + 999;
+                        query.push_str(&format!(
+                            " AND ((create_timestamp >= {0} AND create_timestamp <= {1}) OR (create_timestamp = 0 AND order_date >= '{2} 00:00:00' AND order_date <= '{2} 23:59:59'))",
+                            start_ts, end_ts, server_today
+                        ));
+                    }
+                }
+            }
+        }
     } else {
         if let Some(ref s_date) = start_date {
-            if !s_date.trim().is_empty() {
-                let clean_s = s_date.replace("'", "''");
-                query.push_str(&format!(" AND order_date >= '{} 00:00:00'", clean_s));
+            let clean_s = s_date.trim();
+            if !clean_s.is_empty() {
+                if let Ok(sd) = NaiveDate::parse_from_str(clean_s, "%Y-%m-%d") {
+                    if let Some(s_dt) = sd.and_hms_opt(0, 0, 0) {
+                        if let Some(s_loc) = Local.from_local_datetime(&s_dt).single() {
+                            let start_ts = s_loc.timestamp_millis();
+                            let safe_s = clean_s.replace("'", "''");
+                            query.push_str(&format!(
+                                " AND (create_timestamp >= {0} OR (create_timestamp = 0 AND order_date >= '{1} 00:00:00'))",
+                                start_ts, safe_s
+                            ));
+                        }
+                    }
+                } else {
+                    let safe_s = clean_s.replace("'", "''");
+                    query.push_str(&format!(" AND order_date >= '{} 00:00:00'", safe_s));
+                }
             }
         }
         if let Some(ref e_date) = end_date {
-            if !e_date.trim().is_empty() {
-                let clean_e = e_date.replace("'", "''");
-                query.push_str(&format!(" AND order_date <= '{} 23:59:59'", clean_e));
+            let clean_e = e_date.trim();
+            if !clean_e.is_empty() {
+                if let Ok(ed) = NaiveDate::parse_from_str(clean_e, "%Y-%m-%d") {
+                    if let Some(e_dt) = ed.and_hms_opt(23, 59, 59) {
+                        if let Some(e_loc) = Local.from_local_datetime(&e_dt).single() {
+                            let end_ts = e_loc.timestamp_millis() + 999;
+                            let safe_e = clean_e.replace("'", "''");
+                            query.push_str(&format!(
+                                " AND ((create_timestamp > 0 AND create_timestamp <= {0}) OR (create_timestamp = 0 AND order_date <= '{1} 23:59:59'))",
+                                end_ts, safe_e
+                            ));
+                        }
+                    }
+                } else {
+                    let safe_e = clean_e.replace("'", "''");
+                    query.push_str(&format!(" AND order_date <= '{} 23:59:59'", safe_e));
+                }
             }
         }
     }
@@ -334,8 +376,15 @@ pub fn compute_analytics_from_orders(orders: &[BinanceOrderRecord]) -> Operation
             completed_orders += 1;
             total_commission_usdt += o.commission_usdt;
 
-            let day_key = if let Some(ref d) = o.order_date {
-                if d.len() >= 10 {
+            let day_key = if o.create_timestamp > 0 {
+                chrono::DateTime::from_timestamp_millis(o.create_timestamp)
+                    .map(|dt| chrono::DateTime::<Local>::from(dt).format("%Y-%m-%d").to_string())
+                    .unwrap_or_else(|| "Sin Fecha".to_string())
+            } else if let Some(ref d) = o.order_date {
+                // Intentar parsear RFC3339 / ISO universal (ej. '...Z') y convertir a hora local
+                if let Ok(parsed_utc) = chrono::DateTime::parse_from_rfc3339(d) {
+                    chrono::DateTime::<Local>::from(parsed_utc).format("%Y-%m-%d").to_string()
+                } else if d.len() >= 10 {
                     d[..10].to_string()
                 } else if !d.is_empty() {
                     d.clone()

@@ -222,8 +222,9 @@ export default function OperationsFilterBar({
           onClick={onExportExcel}
           disabled={ordersCount === 0}
           icon={Download}
+          title="Descargar libro de operaciones en formato CSV compatible con Excel"
         >
-          <span>Exportar (.xlsx)</span>
+          <span>Exportar (.csv)</span>
         </Button>
       </div>
     </div>

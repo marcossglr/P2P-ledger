@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
@@ -69,17 +69,32 @@ fn parse_date_to_timestamp(date_str: &str) -> i64 {
         return 0;
     }
 
+    // 1. Si ya viene con indicador ISO con timezone (ej. 2026-11-20T23:45:10Z o offset)
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return dt.timestamp_millis();
+    }
+
     let s19 = if s.len() >= 19 { &s[..19] } else { s };
 
     let formats = [
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
         "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
         "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
     ];
 
     for fmt in &formats {
         if let Ok(ndt) = NaiveDateTime::parse_from_str(s19, fmt) {
+            // La exportación web de Binance se genera según la hora local del navegador.
+            // Convertimos la hora local a UTC para obtener el timestamp neutro universal.
+            if let Some(loc_dt) = Local.from_local_datetime(&ndt).single() {
+                return loc_dt.timestamp_millis();
+            }
+            // En caso ambiguo de cambio de hora, fallback a UTC
             return ndt.and_utc().timestamp_millis();
         }
     }
@@ -218,6 +233,16 @@ pub fn import_binance_csv_text(
             if p.is_empty() { "Transferencia Bancaria".to_string() } else { p }
         };
 
+        let normalized_order_date = if create_ts > 0 {
+            DateTime::<Utc>::from_timestamp_millis(create_ts)
+                .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+                .unwrap_or_else(|| if date_str.is_empty() { "-".to_string() } else { date_str })
+        } else if date_str.is_empty() {
+            "-".to_string()
+        } else {
+            date_str
+        };
+
         parsed_orders.push(ParsedCsvOrder {
             order_number,
             adv_no: get_val(col_adv_no),
@@ -231,7 +256,7 @@ pub fn import_binance_csv_text(
             pay_method,
             counterparty: get_val(col_counterparty),
             create_timestamp: create_ts,
-            order_date: if date_str.is_empty() { "-".to_string() } else { date_str },
+            order_date: normalized_order_date,
             order_status: norm_status.to_string(),
             source: "CSV".to_string(),
         });

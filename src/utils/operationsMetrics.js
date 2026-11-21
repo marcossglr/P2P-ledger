@@ -2,6 +2,7 @@
  * Utilidades puras para el cálculo de métricas financieras de la jornada P2P
  * y generación de resúmenes de texto para compartir.
  */
+import { fmtDateTime } from './formatters';
 
 export const fmtFiat = (n) =>
   Number(n || 0).toLocaleString('es-ES', {
@@ -282,8 +283,70 @@ export function computeOperationsMetrics({
 }
 
 /**
- * Genera el texto estructurado del resumen diario para copiar al portapapeles
+ * Exporta un conjunto de órdenes a un archivo CSV estructurado y compatible con Excel en español,
+ * formateando las fechas en la zona horaria local del operador.
  */
+export function exportOrdersToCsv(orders = [], { filename = 'reporte_operaciones.csv' } = {}) {
+  if (!orders || orders.length === 0) return false;
+
+  // Encabezados claros en español
+  const headers = [
+    'Número de Orden',
+    'Fecha Local',
+    'Tipo',
+    'Estado',
+    'Cripto',
+    'Cantidad Cripto',
+    'Moneda Fiat',
+    'Monto Fiat',
+    'Precio Unitario',
+    'Comisión (USDT)',
+    'Método de Pago',
+    'Contraparte',
+    'Timestamp UTC (ms)',
+  ];
+
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '""';
+    const s = String(val).replace(/"/g, '""');
+    return `"${s}"`;
+  };
+
+  const rows = orders.map((o) => {
+    const rawDate = o.create_timestamp || o.order_date;
+    const localDateTimeStr = rawDate ? fmtDateTime(rawDate) : (o.order_date || '');
+
+    return [
+      escapeCsv(o.order_number || o.id),
+      escapeCsv(localDateTimeStr),
+      escapeCsv(o.order_type || ''),
+      escapeCsv(o.order_status || ''),
+      escapeCsv(o.asset || 'USDT'),
+      Number(o.crypto_amount || 0).toFixed(4),
+      escapeCsv(o.fiat_currency || 'VES'),
+      Number(o.fiat_amount || 0).toFixed(2),
+      Number(o.unit_price || 0).toFixed(4),
+      Number(o.commission_usdt || 0).toFixed(4),
+      escapeCsv(o.pay_method || ''),
+      escapeCsv(o.counterparty || ''),
+      o.create_timestamp || 0,
+    ].join(';'); // Separador punto y coma estándar para Excel en español / Europa / Latam
+  });
+
+  // BOM UTF-8 (\uFEFF) para que Excel reconozca tildes y caracteres especiales automáticamente
+  const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  return true;
+}
 export function buildDailySummaryText({
   stats = {},
   metrics = {},
