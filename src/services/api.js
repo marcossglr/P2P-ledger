@@ -255,12 +255,6 @@ export const bankInventoryApi = {
     }
   },
 
-  reconcileAccount: async (payload) => {
-    if (isTauriDesktop()) {
-      return await invoke('reconcile_bank_account', { payload });
-    }
-  },
-
   assignOrder: async (orderId, bankAccountId) => {
     if (isTauriDesktop()) {
       return await invoke('assign_order_to_bank', {

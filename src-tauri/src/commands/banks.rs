@@ -37,15 +37,6 @@ pub struct UpdateAccountPayload {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct ReconcileAccountPayload {
-    pub account_id: i64,
-    pub mode: String, // "CUADRE_CONSOLIDADO" | "MOVIMIENTO_MANUAL" | etc.
-    pub amount: f64,
-    pub note: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct AssignOrderPayload {
     pub order_id: i64,
     pub bank_account_id: Option<i64>,
@@ -166,46 +157,6 @@ pub fn delete_bank_account(
             "UPDATE bank_accounts SET is_default = 1 WHERE id = (SELECT id FROM bank_accounts WHERE is_active = 1 LIMIT 1)",
             []
         );
-    }
-
-    compute_bank_inventory_summary(&conn).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn reconcile_bank_account(
-    payload: ReconcileAccountPayload,
-    state: State<'_, DbState>,
-) -> Result<BankInventorySummary, String> {
-    info!("[Banks] Conciliando cuenta #{} (modo: {}, monto: {})", payload.account_id, payload.mode, payload.amount);
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
-
-    if payload.mode == "CUADRE_CONSOLIDADO" {
-        // Fijar nuevo saldo ancla y corte de tiempo
-        conn.execute(
-            "UPDATE bank_accounts SET
-                anchor_balance = ?1,
-                anchor_timestamp = ?2,
-                manual_delta_bs = 0.0,
-                anchor_date_label = 'Cuadre Manual',
-                updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?3",
-            params![payload.amount, now_ms, payload.account_id],
-        )
-        .map_err(|e| e.to_string())?;
-    } else if payload.mode == "MOVIMIENTO_MANUAL" {
-        conn.execute(
-            "UPDATE bank_accounts SET
-                manual_delta_bs = manual_delta_bs + ?1,
-                updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?2",
-            params![payload.amount, payload.account_id],
-        )
-        .map_err(|e| e.to_string())?;
     }
 
     compute_bank_inventory_summary(&conn).map_err(|e| e.to_string())

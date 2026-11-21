@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import BankReconcileModal from '../modals/BankReconcileModal';
+import React, { useMemo, useCallback } from 'react';
 import P2PMarketChartCard from '../market/P2PMarketChartCard';
 import OperationsKpiCards from '../dashboard/OperationsKpiCards';
 import MyAdsSection from '../dashboard/MyAdsSection';
@@ -39,24 +38,6 @@ export default function OperationsDashboard({
     onPairsDetected,
   });
 
-  // Modal de cuadre rápido de posición consolidada en Bs
-  const [reconcileModal, setReconcileModal] = useState({
-    open: false,
-    accountId: null,
-    tab: 'SINGLE',
-  });
-
-  const handleCloseReconcileModal = useCallback(
-    () => setReconcileModal((prev) => ({ ...prev, open: false })),
-    []
-  );
-  const handleOpenReconcileModal = useCallback(() => {
-    setReconcileModal({
-      open: true,
-      accountId: data?.bank_inventory?.accounts?.[0]?.id || null,
-      tab: 'SINGLE',
-    });
-  }, [data?.bank_inventory?.accounts]);
   const handleNavigateConnections = useCallback(() => {
     if (onNavigateSettings) onNavigateSettings('CONNECTIONS');
   }, [onNavigateSettings]);
@@ -116,7 +97,6 @@ export default function OperationsDashboard({
             completedCount={metrics.completedCount}
             totalCapitalConsolidatedUsdt={metrics.totalCapitalConsolidatedUsdt}
             totalBankBs={metrics.totalBankBs}
-            onOpenReconcileModal={handleOpenReconcileModal}
             fmtUsdt={fmtUsdt}
             fmtFiat={fmtFiat}
             fmtRate={fmtRate}
@@ -134,18 +114,6 @@ export default function OperationsDashboard({
           fmtUsdt={fmtUsdt}
           fmtFiat={fmtFiat}
           fmtRate={fmtRate}
-        />
-      )}
-
-      {/* Modal de Cuadre Rápido de Posición Consolidada en Bs (Solo si está abierto) */}
-      {reconcileModal.open && (
-        <BankReconcileModal
-          isOpen={reconcileModal.open}
-          onClose={handleCloseReconcileModal}
-          accounts={data?.bank_inventory?.accounts || EMPTY_ARRAY}
-          initialAccountId={reconcileModal.accountId}
-          initialTab={reconcileModal.tab}
-          onSuccess={updateBankInventory}
         />
       )}
     </div>

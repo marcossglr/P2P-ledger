@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Building2,
-  Scale,
   Settings2,
   History,
   RefreshCw,
@@ -10,7 +9,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
 } from 'lucide-react';
-import BankReconcileModal from '../modals/BankReconcileModal';
 import BankMovementsModal from '../modals/BankMovementsModal';
 import BankAdjustmentsModal from '../modals/BankAdjustmentsModal';
 import BankAccountFormModal from '../modals/BankAccountFormModal';
@@ -39,13 +37,6 @@ export default function BankInventoryView({ isActive = true, refreshTrigger, onI
     accountId: null,
   });
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
-
-  // Modal de Cuadre de Posición Consolidada
-  const [reconcileModal, setReconcileModal] = useState({
-    open: false,
-    accountId: null,
-    tab: 'SINGLE',
-  });
 
   // Modal de Configurar Cuenta Bancaria
   const [accountFormModal, setAccountFormModal] = useState({
@@ -377,22 +368,6 @@ export default function BankInventoryView({ isActive = true, refreshTrigger, onI
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
-                      variant="primary"
-                      size="sm"
-                      icon={Scale}
-                      onClick={() =>
-                        setReconcileModal({
-                          open: true,
-                          accountId: currentAccount.id,
-                          tab: 'SINGLE',
-                        })
-                      }
-                    >
-                      <span>Cuadrar Saldo</span>
-                    </Button>
-
-                    <Button
-                      type="button"
                       variant="secondary"
                       size="sm"
                       icon={Receipt}
@@ -533,18 +508,6 @@ export default function BankInventoryView({ isActive = true, refreshTrigger, onI
           onClose={() => setHistoryModalOpen(false)}
           adjustments={adjustments}
           accounts={accounts}
-        />
-      )}
-
-      {/* Modal de Cuadre Manual de Posición */}
-      {reconcileModal.open && (
-        <BankReconcileModal
-          isOpen={reconcileModal.open}
-          onClose={() => setReconcileModal((prev) => ({ ...prev, open: false }))}
-          accounts={accounts}
-          initialAccountId={reconcileModal.accountId}
-          hideAccountSelector={true}
-          onSuccess={(updatedData) => setData(updatedData)}
         />
       )}
 

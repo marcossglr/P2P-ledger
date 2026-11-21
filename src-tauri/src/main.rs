@@ -16,7 +16,6 @@ use commands::banks::{
     create_bank_account,
     update_bank_account,
     delete_bank_account,
-    reconcile_bank_account,
     assign_order_to_bank,
 };
 use commands::operations::{
@@ -113,7 +112,6 @@ fn main() {
             create_bank_account,
             update_bank_account,
             delete_bank_account,
-            reconcile_bank_account,
             assign_order_to_bank,
             // Operations & analytics
             get_system_health,

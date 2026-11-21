@@ -2,9 +2,8 @@ import React, { memo } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Scale,
 } from 'lucide-react';
-import { Card, Button, InfoPopover } from '../ui';
+import { Card, InfoPopover } from '../ui';
 
 function OperationsKpiCards({
   stats = {},
@@ -18,7 +17,6 @@ function OperationsKpiCards({
   completedCount = 0,
   totalCapitalConsolidatedUsdt = 0,
   totalBankBs = 0,
-  onOpenReconcileModal,
   fmtUsdt = (n) => String(n),
   fmtFiat = (n) => String(n),
   fmtRate = (n) => String(n),
@@ -205,21 +203,11 @@ function OperationsKpiCards({
           ======================================================== */}
       <Card className="relative flex flex-col justify-between p-4 shadow-md">
         <div>
-          {/* Cabecera uniforme compacta con botón de acción */}
+          {/* Cabecera uniforme compacta */}
           <div className="flex items-center justify-between gap-1.5 min-h-[24px]">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 truncate">
               Posición Consolidada
             </span>
-            {onOpenReconcileModal && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon-xs"
-                icon={Scale}
-                onClick={onOpenReconcileModal}
-                title="Cuadrar cuentas bancarias"
-              />
-            )}
           </div>
 
           {/* Métrica principal en USDT */}
