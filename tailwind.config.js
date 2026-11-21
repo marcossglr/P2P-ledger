@@ -14,7 +14,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', ...defaultTheme.fontFamily.sans],
-        mono: ['"JetBrains Mono"', ...defaultTheme.fontFamily.mono],
+        mono: ['Inter', ...defaultTheme.fontFamily.mono],
       },
     },
   },

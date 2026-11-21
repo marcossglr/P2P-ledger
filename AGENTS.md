@@ -60,4 +60,4 @@ Cualquier componente nuevo o modificado debe consumir exclusivamente los compone
   - Tema por defecto (Dark Slate)
   - `LIGHT_ELEGANT`
   - `NAVY_MIDNIGHT`
-- Mantener tipografía numérica y financiera monoespaciada para montos, precios y tasas (`tabular-nums` / `font-mono`).
+- **Tipografía Unificada:** Se utiliza exclusivamente **Inter** como única familia tipográfica en toda la aplicación. Para datos numéricos y financieros (montos, precios, tasas, órdenes) se utiliza alineación tabular (`tabular-nums` / `font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum"`).
