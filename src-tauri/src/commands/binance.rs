@@ -5,9 +5,9 @@ use crate::db::DbState;
 use crate::services::binance::{
     get_saved_config, save_config, clear_config, fetch_funding_asset_balance,
     get_raw_credentials, fetch_public_market_snapshot,
-    fetch_binance_payment_methods, fetch_binance_crypto_assets,
+    fetch_binance_payment_methods, fetch_binance_crypto_assets, fetch_user_p2p_ads,
     BinanceConfigResponse, FundingWalletResponse, SyncResult, SyncProgressEvent,
-    PublicMarketSnapshot, BinancePaymentMethod, BinanceCryptoAsset,
+    PublicMarketSnapshot, BinancePaymentMethod, BinanceCryptoAsset, P2PUserAd,
 };
 
 #[derive(Debug, Deserialize)]
@@ -261,8 +261,12 @@ pub async fn sync_binance_orders(
 }
 
 #[tauri::command]
-pub fn get_my_ads() -> Result<Vec<serde_json::Value>, String> {
-    Ok(Vec::new())
+pub fn get_my_ads(state: State<'_, DbState>) -> Result<Vec<P2PUserAd>, String> {
+    info!("[Binance] Consultando anuncios P2P activos del usuario...");
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let ads = fetch_user_p2p_ads(&conn)?;
+    info!("[Binance] Anuncios P2P obtenidos: {} anuncios", ads.len());
+    Ok(ads)
 }
 
 #[tauri::command]

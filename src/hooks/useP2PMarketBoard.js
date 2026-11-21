@@ -32,23 +32,40 @@ const safeStorage = {
 export function useP2PMarketBoard({
   selectedAsset: initialAsset = 'USDT',
   fiatCurrency = 'VES',
+  workspaceId = 'default',
   refreshTrigger,
 }) {
-  // --- 1. Filtros Activos con persistencia ---
+  const wsPrefix = workspaceId ? `ws_${workspaceId}_` : '';
+
+  // Helpers para persistencia con soporte para workspaces y retrocompatibilidad
+  const getStored = useCallback((key, fallback) => {
+    return (
+      safeStorage.getItem(`${wsPrefix}${key}`) ||
+      safeStorage.getItem(key, fallback)
+    );
+  }, [wsPrefix]);
+
+  const setStored = useCallback((key, value) => {
+    safeStorage.setItem(`${wsPrefix}${key}`, value);
+    // Mantener también la clave global para compatibilidad
+    safeStorage.setItem(key, value);
+  }, [wsPrefix]);
+
+  // --- 1. Filtros Activos con persistencia aislada por Workspace ---
   const [selectedAsset, setSelectedAsset] = useState(
-    () => safeStorage.getItem('p2p_chart_asset') || initialAsset || 'USDT'
+    () => getStored('p2p_chart_asset', initialAsset || 'USDT')
   );
   const [selectedBank, setSelectedBank] = useState(
-    () => safeStorage.getItem(`p2p_chart_bank_${fiatCurrency}`) || safeStorage.getItem('p2p_chart_bank', 'ALL')
+    () => getStored(`p2p_chart_bank_${fiatCurrency}`, getStored('p2p_chart_bank', 'ALL'))
   );
   const [amountFilter, setAmountFilter] = useState(
-    () => safeStorage.getItem(`p2p_chart_amount_${fiatCurrency}`) || safeStorage.getItem('p2p_chart_amount', '')
+    () => getStored(`p2p_chart_amount_${fiatCurrency}`, getStored('p2p_chart_amount', ''))
   );
   const [onlyMerchants, setOnlyMerchants] = useState(
-    () => safeStorage.getItem('p2p_chart_merchants') === 'true'
+    () => getStored('p2p_chart_merchants', 'false') === 'true'
   );
   const [priceMode, setPriceMode] = useState(
-    () => safeStorage.getItem('p2p_chart_price_mode', 'BEST')
+    () => getStored('p2p_chart_price_mode', 'BEST')
   );
 
   // --- 2. Estado de Datos de Mercado ---
@@ -183,23 +200,47 @@ export function useP2PMarketBoard({
     [selectedAsset, fiatCurrency]
   );
 
-  // Sincronizar cuando cambia la divisa fiat externa
+  // Sincronizar cuando cambia la divisa fiat externa o el workspace
   const prevFiatRef = useRef(fiatCurrency);
+  const prevWorkspaceRef = useRef(workspaceId);
+
   useEffect(() => {
-    if (prevFiatRef.current !== fiatCurrency) {
+    const fiatChanged = prevFiatRef.current !== fiatCurrency;
+    const wsChanged = prevWorkspaceRef.current !== workspaceId;
+
+    if (fiatChanged || wsChanged) {
       prevFiatRef.current = fiatCurrency;
-      const fiatBank = safeStorage.getItem(`p2p_chart_bank_${fiatCurrency}`, 'ALL');
-      const fiatAmount = safeStorage.getItem(`p2p_chart_amount_${fiatCurrency}`, '');
+      prevWorkspaceRef.current = workspaceId;
+
+      const fiatBank = getStored(`p2p_chart_bank_${fiatCurrency}`, getStored('p2p_chart_bank', 'ALL'));
+      const fiatAmount = getStored(`p2p_chart_amount_${fiatCurrency}`, getStored('p2p_chart_amount', ''));
+      const wsAsset = getStored('p2p_chart_asset', initialAsset || 'USDT');
+      const wsMerchants = getStored('p2p_chart_merchants', 'false') === 'true';
+      const wsPriceMode = getStored('p2p_chart_price_mode', 'BEST');
 
       setSelectedBank(fiatBank);
       setAmountFilter(fiatAmount);
+      setSelectedAsset(wsAsset);
+      setOnlyMerchants(wsMerchants);
+      setPriceMode(wsPriceMode);
 
-      safeStorage.setItem('p2p_chart_bank', fiatBank);
-      safeStorage.setItem('p2p_chart_amount', fiatAmount);
+      setStored('p2p_chart_bank', fiatBank);
+      setStored(`p2p_chart_bank_${fiatCurrency}`, fiatBank);
+      setStored('p2p_chart_amount', fiatAmount);
+      setStored(`p2p_chart_amount_${fiatCurrency}`, fiatAmount);
+      setStored('p2p_chart_asset', wsAsset);
+      setStored('p2p_chart_merchants', String(wsMerchants));
+      setStored('p2p_chart_price_mode', wsPriceMode);
 
-      fetchMarketStats({ bank: fiatBank, amount: fiatAmount, force: true });
+      fetchMarketStats({
+        asset: wsAsset,
+        bank: fiatBank,
+        amount: fiatAmount,
+        onlyMerchants: wsMerchants,
+        force: true,
+      });
     }
-  }, [fiatCurrency, fetchMarketStats]);
+  }, [fiatCurrency, workspaceId, getStored, setStored, initialAsset, fetchMarketStats]);
 
   // Sincronizar si cambia initialAsset desde props
   const prevInitialAssetRef = useRef(initialAsset);
@@ -207,10 +248,10 @@ export function useP2PMarketBoard({
     if (initialAsset && prevInitialAssetRef.current !== initialAsset) {
       prevInitialAssetRef.current = initialAsset;
       setSelectedAsset(initialAsset);
-      safeStorage.setItem('p2p_chart_asset', initialAsset);
+      setStored('p2p_chart_asset', initialAsset);
       fetchMarketStats({ asset: initialAsset, force: true });
     }
-  }, [initialAsset, fetchMarketStats]);
+  }, [initialAsset, setStored, fetchMarketStats]);
 
   // Carga inicial y por refreshTrigger
   useEffect(() => {
@@ -268,45 +309,45 @@ export function useP2PMarketBoard({
     (asset) => {
       const clean = (asset || 'USDT').toUpperCase().trim();
       setSelectedAsset(clean);
-      safeStorage.setItem('p2p_chart_asset', clean);
+      setStored('p2p_chart_asset', clean);
       fetchMarketStats({ asset: clean, force: true });
     },
-    [fetchMarketStats]
+    [setStored, fetchMarketStats]
   );
 
   const updateBank = useCallback(
     (bank) => {
       setSelectedBank(bank);
-      safeStorage.setItem('p2p_chart_bank', bank);
-      safeStorage.setItem(`p2p_chart_bank_${fiatCurrency}`, bank);
+      setStored('p2p_chart_bank', bank);
+      setStored(`p2p_chart_bank_${fiatCurrency}`, bank);
       fetchMarketStats({ bank, force: true });
     },
-    [fiatCurrency, fetchMarketStats]
+    [fiatCurrency, setStored, fetchMarketStats]
   );
 
   const updateAmount = useCallback(
     (amount) => {
       setAmountFilter(amount);
-      safeStorage.setItem('p2p_chart_amount', amount);
-      safeStorage.setItem(`p2p_chart_amount_${fiatCurrency}`, amount);
+      setStored('p2p_chart_amount', amount);
+      setStored(`p2p_chart_amount_${fiatCurrency}`, amount);
       fetchMarketStats({ amount, force: true });
     },
-    [fiatCurrency, fetchMarketStats]
+    [fiatCurrency, setStored, fetchMarketStats]
   );
 
   const updateMerchants = useCallback(
     (val) => {
       setOnlyMerchants(val);
-      safeStorage.setItem('p2p_chart_merchants', String(val));
+      setStored('p2p_chart_merchants', String(val));
       fetchMarketStats({ onlyMerchants: val, force: true });
     },
-    [fetchMarketStats]
+    [setStored, fetchMarketStats]
   );
 
   const updatePriceMode = useCallback((val) => {
     setPriceMode(val);
-    safeStorage.setItem('p2p_chart_price_mode', val);
-  }, []);
+    setStored('p2p_chart_price_mode', val);
+  }, [setStored]);
 
   const resetFilters = useCallback(() => {
     setSelectedAsset('USDT');
@@ -315,16 +356,16 @@ export function useP2PMarketBoard({
     setOnlyMerchants(false);
     setPriceMode('BEST');
 
-    safeStorage.setItem('p2p_chart_asset', 'USDT');
-    safeStorage.setItem('p2p_chart_bank', 'ALL');
-    safeStorage.setItem(`p2p_chart_bank_${fiatCurrency}`, 'ALL');
-    safeStorage.setItem('p2p_chart_amount', '');
-    safeStorage.setItem(`p2p_chart_amount_${fiatCurrency}`, '');
-    safeStorage.setItem('p2p_chart_merchants', 'false');
-    safeStorage.setItem('p2p_chart_price_mode', 'BEST');
+    setStored('p2p_chart_asset', 'USDT');
+    setStored('p2p_chart_bank', 'ALL');
+    setStored(`p2p_chart_bank_${fiatCurrency}`, 'ALL');
+    setStored('p2p_chart_amount', '');
+    setStored(`p2p_chart_amount_${fiatCurrency}`, '');
+    setStored('p2p_chart_merchants', 'false');
+    setStored('p2p_chart_price_mode', 'BEST');
 
     fetchMarketStats({ asset: 'USDT', bank: 'ALL', amount: '', onlyMerchants: false, force: true });
-  }, [fiatCurrency, fetchMarketStats]);
+  }, [fiatCurrency, setStored, fetchMarketStats]);
 
   const hasActiveFilters = useMemo(
     () => (selectedAsset && selectedAsset !== 'USDT') || selectedBank !== 'ALL' || amountFilter !== '' || onlyMerchants,

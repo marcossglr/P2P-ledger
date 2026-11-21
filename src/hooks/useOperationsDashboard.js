@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { operationsApi } from '../services/api';
+import { operationsApi, binanceApi, bankInventoryApi } from '../services/api';
 
 /**
  * Hook para cargar, actualizar y gestionar el estado del dashboard de operaciones del día.
@@ -47,16 +47,33 @@ export function useOperationsDashboard({
         if (selectedAsset !== 'ALL') queryParams.asset = selectedAsset;
         if (fiatCurrency !== 'ALL') queryParams.fiat_currency = fiatCurrency;
 
-        const json = await operationsApi.getOperations(queryParams);
+        const [json, myAdsResult, bankInvResult, fundingWalletResult] = await Promise.allSettled([
+          operationsApi.getOperations(queryParams),
+          binanceApi.getMyAds(),
+          bankInventoryApi.getInventory(),
+          binanceApi.getFundingWallet(),
+        ]);
+
+        const opsData = json.status === 'fulfilled' ? json.value : {};
+        const myAds = myAdsResult.status === 'fulfilled' ? (myAdsResult.value || []) : [];
+        const bankInventory = bankInvResult.status === 'fulfilled' ? bankInvResult.value : null;
+        const fundingWallet = fundingWalletResult.status === 'fulfilled' ? fundingWalletResult.value : null;
+
+        const mergedData = {
+          ...opsData,
+          my_ads: myAds,
+          bank_inventory: bankInventory,
+          funding_wallet: fundingWallet,
+        };
 
         if (isMountedRef.current) {
-          setData(json);
+          setData(mergedData);
           setError(null);
           hasDataRef.current = true;
         }
 
-        if (json?.available_assets && onPairsDetectedRef.current) {
-          onPairsDetectedRef.current(json.available_assets, json.available_fiats || ['VES']);
+        if (mergedData?.available_assets && onPairsDetectedRef.current) {
+          onPairsDetectedRef.current(mergedData.available_assets, mergedData.available_fiats || ['VES']);
         }
       } catch (err) {
         console.error('Error cargando operaciones de hoy:', err);

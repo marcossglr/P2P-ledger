@@ -69,6 +69,25 @@ pub struct SyncProgressEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct P2PUserAd {
+    pub adv_no: String,
+    pub adv_type: String,       // "COMPRA" o "VENTA"
+    pub adv_type_raw: String,   // "BUY" o "SELL"
+    pub asset: String,
+    pub fiat_unit: String,
+    pub price: f64,
+    pub surplus_amount: f64,
+    pub init_amount: f64,
+    pub min_fiat: f64,
+    pub max_fiat: f64,
+    pub status_code: String,    // "1" = Online, "2" = Offline, etc.
+    pub status_label: String,   // "ACTIVO", "PAUSADO", "CERRADO"
+    pub is_active: bool,
+    pub trade_methods: Vec<String>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct P2PNormalizedAd {
     pub adv_no: String,
     pub trade_type: String,
@@ -286,6 +305,129 @@ pub fn fetch_funding_asset_balance(
         source: "API".to_string(),
         updated_at: chrono::Local::now().to_rfc3339(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// 1.1 Fetch User Active/Published P2P Ads
+// ---------------------------------------------------------------------------
+pub fn fetch_user_p2p_ads(conn: &Connection) -> Result<Vec<P2PUserAd>, String> {
+    let (api_key, api_secret) = match get_raw_credentials(conn).map_err(|e| e.to_string())? {
+        Some(creds) => creds,
+        None => return Ok(Vec::new()),
+    };
+
+    if api_key.trim().is_empty() || api_secret.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let ts = current_timestamp_ms();
+    let query_str = format!("timestamp={}&recvWindow=10000", ts);
+    let signature = sign_query(&query_str, &api_secret);
+    let url = format!("{}/sapi/v1/c2c/ads/listWithPagination?{}&signature={}", BINANCE_BASE_URL, query_str, signature);
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let body = serde_json::json!({
+        "page": 1,
+        "rows": 50
+    });
+
+    let resp = client
+        .post(&url)
+        .header("X-MBX-APIKEY", api_key)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "P2PLedgerDesktop/1.0")
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Error de red al consultar anuncios P2P del usuario: {}", e))?;
+
+    if !resp.status().is_success() {
+        let err_text = resp.text().unwrap_or_default();
+        return Err(format!("Binance C2C Ads API Error: {}", err_text));
+    }
+
+    let root: serde_json::Value = resp.json().map_err(|e| format!("Error parseando JSON de anuncios: {}", e))?;
+    let raw_ads = root.get("data").and_then(|v| v.as_array());
+
+    let mut result = Vec::new();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    if let Some(ads) = raw_ads {
+        for ad in ads {
+            let adv_no = ad.get("advNo").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if adv_no.is_empty() {
+                continue;
+            }
+
+            let adv_type_raw = ad.get("tradeType")
+                .or_else(|| ad.get("advType"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_uppercase();
+
+            let adv_type = if adv_type_raw == "BUY" { "COMPRA".to_string() } else { "VENTA".to_string() };
+
+            let status_code = ad.get("advStatus")
+                .and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_i64().map(|n| n.to_string())))
+                .unwrap_or_else(|| "1".to_string());
+
+            let status_label = if status_code == "1" {
+                "ACTIVO".to_string()
+            } else if status_code == "2" {
+                "PAUSADO".to_string()
+            } else {
+                "CERRADO".to_string()
+            };
+
+            let is_active = status_code == "1";
+
+            let mut methods = Vec::new();
+            if let Some(tms) = ad.get("tradeMethods").and_then(|v| v.as_array()) {
+                for tm in tms {
+                    let m_name = tm.get("tradeMethodName")
+                        .or_else(|| tm.get("identifier"))
+                        .or_else(|| tm.get("payType"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .trim();
+                    if !m_name.is_empty() && !methods.contains(&m_name.to_string()) {
+                        methods.push(m_name.to_string());
+                    }
+                }
+            }
+
+            let price = parse_safe_f64(ad.get("price"));
+            let surplus = parse_safe_f64(ad.get("surplusAmount").or_else(|| ad.get("tradableQuantity")));
+            let init_amount = parse_safe_f64(ad.get("initAmount"));
+            let min_fiat = parse_safe_f64(ad.get("minSingleTransAmount"));
+            let max_fiat = parse_safe_f64(ad.get("dynamicMaxSingleTransAmount").or_else(|| ad.get("maxSingleTransAmount")));
+            let asset = ad.get("asset").and_then(|v| v.as_str()).unwrap_or("USDT").to_string();
+            let fiat_unit = ad.get("fiatUnit").and_then(|v| v.as_str()).unwrap_or("VES").to_string();
+
+            result.push(P2PUserAd {
+                adv_no,
+                adv_type,
+                adv_type_raw,
+                asset,
+                fiat_unit,
+                price,
+                surplus_amount: surplus,
+                init_amount,
+                min_fiat,
+                max_fiat,
+                status_code,
+                status_label,
+                is_active,
+                trade_methods: methods,
+                updated_at: now.clone(),
+            });
+        }
+    }
+
+    Ok(result)
 }
 
 // ---------------------------------------------------------------------------

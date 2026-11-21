@@ -218,6 +218,7 @@ export default function App() {
               lastSyncedAt={health.last_synced_at}
               selectedAsset={selectedAsset}
               fiatCurrency={fiatCurrency}
+              activeWorkspaceId={activeWorkspaceId}
               onPairsDetected={(assets, fiats) => {
                 if (assets?.length) setAvailableAssets(assets);
                 if (fiats?.length) setAvailableFiats(fiats);

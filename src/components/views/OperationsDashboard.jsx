@@ -25,6 +25,7 @@ export default function OperationsDashboard({
   isSyncingBg,
   selectedAsset = 'USDT',
   fiatCurrency = 'VES',
+  activeWorkspaceId = 'default',
   onPairsDetected,
 }) {
   // Hook central de datos del dashboard de hoy
@@ -81,6 +82,7 @@ export default function OperationsDashboard({
   const marketBoard = useP2PMarketBoard({
     selectedAsset: cryptoAsset,
     fiatCurrency: fiat,
+    workspaceId: activeWorkspaceId,
     refreshTrigger,
   });
 
